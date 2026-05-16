@@ -52,6 +52,25 @@ export default function SellView({ user, onListingCreated }: { user: UserType; o
     } finally { setSubmitting(false); }
   };
 
+  // Seller verification: must complete profile first
+  const profileComplete = user.faculty && user.phone && user.hostel;
+
+  if (!profileComplete) {
+    return (
+      <div className="p-6 flex flex-col items-center justify-center text-center min-h-[60vh]">
+        <div className="w-16 h-16 rounded-2xl bg-amber-500/10 flex items-center justify-center mb-4">
+          <Camera className="w-8 h-8 text-amber-500" />
+        </div>
+        <h2 className="font-bold text-xl mb-2">Complete Your Profile First</h2>
+        <p className="text-sm text-muted-foreground mb-1 max-w-xs">
+          To sell on UNILAG Marketplace, you need to verify your identity by completing your profile.
+        </p>
+        <p className="text-xs text-muted-foreground mb-4">Add your <strong>faculty</strong>, <strong>phone number</strong>, and <strong>hostel</strong>.</p>
+        <p className="text-[11px] text-muted-foreground/60">Go to the <strong>Me</strong> tab → Edit Profile</p>
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 space-y-5 max-w-lg mx-auto">
       <h2 className="font-bold text-xl">Sell Something</h2>

@@ -1,20 +1,75 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Send, ArrowLeft } from 'lucide-react';
+import { Send, ArrowLeft, CheckCircle, Star, Package } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Textarea } from '@/components/ui/textarea';
 import { api } from '@/lib/api';
 import { User as UserType, Chat, Message } from '@/lib/types';
 import { timeAgo, getInitials, getListingFirstImage } from '@/lib/marketplace-utils';
+
+function ReviewModal({ seller, onSubmit, onClose }: { seller: any; onSubmit: (rating: number, comment: string) => void; onClose: () => void }) {
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="w-full max-w-sm bg-background rounded-2xl shadow-2xl p-6 animate-in fade-in zoom-in-95">
+        <div className="text-center mb-4">
+          <div className="w-14 h-14 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto mb-3">
+            <CheckCircle className="w-7 h-7 text-emerald-500" />
+          </div>
+          <h3 className="font-bold text-lg">Deal Completed! 🎉</h3>
+          <p className="text-sm text-muted-foreground">Rate your experience with <strong>{seller.username}</strong></p>
+        </div>
+
+        {/* Star rating */}
+        <div className="flex justify-center gap-1 mb-4">
+          {[1, 2, 3, 4, 5].map(s => (
+            <button key={s} onClick={() => setRating(s)} className="p-1 transition-transform hover:scale-110">
+              <Star className={`w-8 h-8 ${s <= rating ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground/30'}`} />
+            </button>
+          ))}
+        </div>
+
+        <Textarea
+          placeholder="Share your experience (optional)..."
+          value={comment}
+          onChange={e => setComment(e.target.value)}
+          rows={3}
+          className="mb-4"
+          maxLength={300}
+        />
+
+        <div className="flex gap-2">
+          <button onClick={onClose} className="flex-1 h-10 rounded-xl border text-sm hover:bg-muted transition-colors">
+            Skip
+          </button>
+          <button
+            onClick={async () => { setSubmitting(true); await onSubmit(rating, comment); setSubmitting(false); }}
+            disabled={submitting}
+            className="flex-1 h-10 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+          >
+            {submitting ? 'Submitting...' : 'Submit Review'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ChatDetail({ chat, user, onBack }: { chat: Chat; user: UserType; onBack: () => void }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMsg, setNewMsg] = useState('');
   const [sending, setSending] = useState(false);
+  const [showReview, setShowReview] = useState(false);
+  const [dealCompleted, setDealCompleted] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const other = chat.buyerId === user.id ? chat.seller : chat.buyer;
+  const isBuyer = chat.buyerId === user.id;
 
   const fetchMessages = useCallback(async () => {
     try {
@@ -37,6 +92,27 @@ function ChatDetail({ chat, user, onBack }: { chat: Chat; user: UserType; onBack
     finally { setSending(false); }
   };
 
+  const handleConfirmDeal = async () => {
+    setDealCompleted(true);
+    // Mark listing as sold
+    try {
+      await api.patch(`/api/listings/${chat.listing.id}`, { status: 'sold' });
+    } catch (e) { console.error(e); }
+    setShowReview(true);
+  };
+
+  const handleSubmitReview = async (rating: number, comment: string) => {
+    try {
+      await api.post('/api/reviews', {
+        reviewerId: user.id,
+        sellerId: other.id,
+        rating,
+        comment: comment || `Great transaction for ${chat.listing.title}`,
+      });
+    } catch (e) { console.error(e); }
+    setShowReview(false);
+  };
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-3 p-3 border-b bg-background/95 backdrop-blur-md">
@@ -47,6 +123,7 @@ function ChatDetail({ chat, user, onBack }: { chat: Chat; user: UserType; onBack
           <p className="text-[10px] text-muted-foreground truncate">{chat.listing.title}</p>
         </div>
       </div>
+
       <ScrollArea className="flex-1 p-3">
         <div className="space-y-2">
           {messages.map(msg => (
@@ -60,12 +137,32 @@ function ChatDetail({ chat, user, onBack }: { chat: Chat; user: UserType; onBack
           <div ref={bottomRef} />
         </div>
       </ScrollArea>
+
+      {/* Deal confirmation button for buyer */}
+      {isBuyer && !dealCompleted && chat.listing.status !== 'sold' && (
+        <div className="px-3 py-2 border-t bg-emerald-500/5">
+          <button onClick={handleConfirmDeal} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-500 text-white text-sm font-medium hover:bg-emerald-600 transition-colors">
+            <Package className="w-4 h-4" /> I Got My Item ✅
+          </button>
+        </div>
+      )}
+
+      {dealCompleted && !showReview && (
+        <div className="px-3 py-2 border-t bg-emerald-500/5 text-center">
+          <p className="text-sm text-emerald-600 font-medium flex items-center justify-center gap-1">
+            <CheckCircle className="w-4 h-4" /> Deal completed! Thank you 🎉
+          </p>
+        </div>
+      )}
+
       <div className="p-3 border-t flex gap-2">
         <Input value={newMsg} onChange={e => setNewMsg(e.target.value)} placeholder="Type a message..." className="flex-1" onKeyDown={e => e.key === 'Enter' && handleSend()} />
         <button onClick={handleSend} disabled={sending || !newMsg.trim()} className="p-2 bg-primary text-primary-foreground rounded-full disabled:opacity-50">
           <Send className="w-4 h-4" />
         </button>
       </div>
+
+      {showReview && <ReviewModal seller={other} onSubmit={handleSubmitReview} onClose={() => setShowReview(false)} />}
     </div>
   );
 }
