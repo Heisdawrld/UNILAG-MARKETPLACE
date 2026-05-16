@@ -1,11 +1,13 @@
 import { PrismaClient } from '@prisma/client'
 import { PrismaLibSQL } from '@prisma/adapter-libsql'
-import { createClient } from '@libsql/client'
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
+/**
+ * Check if Turso credentials are valid and present.
+ */
 function isValidTursoConfig(): boolean {
   const url = process.env.TURSO_DATABASE_URL
   const token = process.env.TURSO_AUTH_TOKEN
@@ -14,60 +16,61 @@ function isValidTursoConfig(): boolean {
     token &&
     url !== 'undefined' &&
     token !== 'undefined' &&
+    url.trim() !== '' &&
+    token.trim() !== '' &&
     url.startsWith('libsql://')
   )
 }
 
+/**
+ * Create a PrismaClient connected to Turso (production) or local SQLite (dev).
+ */
 function createPrismaClient(): PrismaClient {
-  // Use Turso only when valid credentials are present
+  // ── Try Turso first (works in both production and development) ──
   if (isValidTursoConfig()) {
     try {
-      const libsql = createClient({
+      // IMPORTANT: Pass config object to PrismaLibSQL, NOT a createClient() instance.
+      // The adapter creates its own libsql client internally.
+      // Also set DATABASE_URL to the Turso URL for Prisma's internal validation.
+      const originalDbUrl = process.env.DATABASE_URL
+      process.env.DATABASE_URL = process.env.TURSO_DATABASE_URL
+
+      const adapter = new PrismaLibSQL({
         url: process.env.TURSO_DATABASE_URL!,
         authToken: process.env.TURSO_AUTH_TOKEN!,
       })
-      const adapter = new PrismaLibSQL(libsql)
-      console.log('[db] Connected to Turso database')
+
+      // Restore original DATABASE_URL after adapter creation
+      if (originalDbUrl) process.env.DATABASE_URL = originalDbUrl
+
+      console.log('[db] ✅ Connected to Turso database')
       return new PrismaClient({ adapter })
     } catch (err) {
-      console.error('[db] Failed to connect to Turso:', err)
-      // In production, re-throw — we can't fall back to local SQLite on Render
+      console.error('[db] ❌ Failed to connect to Turso:', err)
       if (process.env.NODE_ENV === 'production') {
-        throw err
+        console.error('[db] ⚠️  Database unavailable — API routes will return errors')
+      } else {
+        console.log('[db] Falling back to local SQLite for development')
       }
-      console.log('[db] Falling back to local SQLite for development')
     }
   } else {
     if (process.env.NODE_ENV === 'production') {
-      console.error('[db] CRITICAL: Turso credentials not configured in production!')
-      console.error('[db] Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN environment variables')
-      // In production without Turso, we throw so the app doesn't silently use a non-existent local DB
-      throw new Error(
-        'Database not configured. TURSO_DATABASE_URL and TURSO_AUTH_TOKEN must be set in production.'
-      )
+      console.error('[db] ❌ CRITICAL: Turso credentials not configured in production!')
+      console.error('[db] ⚠️  API routes will return errors until TURSO_DATABASE_URL and TURSO_AUTH_TOKEN are set')
+    } else {
+      console.log('[db] ℹ️  Turso not configured, using local SQLite')
     }
-    console.log('[db] Turso credentials not configured, using local SQLite')
   }
 
-  // Fallback to local SQLite (only works in development)
+  // ── Fallback: local SQLite (development only) ──
   return new PrismaClient({
-    log: process.env.NODE_ENV === 'development' ? ['query'] : [],
+    log: process.env.NODE_ENV === 'development' ? ['query'] : ['error'],
   })
 }
 
-let db: PrismaClient
-try {
-  db = globalForPrisma.prisma ?? createPrismaClient()
-  if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
-} catch (err) {
-  console.error('[db] Failed to create PrismaClient:', err)
-  // Create a dummy client that will return errors instead of crashing the entire app
-  // This allows the frontend to at least load and show error messages
-  db = new PrismaClient({
-    log: ['error'],
-  })
-  // Store the error for API routes to check
-  globalForPrisma.prisma = undefined
-}
+// Create the client — using the global cache to prevent connection leaks in dev
+export const db = globalForPrisma.prisma ?? createPrismaClient()
 
-export { db }
+if (process.env.NODE_ENV !== 'production') {
+  globalForPrisma.prisma = db
+}

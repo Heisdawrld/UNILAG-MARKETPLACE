@@ -1996,24 +1996,60 @@ export default function Home() {
   const [userLoading, setUserLoading] = useState(true);
   const [activeChatFromDetail, setActiveChatFromDetail] = useState<Chat | null>(null);
 
-  // Load user on mount
+  // Load user on mount — try Clerk first, then demo user, then seed
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        // First try to get the demo user
-        let data = await api.get('/api/auth/me?email=chidi.okonkwo@unilag.edu.ng');
-        setUser(data);
-      } catch (err) {
-        // If user doesn't exist, try seeding the database
-        console.log('Demo user not found, attempting to seed database...');
+        // 1) Try Clerk-authenticated user first
+        try {
+          const clerkData = await api.get('/api/auth/clerk-me');
+          if (clerkData && clerkData.id) {
+            setUser(clerkData);
+            setUserLoading(false);
+            return;
+          }
+        } catch {
+          // Clerk not configured or not authenticated — that's fine
+        }
+
+        // 2) Try the demo user (from seeded data)
+        try {
+          let data = await api.get('/api/auth/me?email=chidi.okonkwo@unilag.edu.ng');
+          if (data && data.id) {
+            setUser(data);
+            setUserLoading(false);
+            return;
+          }
+        } catch {
+          // Demo user doesn't exist yet — try seeding
+        }
+
+        // 3) Seed the database and try again
+        console.log('[app] No user found, attempting to seed database...');
         try {
           await api.post('/api/seed');
-          // After seeding, try fetching the user again
           const data = await api.get('/api/auth/me?email=chidi.okonkwo@unilag.edu.ng');
-          setUser(data);
+          if (data && data.id) {
+            setUser(data);
+          }
         } catch (seedErr) {
-          console.error('Failed to seed or fetch user:', seedErr);
+          console.error('[app] Failed to seed or fetch user:', seedErr);
+          // Try registering a demo user directly
+          try {
+            const regData = await api.post('/api/auth/register', {
+              username: 'demo_user',
+              email: 'demo@unilag.market',
+              bio: 'Demo user for UNILAG Marketplace',
+            });
+            if (regData && regData.id) {
+              setUser(regData);
+            }
+          } catch (regErr) {
+            console.error('[app] Failed to register demo user:', regErr);
+          }
         }
+      } catch (err) {
+        console.error('[app] Unexpected error loading user:', err);
       } finally {
         setUserLoading(false);
       }
@@ -2119,14 +2155,18 @@ export default function Home() {
           <h1 className="font-bold text-xl mb-2">UNILAG Marketplace</h1>
           <AlertTriangle className="w-8 h-8 mx-auto mb-3 text-amber-500" />
           <p className="text-sm text-muted-foreground mb-4">
-            Could not connect to the database. Please check your environment configuration.
+            The marketplace is currently unavailable. This is usually caused by missing database configuration.
           </p>
-          <p className="text-xs text-muted-foreground">
-            Make sure TURSO_DATABASE_URL and TURSO_AUTH_TOKEN are set correctly.
+          <p className="text-xs text-muted-foreground mb-2">
+            If you are the administrator, please ensure these environment variables are set:
           </p>
+          <div className="bg-muted rounded-lg p-3 text-left text-xs font-mono space-y-1 mb-4">
+            <p>TURSO_DATABASE_URL=libsql://...</p>
+            <p>TURSO_AUTH_TOKEN=eyJhbGci...</p>
+          </div>
           <Button
             variant="outline"
-            className="mt-4"
+            className="mt-2"
             onClick={() => window.location.reload()}
           >
             <RefreshCw className="w-4 h-4 mr-2" />
