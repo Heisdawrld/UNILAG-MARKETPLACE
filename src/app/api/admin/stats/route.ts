@@ -1,5 +1,6 @@
 import { db, isDatabaseAvailable } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
 
 // GET /api/admin/stats — dashboard overview
 export async function GET(req: NextRequest) {
@@ -7,17 +8,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
   }
 
-  const { searchParams } = new URL(req.url);
-  const adminId = searchParams.get('adminId');
-
-  // Verify admin
-  if (!adminId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const admin = await db.user.findUnique({ where: { id: adminId } });
-  if (!admin || admin.role !== 'admin') {
-    return NextResponse.json({ error: 'Access denied' }, { status: 403 });
-  }
-
   try {
+    // ── SECURITY: verify Clerk session & Admin role ──
+    const { userId: clerkId } = await auth();
+    if (!clerkId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const admin = await db.user.findUnique({ where: { clerkId } });
+    if (!admin || admin.role !== 'admin') {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
     const [
       totalUsers, totalListings, activeListings, soldListings,
       totalReviews, totalReports, pendingReports, totalChats,
@@ -71,14 +71,18 @@ export async function PATCH(req: NextRequest) {
   }
 
   try {
-    const body = await req.json();
-    const { adminId, action, targetId, data } = body;
-
-    // Verify admin
-    const admin = await db.user.findUnique({ where: { id: adminId } });
+    // ── SECURITY: verify Clerk session & Admin role ──
+    const { userId: clerkId } = await auth();
+    if (!clerkId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const admin = await db.user.findUnique({ where: { clerkId } });
     if (!admin || admin.role !== 'admin') {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
+
+    const body = await req.json();
+    const { action, targetId, data } = body;
 
     switch (action) {
       case 'verify_user':

@@ -1,22 +1,32 @@
 import { db, isDatabaseAvailable } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
 
 export async function GET(request: NextRequest) {
   if (!isDatabaseAvailable()) {
-    return NextResponse.json(
-      { error: 'Database not configured. Please set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN environment variables.' },
-      { status: 503 }
-    );
+    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
   }
   try {
+    // ── SECURITY: verify Clerk session ──
+    const { userId: clerkId } = await auth();
+    if (!clerkId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const authUser = await db.user.findUnique({ where: { clerkId }, select: { id: true } });
+    if (!authUser) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
 
     if (!userId) {
-      return NextResponse.json(
-        { error: 'userId query parameter is required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'userId is required' }, { status: 400 });
+    }
+
+    // ── SECURITY: ensure requesting user is fetching their own chats ──
+    if (userId !== authUser.id) {
+      return NextResponse.json({ error: 'Forbidden — not your chats' }, { status: 403 });
     }
 
     // Get chats where user is buyer or seller — only load last message, not all messages
@@ -78,36 +88,39 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error fetching chats:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch chats' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch chats' }, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
   if (!isDatabaseAvailable()) {
-    return NextResponse.json(
-      { error: 'Database not configured. Please set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN environment variables.' },
-      { status: 503 }
-    );
+    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
   }
   try {
+    // ── SECURITY: verify Clerk session ──
+    const { userId: clerkId } = await auth();
+    if (!clerkId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const authUser = await db.user.findUnique({ where: { clerkId }, select: { id: true } });
+    if (!authUser) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
     const body = await request.json();
     const { listingId, buyerId, sellerId } = body;
 
     if (!listingId || !buyerId || !sellerId) {
-      return NextResponse.json(
-        { error: 'listingId, buyerId, and sellerId are required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'listingId, buyerId, and sellerId are required' }, { status: 400 });
+    }
+
+    // ── SECURITY: ensure requesting user is the buyer ──
+    if (buyerId !== authUser.id) {
+      return NextResponse.json({ error: 'Forbidden — you can only start chats as yourself' }, { status: 403 });
     }
 
     if (buyerId === sellerId) {
-      return NextResponse.json(
-        { error: 'Buyer and seller cannot be the same' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Buyer and seller cannot be the same' }, { status: 400 });
     }
 
     // Check if listing exists

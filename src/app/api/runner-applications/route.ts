@@ -1,5 +1,6 @@
 import { db, isDatabaseAvailable } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
 
 // Store runner applications in notifications table as a workaround
 // (avoids adding new DB table — notifications has all needed fields)
@@ -9,6 +10,16 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    // ── SECURITY: verify Clerk session ──
+    const { userId: clerkId } = await auth();
+    if (!clerkId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const authUser = await db.user.findUnique({ where: { clerkId } });
+    if (!authUser) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
     const body = await request.json();
     const { userId, studentId, motivation, availability } = body;
 
@@ -16,9 +27,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'userId and studentId are required' }, { status: 400 });
     }
 
+    // ── SECURITY: ensure requesting user is applying for themselves ──
+    if (userId !== authUser.id) {
+      return NextResponse.json({ error: 'Forbidden — you can only apply for yourself' }, { status: 403 });
+    }
+
     // Check user exists
-    const user = await db.user.findUnique({ where: { id: userId } });
-    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    const user = authUser;
 
     // Store application as a notification to admin users
     // Message format is parseable by admin dashboard
@@ -51,18 +66,18 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const { searchParams } = new URL(request.url);
-    const adminId = searchParams.get('adminId');
-
-    if (!adminId) return NextResponse.json({ error: 'adminId required' }, { status: 400 });
-
-    const admin = await db.user.findUnique({ where: { id: adminId } });
+    // ── SECURITY: verify Clerk session & Admin role ──
+    const { userId: clerkId } = await auth();
+    if (!clerkId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const admin = await db.user.findUnique({ where: { clerkId } });
     if (!admin || admin.role !== 'admin') {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
     const applications = await db.notification.findMany({
-      where: { userId: adminId, type: 'runner_application' },
+      where: { userId: admin.id, type: 'runner_application' },
       orderBy: { createdAt: 'desc' },
     });
 

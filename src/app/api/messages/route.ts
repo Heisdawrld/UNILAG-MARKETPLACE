@@ -73,12 +73,19 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   if (!isDatabaseAvailable()) {
-    return NextResponse.json(
-      { error: 'Database not configured. Please set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN environment variables.' },
-      { status: 503 }
-    );
+    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
   }
   try {
+    // ── SECURITY: verify Clerk session ──
+    const { userId: clerkId } = await auth();
+    if (!clerkId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const authUser = await db.user.findUnique({ where: { clerkId }, select: { id: true } });
+    if (!authUser) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
     const body = await request.json();
     const { chatId, senderId, message, imageUrl } = body;
 
@@ -87,6 +94,11 @@ export async function POST(request: NextRequest) {
         { error: 'chatId, senderId, and message are required' },
         { status: 400 }
       );
+    }
+
+    // ── SECURITY: ensure the sender is the authenticated user ──
+    if (senderId !== authUser.id) {
+      return NextResponse.json({ error: 'Forbidden — you can only send messages as yourself' }, { status: 403 });
     }
 
     // Check if chat exists
