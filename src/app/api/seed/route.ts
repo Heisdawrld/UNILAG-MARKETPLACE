@@ -17,12 +17,15 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const { searchParams } = new URL(request.url);
+    const force = searchParams.get('force') === 'true';
+
     // Check if data already exists
     const existingUsers = await db.user.count();
-    if (existingUsers > 0) {
+    if (existingUsers > 0 && !force) {
       return NextResponse.json({
         success: true,
-        message: 'Database already has data, skipping seed',
+        message: 'Database already has data, skipping seed (use ?force=true to override)',
         existingUsers,
       });
     }

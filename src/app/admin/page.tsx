@@ -5,12 +5,13 @@ import { useUser } from '@clerk/nextjs';
 import { Shield, Users, Package, AlertTriangle, Zap, MessageCircle, Star, Ban, CheckCircle, XCircle, Trash2, Eye, RefreshCw, ArrowLeft, Crown, UserCheck } from 'lucide-react';
 import { api } from '@/lib/api';
 
-type AdminTab = 'overview' | 'users' | 'listings' | 'reports';
+type AdminTab = 'overview' | 'users' | 'listings' | 'reports' | 'runner_apps';
 
 export default function AdminPage() {
   const { user: clerkUser, isLoaded } = useUser();
   const [dbUser, setDbUser] = useState<any>(null);
   const [data, setData] = useState<any>(null);
+  const [runnerApps, setRunnerApps] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [tab, setTab] = useState<AdminTab>('overview');
@@ -27,9 +28,13 @@ export default function AdminPage() {
     if (!dbUser?.id) return;
     setLoading(true);
     try {
-      const result = await api.get(`/api/admin/stats?adminId=${dbUser.id}`);
+      const [result, apps] = await Promise.all([
+        api.get(`/api/admin/stats`), // Now uses auth(), no adminId needed
+        api.get(`/api/runner-applications`),
+      ]);
       if (result.error) { setError(result.error); return; }
       setData(result);
+      setRunnerApps(apps || []);
     } catch { setError('Access denied or fetch failed'); }
     finally { setLoading(false); }
   }, [dbUser?.id]);
@@ -39,7 +44,7 @@ export default function AdminPage() {
   const doAction = async (action: string, targetId: string, extra?: any) => {
     setActionLoading(targetId);
     try {
-      await api.patch('/api/admin/stats', { adminId: dbUser.id, action, targetId, data: extra });
+      await api.patch('/api/admin/stats', { action, targetId, data: extra }); // Now uses auth()
       await fetchData();
     } catch { alert('Action failed'); }
     finally { setActionLoading(''); }
@@ -111,10 +116,10 @@ export default function AdminPage() {
 
       <div className="max-w-6xl mx-auto px-6 py-6">
         {/* Tab Nav */}
-        <div className="flex gap-1 mb-6 bg-white/5 rounded-xl p-1 w-fit">
-          {([['overview', 'Overview'], ['users', 'Users'], ['listings', 'Listings'], ['reports', 'Reports']] as [AdminTab, string][]).map(([id, label]) => (
-            <button key={id} onClick={() => setTab(id)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab === id ? 'bg-white/15 text-white' : 'text-white/50 hover:text-white/80'}`}>
-              {label}
+        <div className="flex gap-1 mb-6 bg-white/5 rounded-xl p-1 w-fit overflow-x-auto hide-scrollbar">
+          {([['overview', 'Overview'], ['users', 'Users'], ['listings', 'Listings'], ['reports', 'Reports'], ['runner_apps', 'Runner Apps']] as [AdminTab, string][]).map(([id, label]) => (
+            <button key={id} onClick={() => setTab(id)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${tab === id ? 'bg-white/15 text-white' : 'text-white/50 hover:text-white/80'}`}>
+              {label} {id === 'runner_apps' && runnerApps.length > 0 && <span className="ml-1 bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">{runnerApps.length}</span>}
             </button>
           ))}
         </div>
@@ -131,7 +136,7 @@ export default function AdminPage() {
                 { label: 'Total Reviews', value: stats.totalReviews, icon: Star, color: 'from-amber-500 to-yellow-500' },
                 { label: 'Active Chats', value: stats.totalChats, icon: MessageCircle, color: 'from-pink-500 to-rose-500' },
                 { label: 'Tasks Posted', value: stats.totalTasks, icon: Zap, color: 'from-orange-500 to-amber-500' },
-                { label: 'All Listings', value: stats.totalListings, icon: Package, color: 'from-indigo-500 to-blue-500' },
+                { label: 'Runner Apps', value: runnerApps.length, icon: UserCheck, color: 'from-indigo-500 to-blue-500' },
               ].map(item => (
                 <div key={item.label} className="bg-white/5 border border-white/10 rounded-2xl p-4">
                   <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${item.color} flex items-center justify-center mb-3`}>
@@ -175,7 +180,7 @@ export default function AdminPage() {
             </div>
             <div className="divide-y divide-white/5">
               {data.allUsers?.map((u: any) => (
-                <div key={u.id} className="flex items-center justify-between p-4 hover:bg-white/5">
+                <div key={u.id} className="flex items-center justify-between p-4 hover:bg-white/5 flex-wrap gap-4">
                   <div className="flex items-center gap-3">
                     <img src={u.avatar || `https://api.dicebear.com/9.x/notionists/svg?seed=${u.username}`} className="w-10 h-10 rounded-full" alt="" />
                     <div>
@@ -187,7 +192,7 @@ export default function AdminPage() {
                       <p className="text-[11px] text-white/40">{u.email} · {u.faculty || 'No faculty'} · Trust: {u.trustScore}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     {u.verificationStatus !== 'unilag_verified' && (
                       <button onClick={() => doAction('verify_user', u.id)} disabled={actionLoading === u.id} className="text-[10px] px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-colors">
                         Verify
@@ -196,6 +201,11 @@ export default function AdminPage() {
                     {!u.isRunner && (
                       <button onClick={() => doAction('approve_runner', u.id)} disabled={actionLoading === u.id} className="text-[10px] px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors">
                         <UserCheck className="w-3 h-3 inline mr-0.5" />Runner
+                      </button>
+                    )}
+                    {u.isRunner && (
+                      <button onClick={() => doAction('reject_runner', u.id)} disabled={actionLoading === u.id} className="text-[10px] px-2.5 py-1 rounded-lg bg-white/10 text-white/60 hover:bg-white/20 transition-colors">
+                        Remove Runner
                       </button>
                     )}
                     {u.role !== 'admin' && u.role !== 'banned' && (
@@ -271,6 +281,53 @@ export default function AdminPage() {
                       </button>
                       <button onClick={() => doAction('resolve_report', r.id, { status: 'dismissed' })} className="text-[10px] px-2.5 py-1 rounded-lg bg-white/10 text-white/60 hover:bg-white/20">
                         Dismiss
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Runner Apps Tab */}
+        {tab === 'runner_apps' && (
+          <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
+            <div className="p-4 border-b border-white/10">
+              <h3 className="font-bold text-sm">Runner Applications ({runnerApps.length})</h3>
+            </div>
+            {runnerApps.length === 0 ? (
+              <p className="p-6 text-center text-sm text-white/40">No pending runner applications.</p>
+            ) : (
+              <div className="divide-y divide-white/5">
+                {runnerApps.map((app: any) => (
+                  <div key={app.id} className="flex flex-col md:flex-row md:items-center justify-between p-4 hover:bg-white/5 gap-4">
+                    <div className="space-y-1">
+                      <p className="text-sm font-bold flex items-center gap-1.5">
+                        <Zap className="w-3.5 h-3.5 text-amber-400" />
+                        {app.data.username}
+                      </p>
+                      <p className="text-[11px] text-white/50"><strong className="text-white/70">Student ID:</strong> {app.data.studentId}</p>
+                      {app.data.availability && <p className="text-[11px] text-white/50"><strong className="text-white/70">Availability:</strong> {app.data.availability}</p>}
+                      <p className="text-xs text-white/80 mt-2 bg-white/5 p-2 rounded-lg border border-white/5 italic">
+                        "{app.data.motivation}"
+                      </p>
+                    </div>
+                    <div className="flex gap-2 shrink-0 mt-2 md:mt-0">
+                      <button 
+                        onClick={async () => {
+                          await doAction('approve_runner', app.data.applicantId);
+                          // We should also delete or mark the notification read, but for now we just approve the user.
+                        }} 
+                        className="text-[10px] px-3 py-1.5 rounded-lg bg-emerald-500 text-white font-medium hover:bg-emerald-600 transition-colors shadow-sm"
+                      >
+                        Approve Runner
+                      </button>
+                      <button 
+                        onClick={() => doAction('reject_runner', app.data.applicantId)} 
+                        className="text-[10px] px-3 py-1.5 rounded-lg bg-white/10 text-white/80 font-medium hover:bg-white/20 transition-colors"
+                      >
+                        Reject
                       </button>
                     </div>
                   </div>
