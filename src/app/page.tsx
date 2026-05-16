@@ -14,6 +14,7 @@ const TasksView = lazy(() => import('@/components/tasks/TasksView'));
 const MessagesView = lazy(() => import('@/components/marketplace/MessagesView'));
 const ProfileView = lazy(() => import('@/components/marketplace/ProfileView'));
 const ListingDetail = lazy(() => import('@/components/marketplace/ListingDetail'));
+import Onboarding from '@/components/marketplace/Onboarding';
 
 // ── Bottom Navigation ──
 function BottomNav({ activeTab, onTabChange }: { activeTab: ViewTab; onTabChange: (tab: ViewTab) => void }) {
@@ -76,6 +77,7 @@ export default function MarketplaceApp() {
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [onboarded, setOnboarded] = useState(false);
 
   // Sync Clerk user → DB user
   useEffect(() => {
@@ -205,6 +207,7 @@ export default function MarketplaceApp() {
 
   return (
     <div className="h-[100dvh] flex flex-col bg-background">
+      {!onboarded && <Onboarding onComplete={() => setOnboarded(true)} />}
       <main className="flex-1 min-h-0 overflow-y-auto">
         <Suspense fallback={<TabLoading />}>
           {activeTab === 'home' && (
