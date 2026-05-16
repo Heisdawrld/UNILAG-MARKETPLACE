@@ -170,7 +170,7 @@ export default function ProfileView({
 
             {/* Profile completion status */}
             {(!user.faculty || !user.phone || !user.hostel) ? (
-              <button onClick={() => setShowEdit(true)} className="mt-3 w-full flex items-center justify-between p-2.5 rounded-lg bg-primary/5 border border-primary/20 text-left">
+              <button onClick={() => setShowEdit(true)} className="mt-3 w-full flex items-center justify-between p-2.5 rounded-lg bg-primary/5 border border-primary/20 text-left transition-colors hover:bg-primary/10">
                 <div>
                   <p className="text-xs font-medium text-primary">Complete your profile</p>
                   <p className="text-[10px] text-muted-foreground">Add faculty, phone, hostel to build trust</p>
@@ -178,10 +178,13 @@ export default function ProfileView({
                 <ChevronRight className="w-4 h-4 text-primary" />
               </button>
             ) : (
-              <div className="mt-3 w-full flex items-center gap-2 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                <Shield className="w-4 h-4 text-emerald-500" />
-                <p className="text-xs font-medium text-emerald-600">Profile completed ✅</p>
-              </div>
+              <button onClick={() => setShowEdit(true)} className="mt-3 w-full flex items-center justify-between p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-left transition-colors hover:bg-emerald-500/20">
+                <div className="flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-emerald-500" />
+                  <p className="text-xs font-medium text-emerald-600">Profile completed ✅</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-emerald-600" />
+              </button>
             )}
           </CardContent>
         </Card>
