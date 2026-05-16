@@ -52,6 +52,77 @@ const api = {
   },
 };
 
+// ── Runner Application Card ──
+function RunnerApplicationCard({ user, onApplied }: { user: UserType; onApplied: () => void }) {
+  const { toast } = useToast();
+  const [studentId, setStudentId] = useState('');
+  const [motivation, setMotivation] = useState('');
+  const [availability, setAvailability] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [applied, setApplied] = useState(false);
+
+  const handleApply = async () => {
+    if (!studentId.trim()) {
+      toast({ title: 'Student ID required', variant: 'destructive' }); return;
+    }
+    setSubmitting(true);
+    try {
+      await fetch('/api/runner-applications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, studentId, motivation, availability }),
+      });
+      setApplied(true);
+      onApplied();
+    } catch {
+      toast({ title: 'Failed to submit', variant: 'destructive' });
+    } finally { setSubmitting(false); }
+  };
+
+  if (applied) {
+    return (
+      <Card className="border-0 shadow-sm bg-amber-50 dark:bg-amber-900/20">
+        <CardContent className="p-4 flex items-center gap-3">
+          <CheckCircle2 className="w-5 h-5 text-amber-600 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-amber-700 dark:text-amber-400">Application submitted!</p>
+            <p className="text-xs text-muted-foreground">Admin will review and approve you as a runner</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="border-0 shadow-sm border-l-4 border-l-amber-400">
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-start gap-2">
+          <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <h4 className="font-semibold text-sm">Become a Verified Runner</h4>
+            <p className="text-xs text-muted-foreground">Only verified runners can accept tasks. Apply below and get approved by admin.</p>
+          </div>
+        </div>
+        <div>
+          <Label className="text-xs font-medium mb-1 block">Student ID / Matric Number *</Label>
+          <Input placeholder="e.g. 190405001" value={studentId} onChange={e => setStudentId(e.target.value)} />
+        </div>
+        <div>
+          <Label className="text-xs font-medium mb-1 block">Why do you want to be a runner?</Label>
+          <Textarea placeholder="Tell us about yourself and why you want to run errands on campus..." value={motivation} onChange={e => setMotivation(e.target.value)} rows={2} maxLength={300} />
+        </div>
+        <div>
+          <Label className="text-xs font-medium mb-1 block">Available hours</Label>
+          <Input placeholder="e.g. Weekdays 2pm-6pm, weekends anytime" value={availability} onChange={e => setAvailability(e.target.value)} />
+        </div>
+        <Button onClick={handleApply} disabled={submitting} className="w-full bg-amber-500 hover:bg-amber-600 text-white">
+          {submitting ? 'Submitting...' : 'Apply to Become a Runner ⚡'}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Task Card ──
 function TaskCard({ task, onClick }: { task: Task; onClick: () => void }) {
   const urgencyClass = URGENCY_COLORS[task.urgency] || URGENCY_COLORS.medium;
@@ -265,15 +336,19 @@ function TaskDetail({ taskId, user, onBack }: { taskId: string; user: UserType; 
 
       {/* Apply section — only for non-creators on open tasks */}
       {!isCreator && task.status === 'open' && !hasApplied && (
-        <Card className="border-0 shadow-sm">
-          <CardContent className="p-4 space-y-3">
-            <h4 className="font-semibold text-sm">Apply as Runner</h4>
-            <Textarea placeholder="Why should they pick you? (optional)" value={applyMsg} onChange={(e) => setApplyMsg(e.target.value)} rows={2} />
-            <Button onClick={handleApply} disabled={applying} className="w-full">
-              <Send className="w-4 h-4 mr-2" />{applying ? 'Applying...' : 'Apply Now'}
-            </Button>
-          </CardContent>
-        </Card>
+        user.isRunner ? (
+          <Card className="border-0 shadow-sm">
+            <CardContent className="p-4 space-y-3">
+              <h4 className="font-semibold text-sm">Apply as Runner</h4>
+              <Textarea placeholder="Why should they pick you? (optional)" value={applyMsg} onChange={(e) => setApplyMsg(e.target.value)} rows={2} />
+              <Button onClick={handleApply} disabled={applying} className="w-full">
+                <Send className="w-4 h-4 mr-2" />{applying ? 'Applying...' : 'Apply Now'}
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <RunnerApplicationCard user={user} onApplied={() => toast({ title: 'Application sent!', description: 'Admin will review and approve you as a runner' })} />
+        )
       )}
 
       {hasApplied && !isAssigned && (
