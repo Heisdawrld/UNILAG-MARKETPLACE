@@ -20,7 +20,10 @@ export async function GET(request: NextRequest) {
     }
 
     const notifications = await db.notification.findMany({
-      where: { userId },
+      where: { 
+        userId,
+        type: { not: 'runner_application' }
+      },
       orderBy: { createdAt: 'desc' },
     });
 

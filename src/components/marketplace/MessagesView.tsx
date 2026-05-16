@@ -92,10 +92,19 @@ function ChatDetail({ chat, user, onBack }: { chat: Chat; user: UserType; onBack
     finally { setSending(false); }
   };
 
+  const handleCreateOrder = async () => {
+    setSending(true);
+    try {
+      await api.post('/api/messages', { chatId: chat.id, senderId: user.id, message: '📦 [SYSTEM:ORDER_CREATED]' });
+      fetchMessages();
+    } catch (e) { console.error(e); }
+    finally { setSending(false); }
+  };
+
   const handleConfirmDeal = async () => {
     setDealCompleted(true);
-    // Mark listing as sold
     try {
+      await api.post('/api/messages', { chatId: chat.id, senderId: user.id, message: '✅ [SYSTEM:ORDER_COMPLETED]' });
       await api.patch(`/api/listings/${chat.listing.id}`, { status: 'sold' });
     } catch (e) { console.error(e); }
     setShowReview(true);
@@ -113,6 +122,9 @@ function ChatDetail({ chat, user, onBack }: { chat: Chat; user: UserType; onBack
     setShowReview(false);
   };
 
+  const orderCreated = messages.some(m => m.message.includes('[SYSTEM:ORDER_CREATED]'));
+  const orderCompleted = messages.some(m => m.message.includes('[SYSTEM:ORDER_COMPLETED]'));
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-3 p-3 border-b bg-background/95 backdrop-blur-md">
@@ -126,28 +138,60 @@ function ChatDetail({ chat, user, onBack }: { chat: Chat; user: UserType; onBack
 
       <ScrollArea className="flex-1 p-3">
         <div className="space-y-2">
-          {messages.map(msg => (
-            <div key={msg.id} className={`flex ${msg.senderId === user.id ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[75%] px-3 py-2 rounded-2xl text-sm ${msg.senderId === user.id ? 'bg-primary text-primary-foreground rounded-br-md' : 'bg-muted rounded-bl-md'}`}>
-                <p>{msg.message}</p>
-                <p className={`text-[9px] mt-0.5 ${msg.senderId === user.id ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>{timeAgo(msg.createdAt)}</p>
+          {messages.map(msg => {
+            const isSysCreate = msg.message.includes('[SYSTEM:ORDER_CREATED]');
+            const isSysComplete = msg.message.includes('[SYSTEM:ORDER_COMPLETED]');
+            
+            if (isSysCreate) {
+              return (
+                <div key={msg.id} className="flex justify-center my-4">
+                  <div className="bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-full text-[10px] text-amber-600 font-medium flex items-center gap-1.5">
+                    <Package className="w-3 h-3" /> Order Initiated
+                  </div>
+                </div>
+              );
+            }
+            if (isSysComplete) {
+              return (
+                <div key={msg.id} className="flex justify-center my-4">
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-full text-[10px] text-emerald-600 font-medium flex items-center gap-1.5">
+                    <CheckCircle className="w-3 h-3" /> Order Received & Completed
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div key={msg.id} className={`flex ${msg.senderId === user.id ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[75%] px-3 py-2 rounded-2xl text-sm ${msg.senderId === user.id ? 'bg-primary text-primary-foreground rounded-br-md' : 'bg-muted rounded-bl-md'}`}>
+                  <p>{msg.message}</p>
+                  <p className={`text-[9px] mt-0.5 ${msg.senderId === user.id ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>{timeAgo(msg.createdAt)}</p>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           <div ref={bottomRef} />
         </div>
       </ScrollArea>
 
-      {/* Deal confirmation button for buyer */}
-      {isBuyer && !dealCompleted && chat.listing.status !== 'sold' && (
-        <div className="px-3 py-2 border-t bg-emerald-500/5">
-          <button onClick={handleConfirmDeal} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-500 text-white text-sm font-medium hover:bg-emerald-600 transition-colors">
-            <Package className="w-4 h-4" /> I Got My Item ✅
-          </button>
+      {/* Action Area based on Order State */}
+      {chat.listing.status !== 'sold' && !orderCompleted && (
+        <div className="px-3 py-2 border-t bg-muted/30">
+          {!orderCreated ? (
+            <button onClick={handleCreateOrder} disabled={sending} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary/10 text-primary border border-primary/20 text-sm font-medium hover:bg-primary/20 transition-colors">
+              <Package className="w-4 h-4" /> Create Order
+            </button>
+          ) : isBuyer ? (
+            <button onClick={handleConfirmDeal} disabled={sending} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-500 text-white text-sm font-medium hover:bg-emerald-600 transition-colors shadow-sm animate-pulse-once">
+              <CheckCircle className="w-4 h-4" /> I Have Received My Order
+            </button>
+          ) : (
+            <p className="text-xs text-center text-muted-foreground py-1">Waiting for buyer to confirm receipt...</p>
+          )}
         </div>
       )}
 
-      {dealCompleted && !showReview && (
+      {(orderCompleted || chat.listing.status === 'sold') && (
         <div className="px-3 py-2 border-t bg-emerald-500/5 text-center">
           <p className="text-sm text-emerald-600 font-medium flex items-center justify-center gap-1">
             <CheckCircle className="w-4 h-4" /> Deal completed! Thank you 🎉

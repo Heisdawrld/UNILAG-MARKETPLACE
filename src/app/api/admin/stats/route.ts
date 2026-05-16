@@ -103,10 +103,18 @@ export async function PATCH(req: NextRequest) {
 
       case 'approve_runner':
         await db.user.update({ where: { id: targetId }, data: { isRunner: true } });
+        // Also delete the runner application notification
+        await db.notification.deleteMany({
+          where: { type: 'runner_application', data: { contains: `"applicantId":"${targetId}"` } }
+        });
         return NextResponse.json({ success: true, message: 'Runner approved' });
 
       case 'reject_runner':
         await db.user.update({ where: { id: targetId }, data: { isRunner: false } });
+        // Delete the runner application notification
+        await db.notification.deleteMany({
+          where: { type: 'runner_application', data: { contains: `"applicantId":"${targetId}"` } }
+        });
         return NextResponse.json({ success: true, message: 'Runner rejected' });
 
       case 'remove_listing':

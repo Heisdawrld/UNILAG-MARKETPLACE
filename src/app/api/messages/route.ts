@@ -50,12 +50,12 @@ export async function GET(request: NextRequest) {
     });
 
     // Mark unseen messages as seen (only messages not sent by the requesting user)
-    if (userId) {
+    if (authUser.id) {
       await db.message.updateMany({
         where: {
           chatId,
           seen: false,
-          senderId: { not: userId },
+          senderId: { not: authUser.id },
         },
         data: { seen: true },
       });
