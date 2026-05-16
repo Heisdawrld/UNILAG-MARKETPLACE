@@ -5,8 +5,8 @@
   "scripts": {
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
     "postinstall": "npx prisma generate",
-    "build": "npx next build && cp -r .next/static .next/standalone/.next/static && cp -r public .next/standalone/public",
-    "start": "NODE_ENV=production node .next/standalone/server.js",
+    "build": "npx next build && node scripts/copy-standalone-assets.mjs",
+    "start": "NODE_ENV=production node scripts/start-server.mjs",
     "lint": "eslint .",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
