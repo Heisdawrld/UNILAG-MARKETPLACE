@@ -14,6 +14,7 @@ const nextConfig: NextConfig = {
     '@libsql/client',
     '@prisma/adapter-libsql',
     'better-sqlite3',
+    'sharp',
   ],
 };
 

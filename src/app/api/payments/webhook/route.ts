@@ -1,4 +1,4 @@
-import { db } from '@/lib/db';
+import { db, isDatabaseAvailable } from '@/lib/db';
 import { verifyWebhookSignature } from '@/lib/flutterwave';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -11,6 +11,12 @@ const BOOST_DURATION_MAP: Record<number, number> = {
 };
 
 export async function POST(request: NextRequest) {
+  if (!isDatabaseAvailable()) {
+    return NextResponse.json(
+      { error: 'Database not configured. Please set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN environment variables.' },
+      { status: 503 }
+    );
+  }
   try {
     // ── Get signature header ──
     const signature = request.headers.get('verif-hash');

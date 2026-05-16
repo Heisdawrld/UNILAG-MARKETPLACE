@@ -1,4 +1,4 @@
-import { db } from '@/lib/db';
+import { db, isDatabaseAvailable } from '@/lib/db';
 import { verifyPayment } from '@/lib/flutterwave';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -11,6 +11,12 @@ const BOOST_DURATION_MAP: Record<number, number> = {
 };
 
 export async function GET(request: NextRequest) {
+  if (!isDatabaseAvailable()) {
+    return NextResponse.json(
+      { error: 'Database not configured. Please set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN environment variables.' },
+      { status: 503 }
+    );
+  }
   try {
     const { searchParams } = new URL(request.url);
     const tx_ref = searchParams.get('tx_ref');

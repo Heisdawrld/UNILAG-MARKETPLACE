@@ -1,10 +1,16 @@
-import { db } from '@/lib/db';
+import { db, isDatabaseAvailable } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (!isDatabaseAvailable()) {
+    return NextResponse.json(
+      { error: 'Database not configured. Please set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN environment variables.' },
+      { status: 503 }
+    );
+  }
   try {
     const { id } = await params;
     const body = await request.json();

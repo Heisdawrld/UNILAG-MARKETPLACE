@@ -47,3 +47,78 @@ Stage Summary:
 - Key insight: DATABASE_URL must equal TURSO_DATABASE_URL when using the Prisma adapter
 - All API endpoints verified working locally with Turso
 - Critical Render setup instruction: Set DATABASE_URL = TURSO_DATABASE_URL in Render env vars
+
+---
+Task ID: 2-a
+Agent: Sub Agent
+Task: Add graceful database unavailability handling to all API route files
+
+Work Log:
+- Read all 26 API route files to understand current error handling patterns
+- Confirmed `isDatabaseAvailable()` function already exists and is exported from `@/lib/db`
+- Added `isDatabaseAvailable` import alongside `db` import in all 26 API route files
+- Added `if (!isDatabaseAvailable())` guard check at the beginning of every route handler (35 handlers total across 26 files)
+- Each check returns a 503 JSON response: `{ error: 'Database not configured. Please set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN environment variables.' }`
+- Build verified successfully — all routes compile without errors
+
+Files Modified (26 files, 35 route handlers):
+1. listings/route.ts — GET, POST
+2. listings/[id]/route.ts — GET, PATCH, DELETE
+3. chats/route.ts — GET, POST
+4. messages/route.ts — GET, POST
+5. notifications/route.ts — GET
+6. notifications/read/route.ts — PATCH
+7. saved/route.ts — GET, POST, DELETE
+8. reviews/route.ts — GET, POST
+9. reports/route.ts — POST
+10. boosts/route.ts — POST
+11. users/[id]/route.ts — GET, PATCH
+12. auth/me/route.ts — GET
+13. auth/register/route.ts — POST
+14. auth/clerk-me/route.ts — GET
+15. auth/clerk-sync/route.ts — POST
+16. auth/profile/route.ts — PATCH
+17. payments/initialize/route.ts — POST
+18. payments/verify/route.ts — GET
+19. payments/webhook/route.ts — POST
+20. payments/history/route.ts — GET
+21. admin/stats/route.ts — GET
+22. admin/listings/[id]/route.ts — DELETE
+23. admin/reports/route.ts — GET
+24. admin/reports/[id]/route.ts — PATCH
+25. admin/users/[id]/route.ts — PATCH
+26. seed/route.ts — POST
+
+Stage Summary:
+- All 26 API route files updated with `isDatabaseAvailable()` guard
+- 35 individual route handlers now return graceful 503 error when database is unavailable
+- Prevents unhandled Proxy errors from bubbling up to users
+- Build passes successfully
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Fix 502 Bad Gateway on Render - comprehensive code review and deployment fix
+
+Work Log:
+- Checked live URL https://unilag-marketplace.onrender.com/ — returns 502 Bad Gateway
+- Identified root cause: app crashes because PrismaClient is created at module import time, and if DATABASE_URL is undefined, LibsqlError: URL_INVALID is thrown
+- Rewrote db.ts to use lazy initialization via Proxy pattern — app no longer crashes on startup when DB is unavailable
+- Added isDatabaseAvailable() export for API routes to check DB status
+- Fixed .env: DATABASE_URL now points to file:./dev.db for local dev (not the Turso URL)
+- Added /api/health endpoint for monitoring DB connectivity
+- Added /api/route.ts to return app status info
+- Updated package.json build script to copy prisma schema and client to standalone output
+- Added sharp to serverExternalPackages in next.config.ts
+- Updated render.yaml with clearer documentation
+- Updated .env.example with better instructions
+- Added isDatabaseAvailable guard to all 26 API route files (35 handlers) returning 503 when DB is down
+- Build tested successfully locally
+- Health endpoint verified working locally with Turso connection
+
+Stage Summary:
+- Root cause fixed: DB connection is now lazy (Proxy-based), app won't crash on startup
+- Even if no database is configured, the app starts and shows a helpful error page
+- All API routes return graceful 503 errors when DB is unavailable
+- User needs to set TURSO_DATABASE_URL, TURSO_AUTH_TOKEN, and DATABASE_URL in Render dashboard
+- DATABASE_URL on Render MUST be set to the same value as TURSO_DATABASE_URL

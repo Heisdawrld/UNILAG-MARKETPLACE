@@ -1,4 +1,4 @@
-import { db } from '@/lib/db';
+import { db, isDatabaseAvailable } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { Webhook } from 'svix';
 
@@ -16,6 +16,12 @@ interface ClerkWebhookEvent {
 }
 
 export async function POST(request: NextRequest) {
+  if (!isDatabaseAvailable()) {
+    return NextResponse.json(
+      { error: 'Database not configured. Please set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN environment variables.' },
+      { status: 503 }
+    );
+  }
   // Get headers
   const svix_id = request.headers.get('svix-id');
   const svix_timestamp = request.headers.get('svix-timestamp');
