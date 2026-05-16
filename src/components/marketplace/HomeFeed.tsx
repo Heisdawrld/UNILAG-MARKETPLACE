@@ -45,10 +45,12 @@ export default function HomeFeed({
 
   // Fetch notifications
   useEffect(() => {
-    api.get(`/api/notifications?userId=${user.id}`).then(setNotifications).catch(() => {});
+    api.get(`/api/notifications?userId=${user.id}`)
+      .then((data: any) => setNotifications(Array.isArray(data) ? data : data?.notifications || []))
+      .catch(() => setNotifications([]));
   }, [user.id]);
 
-  const unreadCount = useMemo(() => notifications.filter(n => !n.read).length, [notifications]);
+  const unreadCount = useMemo(() => (notifications || []).filter(n => !n.read).length, [notifications]);
   const boosted = useMemo(() => listings.filter(l => l.boosted), [listings]);
   const recent = useMemo(() => listings.slice(0, 10), [listings]);
   const popular = useMemo(() => [...listings].sort((a, b) => b.views - a.views).slice(0, 6), [listings]);
