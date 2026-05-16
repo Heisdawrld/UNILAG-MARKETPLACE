@@ -267,7 +267,7 @@ function HomeFeed({
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div>
       {/* Header */}
       <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-sm border-b px-4 py-3">
         <div className="flex items-center justify-between">
@@ -338,8 +338,7 @@ function HomeFeed({
         </div>
       </div>
 
-      <ScrollArea className="flex-1 min-h-0">
-        <div className="px-4 space-y-8">
+      <div className="px-4 space-y-8 pb-4">
           {/* Trending / Boosted */}
           {boostedListings.length > 0 && (
             <section>
@@ -431,7 +430,6 @@ function HomeFeed({
             </div>
           </section>
         </div>
-      </ScrollArea>
     </div>
   );
 }
@@ -496,7 +494,7 @@ function SearchView({
   }, [category, condition, negotiable, priceRange, sortBy]);
 
   return (
-    <div className="flex flex-col h-full">
+    <div>
       {/* Search Header */}
       <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-sm border-b px-4 py-3 space-y-3">
         <div className="flex items-center gap-2">
@@ -607,8 +605,7 @@ function SearchView({
       </div>
 
       {/* Results */}
-      <ScrollArea className="flex-1 min-h-0">
-        <div className="px-4">
+      <div className="px-4 pb-4">
           {loading ? (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mt-4">
               {Array.from({ length: 6 }).map((_, i) => (
@@ -639,7 +636,6 @@ function SearchView({
             </div>
           )}
         </div>
-      </ScrollArea>
     </div>
   );
 }
@@ -714,8 +710,7 @@ function SellView({ user, onListingCreated }: { user: UserType; onListingCreated
   };
 
   return (
-    <ScrollArea className="flex-1 min-h-0">
-      <div className="p-4 space-y-5 max-w-lg mx-auto">
+    <div className="p-4 space-y-5 max-w-lg mx-auto pb-4">
         <h2 className="font-bold text-xl">Sell Something</h2>
 
         {/* Image Upload */}
@@ -859,7 +854,6 @@ function SellView({ user, onListingCreated }: { user: UserType; onListingCreated
           {submitting ? 'Posting...' : 'Post Listing'}
         </Button>
       </div>
-    </ScrollArea>
   );
 }
 
@@ -949,7 +943,7 @@ function MessagesView({ user, initialChat }: { user: UserType; initialChat?: Cha
   if (activeChat) {
     const otherUser = getOtherUser(activeChat);
     return (
-      <div className="flex flex-col h-full">
+      <div style={{ height: 'calc(100dvh - 5rem)', position: 'sticky', top: 0 }} className="flex flex-col">
         {/* Chat Header */}
         <div className="flex items-center gap-3 px-4 py-3 border-b bg-background">
           <button onClick={() => setActiveChat(null)} className="p-1">
@@ -1027,12 +1021,12 @@ function MessagesView({ user, initialChat }: { user: UserType; initialChat?: Cha
 
   // Chat list view
   return (
-    <div className="flex flex-col h-full">
+    <div className="pb-4">
       <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-sm border-b px-4 py-3">
         <h2 className="font-bold text-lg">Messages</h2>
       </div>
 
-      <ScrollArea className="flex-1 min-h-0">
+      <div className="pb-4">
         {loading ? (
           <div className="p-4 space-y-3">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -1094,7 +1088,7 @@ function MessagesView({ user, initialChat }: { user: UserType; initialChat?: Cha
             })}
           </div>
         )}
-      </ScrollArea>
+      </div>
     </div>
   );
 }
@@ -1198,7 +1192,7 @@ function ListingDetail({
   const isOwnListing = listing.sellerId === user.id;
 
   return (
-    <ScrollArea className="flex-1">
+    <div className="pb-4">
       <div className="max-w-2xl mx-auto">
         {/* Image Gallery */}
         <div className="relative">
@@ -1412,7 +1406,7 @@ function ListingDetail({
           </div>
         </DialogContent>
       </Dialog>
-    </ScrollArea>
+    </div>
   );
 }
 
@@ -1519,7 +1513,7 @@ function ProfileView({
   };
 
   return (
-    <ScrollArea className="flex-1">
+    <div className="pb-4">
       <div className="p-4 max-w-lg mx-auto">
         {/* Profile Header */}
         <div className="text-center mb-6">
@@ -1765,7 +1759,7 @@ function ProfileView({
           </div>
         </DialogContent>
       </Dialog>
-    </ScrollArea>
+    </div>
   );
 }
 
@@ -1820,7 +1814,7 @@ function AdminDashboard({ user, onClose }: { user: UserType; onClose: () => void
   }
 
   return (
-    <ScrollArea className="flex-1">
+    <div className="pb-4">
       <div className="p-4 max-w-lg mx-auto">
         <div className="flex items-center gap-2 mb-4">
           <button onClick={onClose} className="p-1">
@@ -1917,7 +1911,7 @@ function AdminDashboard({ user, onClose }: { user: UserType; onClose: () => void
           </div>
         )}
       </div>
-    </ScrollArea>
+    </div>
   );
 }
 
@@ -1942,7 +1936,7 @@ function BottomNav({
   ];
 
   return (
-    <nav className="z-50 bg-background/95 backdrop-blur-sm border-t safe-bottom flex-shrink-0">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-t safe-bottom">
       <div className="flex items-center justify-around max-w-lg mx-auto">
         {tabs.map(({ id, icon: Icon, label }) => {
           const isSell = id === 'sell';
@@ -2104,6 +2098,7 @@ export default function Home() {
   const handleTabChange = useCallback((tab: ViewTab) => {
     setActiveTab(tab);
     setSelectedListingId(null);
+    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
   }, []);
 
   // Calculate unread messages count for badge
@@ -2178,85 +2173,58 @@ export default function Home() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-background overflow-hidden">
+    <div className="min-h-screen bg-background">
       {/* Main Content */}
-      <main className="flex-1 min-h-0 overflow-hidden relative">
-        <AnimatePresence mode="wait">
-          {selectedListingId ? (
-            <motion.div
-              key="detail"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.2 }}
-              className="h-full"
-            >
-              <ListingDetail
-                listingId={selectedListingId}
+      <main className="pb-20">
+        {selectedListingId ? (
+          <ListingDetail
+            listingId={selectedListingId}
+            user={user}
+            onBack={() => setSelectedListingId(null)}
+            onToggleSave={() => handleToggleSave(selectedListingId)}
+            isSaved={savedIds.has(selectedListingId)}
+            onOpenChat={handleOpenChat}
+          />
+        ) : showAdmin ? (
+          <AdminDashboard user={user} onClose={() => setShowAdmin(false)} />
+        ) : (
+          <div>
+            {activeTab === 'home' && (
+              <HomeFeed
                 user={user}
-                onBack={() => setSelectedListingId(null)}
-                onToggleSave={() => handleToggleSave(selectedListingId)}
-                isSaved={savedIds.has(selectedListingId)}
-                onOpenChat={handleOpenChat}
+                onSelectListing={handleSelectListing}
+                onToggleSave={handleToggleSave}
+                savedIds={savedIds}
+                unreadNotifications={unreadNotifs}
               />
-            </motion.div>
-          ) : showAdmin ? (
-            <motion.div
-              key="admin"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.2 }}
-              className="h-full"
-            >
-              <AdminDashboard user={user} onClose={() => setShowAdmin(false)} />
-            </motion.div>
-          ) : (
-            <motion.div
-              key={activeTab}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.15 }}
-              className="h-full flex flex-col"
-            >
-              {activeTab === 'home' && (
-                <HomeFeed
-                  user={user}
-                  onSelectListing={handleSelectListing}
-                  onToggleSave={handleToggleSave}
-                  savedIds={savedIds}
-                  unreadNotifications={unreadNotifs}
-                />
-              )}
-              {activeTab === 'search' && (
-                <SearchView
-                  user={user}
-                  onSelectListing={handleSelectListing}
-                  onToggleSave={handleToggleSave}
-                  savedIds={savedIds}
-                />
-              )}
-              {activeTab === 'sell' && (
-                <SellView
-                  user={user}
-                  onListingCreated={() => setActiveTab('home')}
-                />
-              )}
-              {activeTab === 'messages' && <MessagesView user={user} initialChat={activeChatFromDetail} />}
-              {activeTab === 'profile' && (
-                <ProfileView
-                  user={user}
-                  setUser={setUser}
-                  onSelectListing={handleSelectListing}
-                  savedIds={savedIds}
-                  onToggleSave={handleToggleSave}
-                  onShowAdmin={() => setShowAdmin(true)}
-                />
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+            )}
+            {activeTab === 'search' && (
+              <SearchView
+                user={user}
+                onSelectListing={handleSelectListing}
+                onToggleSave={handleToggleSave}
+                savedIds={savedIds}
+              />
+            )}
+            {activeTab === 'sell' && (
+              <SellView
+                user={user}
+                onListingCreated={() => setActiveTab('home')}
+              />
+            )}
+            {activeTab === 'messages' && <MessagesView user={user} initialChat={activeChatFromDetail} />}
+            {activeTab === 'profile' && (
+              <ProfileView
+                user={user}
+                setUser={setUser}
+                onSelectListing={handleSelectListing}
+                savedIds={savedIds}
+                onToggleSave={handleToggleSave}
+                onShowAdmin={() => setShowAdmin(true)}
+              />
+            )}
+          </div>
+        )}
       </main>
 
       {/* Bottom Navigation */}
