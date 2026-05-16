@@ -224,7 +224,33 @@ export default function ListingDetail({
       </div>
 
       {/* Bottom Action Bar */}
-      {!isOwner && (
+      {isOwner ? (
+        <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t px-4 py-3 safe-bottom z-50">
+          <div className="flex gap-2 max-w-lg mx-auto">
+            {listing.status === 'active' && (
+              <Button variant="outline" className="h-11 flex-1" onClick={async () => {
+                try {
+                  await api.patch(`/api/listings/${listing.id}`, { status: 'sold' });
+                  toast({ title: 'Marked as sold!' });
+                  onBack();
+                } catch { toast({ title: 'Failed to update', variant: 'destructive' }); }
+              }}>
+                Mark as Sold
+              </Button>
+            )}
+            <Button variant="destructive" className="h-11 flex-1" onClick={async () => {
+              if (!confirm('Delete this listing?')) return;
+              try {
+                await api.del(`/api/listings/${listing.id}`);
+                toast({ title: 'Listing deleted' });
+                onBack();
+              } catch { toast({ title: 'Failed to delete', variant: 'destructive' }); }
+            }}>
+              Delete Listing
+            </Button>
+          </div>
+        </div>
+      ) : (
         <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t px-4 py-3 safe-bottom z-50">
           <div className="flex gap-2 max-w-lg mx-auto">
             {listing.seller.phone && (
