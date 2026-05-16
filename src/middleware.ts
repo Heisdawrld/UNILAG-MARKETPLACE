@@ -9,7 +9,7 @@ const clerkConfigured = !!(
   clerkSecret && clerkSecret !== 'undefined' && clerkSecret.trim() !== ''
 )
 
-async function middleware(request: NextRequest) {
+async function middleware(request: NextRequest, event: NextFetchEvent) {
   // If Clerk isn't configured, just pass through
   if (!clerkConfigured) {
     return NextResponse.next()
@@ -26,15 +26,15 @@ async function middleware(request: NextRequest) {
       '/api/health',
     ])
 
-    // clerkMiddleware() returns a handler function, NOT a Response.
-    // We must CALL it with the request to get the actual Response.
+    // clerkMiddleware() returns a handler function.
+    // Call it with both request and event to get the actual Response.
     const handler = clerkMiddleware(async (auth, req) => {
       if (!isPublicRoute(req)) {
         auth().protect()
       }
     })
 
-    return handler(request)
+    return await handler(request, event)
   } catch (err) {
     console.error('[middleware] Clerk import failed, skipping auth:', err)
     return NextResponse.next()
