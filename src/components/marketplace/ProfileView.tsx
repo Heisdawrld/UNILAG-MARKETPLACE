@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
-import { User as UserType, Listing } from '@/lib/types';
+import { User as UserType, Listing, SavedListing } from '@/lib/types';
 import { getInitials } from '@/lib/marketplace-utils';
 import { ListingCard } from './ListingCard';
 
@@ -43,9 +43,11 @@ export default function ProfileView({
   const { signOut } = useClerk();
   const { toast } = useToast();
   const [myListings, setMyListings] = useState<Listing[]>([]);
+  const [savedListings, setSavedListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
   const [showEdit, setShowEdit] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [profileTab, setProfileTab] = useState<'listings' | 'saved'>('listings');
 
   // Edit form state
   const [editForm, setEditForm] = useState({
@@ -60,10 +62,10 @@ export default function ProfileView({
   });
 
   useEffect(() => {
-    api.get(`/api/listings?sellerId=${user.id}&limit=50`)
-      .then(data => setMyListings(data.listings || []))
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    Promise.all([
+      api.get(`/api/listings?sellerId=${user.id}&limit=50`).then(data => setMyListings(data.listings || [])).catch(console.error),
+      api.get(`/api/saved?userId=${user.id}`).then((data: SavedListing[]) => setSavedListings(data.map(s => s.listing))).catch(console.error),
+    ]).finally(() => setLoading(false));
   }, [user.id]);
 
   const handleSaveProfile = async () => {
@@ -194,19 +196,39 @@ export default function ProfileView({
           </CardContent></Card>
         </div>
 
-        {/* My Listings */}
+        {/* Tabs: My Listings / Saved */}
         <div>
-          <h3 className="font-bold text-sm mb-3">My Listings</h3>
+          <div className="flex gap-1 mb-3 bg-muted/50 rounded-lg p-0.5">
+            <button onClick={() => setProfileTab('listings')} className={`flex-1 py-2 text-xs font-medium rounded-md transition-colors ${profileTab === 'listings' ? 'bg-background shadow-sm' : 'text-muted-foreground'}`}>
+              My Listings ({myListings.length})
+            </button>
+            <button onClick={() => setProfileTab('saved')} className={`flex-1 py-2 text-xs font-medium rounded-md transition-colors ${profileTab === 'saved' ? 'bg-background shadow-sm' : 'text-muted-foreground'}`}>
+              Saved ({savedListings.length})
+            </button>
+          </div>
+
           {loading ? (
             <p className="text-sm text-muted-foreground">Loading...</p>
-          ) : myListings.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No listings yet — go to the Sell tab to post your first item!</p>
+          ) : profileTab === 'listings' ? (
+            myListings.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">No listings yet — go to the Sell tab to post your first item!</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {myListings.map(listing => (
+                  <ListingCard key={listing.id} listing={listing} onClick={() => onSelectListing(listing.id)} isSaved={savedIds.has(listing.id)} onToggleSave={() => onToggleSave(listing.id)} />
+                ))}
+              </div>
+            )
           ) : (
-            <div className="grid grid-cols-2 gap-3">
-              {myListings.map(listing => (
-                <ListingCard key={listing.id} listing={listing} onClick={() => onSelectListing(listing.id)} isSaved={savedIds.has(listing.id)} onToggleSave={() => onToggleSave(listing.id)} />
-              ))}
-            </div>
+            savedListings.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">No saved items yet — tap the ❤️ on listings to save them!</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {savedListings.map(listing => (
+                  <ListingCard key={listing.id} listing={listing} onClick={() => onSelectListing(listing.id)} isSaved={true} onToggleSave={() => onToggleSave(listing.id)} />
+                ))}
+              </div>
+            )
           )}
         </div>
       </div>

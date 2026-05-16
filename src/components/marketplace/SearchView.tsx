@@ -16,12 +16,12 @@ import { ListingCard, ListingCardSkeleton } from './ListingCard';
 import { AnimatePresence, motion } from 'framer-motion';
 
 export default function SearchView({
-  user, onSelectListing, onToggleSave, savedIds,
+  user, onSelectListing, onToggleSave, savedIds, initialCategory = '',
 }: {
-  user: UserType; onSelectListing: (id: string) => void; onToggleSave: (id: string) => void; savedIds: Set<string>;
+  user: UserType; onSelectListing: (id: string) => void; onToggleSave: (id: string) => void; savedIds: Set<string>; initialCategory?: string;
 }) {
   const [search, setSearch] = useState('');
-  const [category, setCategory] = useState('');
+  const [category, setCategory] = useState(initialCategory);
   const [sortBy, setSortBy] = useState('newest');
   const [results, setResults] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(false);

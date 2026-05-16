@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Heart, Share2, MapPin, Clock, Eye, Shield, Star, MessageCircle, Phone, ChevronLeft, ChevronRight, CreditCard, Banknote, Lock, AlertTriangle, Flag } from 'lucide-react';
+import { ArrowLeft, Heart, Share2, MapPin, Clock, Eye, Shield, Star, MessageCircle, Phone, ChevronLeft, ChevronRight, CreditCard, Banknote, Lock, AlertTriangle, Flag, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -258,8 +258,13 @@ export default function ListingDetail({
                 <Phone className="w-5 h-5" />
               </Button>
             )}
+            {listing.seller.whatsapp && (
+              <Button variant="outline" size="icon" className="h-11 w-11 text-emerald-600" onClick={() => window.open(`https://wa.me/${listing.seller.whatsapp.replace(/^0/, '234')}?text=${encodeURIComponent(`Hi, I'm interested in your listing: ${listing.title} (${formatPrice(listing.price)}) on UNILAG Marketplace`)}`)}>
+                <MessageSquare className="w-5 h-5" />
+              </Button>
+            )}
             <Button variant="outline" className="h-11 flex-1" onClick={() => onStartChat(listing.seller.id, listing.id)}>
-              <MessageCircle className="w-4 h-4 mr-2" /> Message Seller
+              <MessageCircle className="w-4 h-4 mr-2" /> Message
             </Button>
             <Button className="h-11 flex-1" onClick={() => setShowPayment(true)}>
               <CreditCard className="w-4 h-4 mr-2" /> Buy Now

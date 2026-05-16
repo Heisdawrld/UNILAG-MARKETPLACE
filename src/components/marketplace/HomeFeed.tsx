@@ -1,12 +1,26 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { TrendingUp, Clock, Eye, Award, RefreshCw, Star, Bell } from 'lucide-react';
+import { TrendingUp, Clock, Eye, Award, RefreshCw, Star, Bell, Smartphone, Laptop, BookOpen, ShoppingBag, Utensils, Dumbbell, Home as HomeIcon, Wrench, LayoutGrid } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/api';
-import { User as UserType, Listing } from '@/lib/types';
+import { User as UserType, Listing, Notification } from '@/lib/types';
 import { getInitials } from '@/lib/marketplace-utils';
 import { ListingCard, ListingCardSkeleton } from './ListingCard';
+
+const CATEGORY_ICONS: Record<string, typeof Smartphone> = {
+  'Electronics': Smartphone,
+  'Phones & Tablets': Smartphone,
+  'Laptops': Laptop,
+  'Textbooks': BookOpen,
+  'Fashion': ShoppingBag,
+  'Services': Wrench,
+  'Hostel Essentials': HomeIcon,
+  'Food & Drinks': Utensils,
+  'Sports': Dumbbell,
+  'Others': LayoutGrid,
+};
 
 export default function HomeFeed({
   user, onSelectListing, onToggleSave, savedIds,
@@ -16,6 +30,8 @@ export default function HomeFeed({
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [showNotifs, setShowNotifs] = useState(false);
 
   const fetchListings = useCallback(async () => {
     try {
@@ -27,9 +43,17 @@ export default function HomeFeed({
 
   useEffect(() => { fetchListings(); }, [fetchListings]);
 
+  // Fetch notifications
+  useEffect(() => {
+    api.get(`/api/notifications?userId=${user.id}`).then(setNotifications).catch(() => {});
+  }, [user.id]);
+
+  const unreadCount = useMemo(() => notifications.filter(n => !n.read).length, [notifications]);
   const boosted = useMemo(() => listings.filter(l => l.boosted), [listings]);
   const recent = useMemo(() => listings.slice(0, 10), [listings]);
   const popular = useMemo(() => [...listings].sort((a, b) => b.views - a.views).slice(0, 6), [listings]);
+
+  const categories = Object.entries(CATEGORY_ICONS);
 
   if (loading) {
     return (
@@ -53,13 +77,60 @@ export default function HomeFeed({
               <p className="text-[10px] text-muted-foreground">Campus Marketplace</p>
             </div>
           </div>
-          <button onClick={() => { setRefreshing(true); fetchListings(); }} className="p-2 rounded-full hover:bg-muted">
-            <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setShowNotifs(!showNotifs)} className="relative p-2 rounded-full hover:bg-muted">
+              <Bell className="w-5 h-5" />
+              {unreadCount > 0 && (
+                <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-destructive text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </button>
+            <button onClick={() => { setRefreshing(true); fetchListings(); }} className="p-2 rounded-full hover:bg-muted">
+              <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="px-4 space-y-8 py-4">
+      {/* Notification Dropdown */}
+      {showNotifs && (
+        <div className="mx-4 mt-2 bg-card border rounded-xl shadow-lg overflow-hidden z-40 relative">
+          <div className="p-3 border-b flex items-center justify-between">
+            <p className="font-semibold text-sm">Notifications</p>
+            {unreadCount > 0 && <Badge variant="secondary" className="text-[10px]">{unreadCount} new</Badge>}
+          </div>
+          <div className="max-h-64 overflow-y-auto">
+            {notifications.length === 0 ? (
+              <p className="p-4 text-sm text-muted-foreground text-center">No notifications yet</p>
+            ) : (
+              notifications.slice(0, 10).map(notif => (
+                <div key={notif.id} className={`p-3 border-b last:border-0 text-left ${!notif.read ? 'bg-primary/5' : ''}`}>
+                  <p className="text-xs font-medium">{notif.title}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">{notif.message}</p>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="px-4 space-y-6 py-4">
+        {/* Categories */}
+        <section>
+          <h2 className="font-bold text-sm mb-3">Browse Categories</h2>
+          <div className="grid grid-cols-5 gap-2">
+            {categories.map(([name, Icon]) => (
+              <button key={name} onClick={() => onSelectListing(`cat:${name}`)} className="flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-muted/80 transition-colors">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                  <Icon className="w-5 h-5 text-primary" />
+                </div>
+                <span className="text-[9px] text-center leading-tight font-medium text-muted-foreground">{name.split(' ')[0]}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+
         {/* Trending */}
         {boosted.length > 0 && (
           <section>

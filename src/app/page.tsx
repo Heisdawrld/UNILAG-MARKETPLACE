@@ -73,6 +73,7 @@ export default function MarketplaceApp() {
   const [user, setUser] = useState<UserType | null>(null);
   const [activeTab, setActiveTab] = useState<ViewTab>('home');
   const [selectedListingId, setSelectedListingId] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
 
@@ -134,6 +135,16 @@ export default function MarketplaceApp() {
   const handleTabChange = useCallback((tab: ViewTab) => {
     setActiveTab(tab);
     setSelectedListingId(null);
+    setSelectedCategory('');
+  }, []);
+
+  const handleSelectListing = useCallback((id: string) => {
+    if (id.startsWith('cat:')) {
+      setSelectedCategory(id.replace('cat:', ''));
+      setActiveTab('search');
+    } else {
+      setSelectedListingId(id);
+    }
   }, []);
 
   const handleStartChat = useCallback(async (sellerId: string, listingId: string) => {
@@ -197,10 +208,10 @@ export default function MarketplaceApp() {
       <main className="flex-1 min-h-0 overflow-y-auto">
         <Suspense fallback={<TabLoading />}>
           {activeTab === 'home' && (
-            <HomeFeed user={user} onSelectListing={setSelectedListingId} onToggleSave={handleToggleSave} savedIds={savedIds} />
+            <HomeFeed user={user} onSelectListing={handleSelectListing} onToggleSave={handleToggleSave} savedIds={savedIds} />
           )}
           {activeTab === 'search' && (
-            <SearchView user={user} onSelectListing={setSelectedListingId} onToggleSave={handleToggleSave} savedIds={savedIds} />
+            <SearchView user={user} onSelectListing={handleSelectListing} onToggleSave={handleToggleSave} savedIds={savedIds} initialCategory={selectedCategory} />
           )}
           {activeTab === 'sell' && (
             <SellView user={user} onListingCreated={() => setActiveTab('home')} />
