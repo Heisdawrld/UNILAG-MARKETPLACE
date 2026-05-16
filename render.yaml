@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: unilag-marketplace
+    runtime: node
+    rootDir: .
+    repo: https://github.com/Heisdawrld/UNILAG-MARKETPLACE
+    branch: main
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production

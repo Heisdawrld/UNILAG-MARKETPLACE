@@ -1,0 +1,195 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String   @id @default(cuid())
+  username           String   @unique
+  email              String   @unique
+  avatar             String?
+  faculty            String?
+  department         String?
+  level              String?
+  bio                String?
+  phone              String?
+  whatsapp           String?
+  hostel             String?
+  verificationStatus String   @default("unverified") // unverified, email_verified, unilag_verified
+  trustScore         Int      @default(0)
+  ratingAverage      Float    @default(0)
+  totalReviews       Int      @default(0)
+  role               String   @default("user") // user, seller, vendor, admin
+  clerkId            String?  @unique
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  listings       Listing[]
+  sentMessages   Message[]
+  chatsAsBuyer   Chat[]     @relation("BuyerChats")
+  chatsAsSeller  Chat[]     @relation("SellerChats")
+  savedListings  SavedListing[]
+  reviewsGiven   Review[]   @relation("ReviewAuthor")
+  reviewsReceived Review[]  @relation("ReviewTarget")
+  reportsMade    Report[]   @relation("ReportAuthor")
+  notifications  Notification[]
+  vendor         Vendor?
+}
+
+model Listing {
+  id          String   @id @default(cuid())
+  sellerId    String
+  title       String
+  description String
+  price       Float
+  category    String
+  condition   String   // brand_new, like_new, fairly_used, old
+  negotiable  Boolean  @default(true)
+  location    String?
+  status      String   @default("active") // active, sold, paused, removed
+  views       Int      @default(0)
+  likesCount  Int      @default(0)
+  boosted     Boolean  @default(false)
+  boostedUntil DateTime?
+  images      String   @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  seller        User          @relation(fields: [sellerId], references: [id])
+  chatListings  Chat[]
+  savedBy       SavedListing[]
+  listingReports Report[]
+
+  @@index([category])
+  @@index([status])
+  @@index([sellerId])
+}
+
+model Chat {
+  id        String   @id @default(cuid())
+  listingId String
+  buyerId   String
+  sellerId  String
+  createdAt DateTime @default(now())
+
+  listing  Listing  @relation(fields: [listingId], references: [id])
+  buyer    User     @relation("BuyerChats", fields: [buyerId], references: [id])
+  seller   User     @relation("SellerChats", fields: [sellerId], references: [id])
+  messages Message[]
+
+  @@unique([listingId, buyerId, sellerId])
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  chatId    String
+  senderId  String
+  message   String
+  imageUrl  String?
+  seen      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  chat   Chat @relation(fields: [chatId], references: [id])
+  sender User @relation(fields: [senderId], references: [id])
+
+  @@index([chatId])
+}
+
+model SavedListing {
+  id        String   @id @default(cuid())
+  userId    String
+  listingId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id])
+  listing Listing @relation(fields: [listingId], references: [id])
+
+  @@unique([userId, listingId])
+}
+
+model Review {
+  id         String   @id @default(cuid())
+  reviewerId String
+  sellerId   String
+  rating     Int
+  comment    String
+  createdAt  DateTime @default(now())
+
+  reviewer User @relation("ReviewAuthor", fields: [reviewerId], references: [id])
+  seller   User @relation("ReviewTarget", fields: [sellerId], references: [id])
+
+  @@index([sellerId])
+}
+
+model Report {
+  id         String   @id @default(cuid())
+  reporterId String
+  listingId  String?
+  reason     String   // scam, fake_listing, harassment, spam, illegal_item
+  status     String   @default("pending") // pending, reviewed, resolved, dismissed
+  createdAt  DateTime @default(now())
+
+  reporter User    @relation("ReportAuthor", fields: [reporterId], references: [id])
+  listing  Listing? @relation(fields: [listingId], references: [id])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // new_message, item_sold, boost_expiry, new_follower
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model Vendor {
+  id           String   @id @default(cuid())
+  ownerId      String   @unique
+  businessName String
+  businessLogo String?
+  description  String?
+  verified     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  owner User @relation(fields: [ownerId], references: [id])
+}
+
+model Boost {
+  id               String   @id @default(cuid())
+  listingId        String
+  paymentReference String?
+  flutterwaveTxRef String?
+  amount           Float    @default(0)
+  expiresAt        DateTime
+  createdAt        DateTime @default(now())
+
+  @@index([listingId])
+}
+
+model Payment {
+  id              String   @id @default(cuid())
+  userId          String
+  listingId       String?
+  type            String   // boost, vendor_subscription, sponsored_ad
+  amount          Float
+  currency        String   @default("NGN")
+  flutterwaveTxRef String  @unique
+  flutterwaveId    String?
+  status          String   @default("pending") // pending, successful, failed, refunded
+  metadata        String   @default("{}")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}

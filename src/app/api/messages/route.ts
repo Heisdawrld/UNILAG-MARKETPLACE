@@ -1,0 +1,135 @@
+import { db } from '@/lib/db';
+import { NextRequest, NextResponse } from 'next/server';
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const chatId = searchParams.get('chatId');
+    const userId = searchParams.get('userId');
+
+    if (!chatId) {
+      return NextResponse.json(
+        { error: 'chatId query parameter is required' },
+        { status: 400 }
+      );
+    }
+
+    // Check if chat exists
+    const chat = await db.chat.findUnique({ where: { id: chatId } });
+    if (!chat) {
+      return NextResponse.json(
+        { error: 'Chat not found' },
+        { status: 404 }
+      );
+    }
+
+    const messages = await db.message.findMany({
+      where: { chatId },
+      include: {
+        sender: {
+          select: {
+            id: true,
+            username: true,
+            avatar: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    // Mark unseen messages as seen (only messages not sent by the requesting user)
+    if (userId) {
+      await db.message.updateMany({
+        where: {
+          chatId,
+          seen: false,
+          senderId: { not: userId },
+        },
+        data: { seen: true },
+      });
+    }
+
+    return NextResponse.json(messages);
+  } catch (error) {
+    console.error('Error fetching messages:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch messages' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { chatId, senderId, message, imageUrl } = body;
+
+    if (!chatId || !senderId || !message) {
+      return NextResponse.json(
+        { error: 'chatId, senderId, and message are required' },
+        { status: 400 }
+      );
+    }
+
+    // Check if chat exists
+    const chat = await db.chat.findUnique({
+      where: { id: chatId },
+      include: {
+        buyer: { select: { id: true } },
+        seller: { select: { id: true } },
+      },
+    });
+    if (!chat) {
+      return NextResponse.json(
+        { error: 'Chat not found' },
+        { status: 404 }
+      );
+    }
+
+    // Verify sender is part of the chat
+    if (senderId !== chat.buyerId && senderId !== chat.sellerId) {
+      return NextResponse.json(
+        { error: 'Sender is not part of this chat' },
+        { status: 403 }
+      );
+    }
+
+    const newMessage = await db.message.create({
+      data: {
+        chatId,
+        senderId,
+        message,
+        imageUrl: imageUrl || null,
+        seen: false,
+      },
+      include: {
+        sender: {
+          select: {
+            id: true,
+            username: true,
+            avatar: true,
+          },
+        },
+      },
+    });
+
+    // Create notification for the other user
+    const recipientId = senderId === chat.buyerId ? chat.sellerId : chat.buyerId;
+    await db.notification.create({
+      data: {
+        userId: recipientId,
+        type: 'new_message',
+        title: 'New Message',
+        message: `You have a new message about a listing`,
+      },
+    });
+
+    return NextResponse.json(newMessage, { status: 201 });
+  } catch (error) {
+    console.error('Error sending message:', error);
+    return NextResponse.json(
+      { error: 'Failed to send message' },
+      { status: 500 }
+    );
+  }
+}
