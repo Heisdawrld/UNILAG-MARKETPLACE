@@ -1,8 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // NOTE: "standalone" output is only needed for Render (Node.js server).
+  // Netlify/Vercel use their own runtime and DON'T need standalone mode.
+  // We keep it for Render compatibility but Netlify ignores it via @netlify/plugin-nextjs.
   output: "standalone",
-  /* config options here */
   typescript: {
     ignoreBuildErrors: true,
   },
