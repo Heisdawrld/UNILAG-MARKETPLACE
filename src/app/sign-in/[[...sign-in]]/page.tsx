@@ -1,41 +1,14 @@
 'use client';
-
 import { SignIn } from '@clerk/nextjs';
 
 export default function SignInPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/30 px-4">
-      <div className="w-full max-w-md space-y-8">
-        {/* Branding */}
-        <div className="text-center">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <img src="/logo.png" alt="UNILAG Marketplace" className="w-14 h-14 rounded-2xl shadow-lg" />
-          </div>
-          <h1 className="text-2xl font-bold">UNILAG Marketplace</h1>
-          <p className="text-sm text-muted-foreground mt-1">Sign in to buy, sell & run errands on campus</p>
-        </div>
-
-        {/* Clerk Sign-In */}
-        <div className="flex justify-center">
-          <SignIn
-            appearance={{
-              elements: {
-                rootBox: 'w-full',
-                cardBox: 'w-full shadow-none',
-                card: 'w-full shadow-sm border rounded-2xl',
-                headerTitle: 'text-lg',
-                formButtonPrimary: 'bg-[#6B1D2A] hover:bg-[#5a1824] text-white',
-                footerActionLink: 'text-[#6B1D2A] hover:text-[#5a1824]',
-              },
-            }}
-            forceRedirectUrl="/"
-          />
-        </div>
-
-        <p className="text-center text-xs text-muted-foreground">
-          By signing in, you agree to the UNILAG Marketplace Terms of Service
-        </p>
-      </div>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #f0f4ff 0%, #e8ecf4 100%)', padding: '1rem' }}>
+      <img src="/logo.png" alt="UNILAG" style={{ width: 56, height: 56, borderRadius: 16, marginBottom: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+      <h1 style={{ fontWeight: 800, fontSize: 22, marginBottom: 4 }}>UNILAG Marketplace</h1>
+      <p style={{ fontSize: 13, color: '#666', marginBottom: 20 }}>Sign in to buy, sell &amp; run errands on campus</p>
+      <SignIn afterSignInUrl="/" signUpUrl="/sign-up" />
+      <p style={{ fontSize: 11, color: '#999', marginTop: 16 }}>By signing in, you agree to the UNILAG Marketplace Terms of Service</p>
     </div>
   );
 }
