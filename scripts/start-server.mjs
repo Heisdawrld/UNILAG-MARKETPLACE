@@ -39,9 +39,12 @@ if (!serverJs) {
 console.log(`[start] Launching server from: ${serverJs}`);
 
 // Set required environment for Render
+// CRITICAL: Always force HOSTNAME to 0.0.0.0 because Render sets HOSTNAME
+// to the container's internal name (e.g. srv-xxx). If we use that, the server
+// won't accept connections from Render's reverse proxy → 502 error.
 process.env.NODE_ENV = process.env.NODE_ENV || 'production';
 process.env.PORT = process.env.PORT || '10000';
-process.env.HOSTNAME = process.env.HOSTNAME || '0.0.0.0';
+process.env.HOSTNAME = '0.0.0.0';
 
 console.log(`[start] PORT=${process.env.PORT}, HOSTNAME=${process.env.HOSTNAME}`);
 
