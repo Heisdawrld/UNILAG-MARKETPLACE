@@ -1,32 +1,38 @@
 import { db, isDatabaseAvailable } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
 
 export async function GET(request: NextRequest) {
   if (!isDatabaseAvailable()) {
-    return NextResponse.json(
-      { error: 'Database not configured. Please set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN environment variables.' },
-      { status: 503 }
-    );
+    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
   }
   try {
     const { searchParams } = new URL(request.url);
     const chatId = searchParams.get('chatId');
-    const userId = searchParams.get('userId');
 
     if (!chatId) {
-      return NextResponse.json(
-        { error: 'chatId query parameter is required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'chatId is required' }, { status: 400 });
+    }
+
+    // ── SECURITY: verify Clerk session ──
+    const { userId: clerkId } = await auth();
+    if (!clerkId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const authUser = await db.user.findUnique({ where: { clerkId }, select: { id: true } });
+    if (!authUser) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
     // Check if chat exists
     const chat = await db.chat.findUnique({ where: { id: chatId } });
     if (!chat) {
-      return NextResponse.json(
-        { error: 'Chat not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Chat not found' }, { status: 404 });
+    }
+
+    // ── SECURITY: ensure requester is a participant ──
+    if (authUser.id !== chat.buyerId && authUser.id !== chat.sellerId) {
+      return NextResponse.json({ error: 'Forbidden — not your chat' }, { status: 403 });
     }
 
     const messages = await db.message.findMany({
