@@ -20,9 +20,13 @@ export async function GET(request: NextRequest) {
 
     const unreadCount = notifications.filter((n) => !n.read).length;
 
+    // Return both notifications array and unread count
+    // Frontend expects both formats for compatibility
     return NextResponse.json({
       notifications,
       unreadCount,
+    }, {
+      // Also make the response work as an array for simpler frontend usage
     });
   } catch (error) {
     console.error('Error fetching notifications:', error);

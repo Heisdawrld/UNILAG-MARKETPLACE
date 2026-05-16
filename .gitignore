@@ -32,10 +32,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
-
 
 # typescript
 *.tsbuildinfo
@@ -48,17 +48,15 @@ dev.log
 dev.out.log
 test
 prompt
-
 server.log
+
 # Skills directory
 /skills/
+
 # Database
 db/
 *.db
 dev.db
-
-# Skills
-/skills/
 
 # Scripts
 push-to-turso.mjs
@@ -67,3 +65,38 @@ push-to-turso.mjs
 /agent-ctx/
 .zscripts/
 .z-ai-config
+
+# Junk data files from other projects (specific patterns)
+search_*.json
+pl*.json
+la*.json
+bu*.json
+se*.json
+ch*.json
+fa*.json
+er*.json
+li*.json
+po*.json
+sc*.json
+am*.json
+ml*.json
+fr*.json
+sa*.json
+sa*.json
+ot*.json
+generate_report.py
+
+# Bundle files
+*.bundle
+
+# Upload directory
+/upload/
+
+# Download directory
+/download/
+
+# Mini-services
+/mini-services/
+
+# Examples
+/examples/

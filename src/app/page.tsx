@@ -218,7 +218,8 @@ function HomeFeed({
   const fetchNotifications = useCallback(async () => {
     try {
       const data = await api.get(`/api/notifications?userId=${user.id}`);
-      setNotifications(data);
+      // API returns { notifications, unreadCount } - extract the array
+      setNotifications(data.notifications || data || []);
     } catch (err) {
       console.error('Failed to fetch notifications:', err);
     }
@@ -1999,10 +2000,20 @@ export default function Home() {
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const data = await api.get('/api/auth/me?email=chidi.okonkwo@unilag.edu.ng');
+        // First try to get the demo user
+        let data = await api.get('/api/auth/me?email=chidi.okonkwo@unilag.edu.ng');
         setUser(data);
       } catch (err) {
-        console.error('Failed to fetch user:', err);
+        // If user doesn't exist, try seeding the database
+        console.log('Demo user not found, attempting to seed database...');
+        try {
+          await api.post('/api/seed');
+          // After seeding, try fetching the user again
+          const data = await api.get('/api/auth/me?email=chidi.okonkwo@unilag.edu.ng');
+          setUser(data);
+        } catch (seedErr) {
+          console.error('Failed to seed or fetch user:', seedErr);
+        }
       } finally {
         setUserLoading(false);
       }
@@ -2066,10 +2077,12 @@ export default function Home() {
     if (!user) return;
     const fetchUnread = async () => {
       try {
-        const [chats, notifs] = await Promise.all([
+        const [chats, notifsData] = await Promise.all([
           api.get(`/api/chats?userId=${user.id}`),
           api.get(`/api/notifications?userId=${user.id}`),
         ]);
+        // API returns { notifications, unreadCount } - extract the array
+        const notifs = notifsData.notifications || notifsData || [];
         setUnreadCount(chats.reduce((acc: number, c: Chat) => acc + c.unreadCount, 0));
         setUnreadNotifs(notifs.filter((n: Notification) => !n.read).length);
       } catch (err) {
@@ -2098,11 +2111,27 @@ export default function Home() {
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-destructive" />
-          <h1 className="font-bold text-xl mb-2">Something went wrong</h1>
-          <p className="text-sm text-muted-foreground">Failed to load user data</p>
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="text-center max-w-sm">
+          <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center mx-auto mb-4">
+            <span className="text-primary-foreground font-bold text-2xl">U</span>
+          </div>
+          <h1 className="font-bold text-xl mb-2">UNILAG Marketplace</h1>
+          <AlertTriangle className="w-8 h-8 mx-auto mb-3 text-amber-500" />
+          <p className="text-sm text-muted-foreground mb-4">
+            Could not connect to the database. Please check your environment configuration.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Make sure TURSO_DATABASE_URL and TURSO_AUTH_TOKEN are set correctly.
+          </p>
+          <Button
+            variant="outline"
+            className="mt-4"
+            onClick={() => window.location.reload()}
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Retry
+          </Button>
         </div>
       </div>
     );

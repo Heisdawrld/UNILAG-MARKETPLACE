@@ -10,3 +10,30 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # ── Database (REQUIRED) ──
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false
+      - key: DATABASE_URL
+        value: "file:./dev.db"
+      # ── Clerk Auth (Optional - app works without it) ──
+      - key: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+        sync: false
+      - key: CLERK_SECRET_KEY
+        sync: false
+      - key: CLERK_WEBHOOK_SECRET
+        sync: false
+      # ── Flutterwave Payments (Optional - needed for payments) ──
+      - key: NEXT_PUBLIC_FLUTTERWAVE_PUBLIC_KEY
+        sync: false
+      - key: FLUTTERWAVE_SECRET_KEY
+        sync: false
+      - key: FLUTTERWAVE_WEBHOOK_HASH
+        sync: false
+      # ── App Config ──
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+      # ── Seed Secret (for initial database seeding) ──
+      - key: SEED_SECRET_KEY
+        sync: false

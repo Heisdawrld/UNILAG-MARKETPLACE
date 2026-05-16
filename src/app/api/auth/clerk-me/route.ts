@@ -1,9 +1,24 @@
-import { auth, currentUser } from '@clerk/nextjs/server';
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 
+// Check if Clerk is configured
+const isClerkConfigured = !!(
+  process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY &&
+  process.env.CLERK_SECRET_KEY &&
+  process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY !== 'undefined' &&
+  process.env.CLERK_SECRET_KEY !== 'undefined'
+);
+
 export async function GET() {
+  if (!isClerkConfigured) {
+    return NextResponse.json(
+      { error: 'Clerk authentication is not configured', configured: false },
+      { status: 503 }
+    );
+  }
+
   try {
+    const { auth, currentUser } = await import('@clerk/nextjs/server');
     const { userId } = await auth();
 
     if (!userId) {
