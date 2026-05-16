@@ -69,7 +69,7 @@ export async function PATCH(request: NextRequest) {
   }
   try {
     const body = await request.json();
-    const { userId, username, bio, phone, whatsapp, faculty, department, level, hostel } = body;
+    const { userId, username, avatar, bio, phone, whatsapp, faculty, department, level, hostel } = body;
 
     if (!userId) {
       return NextResponse.json({ error: 'userId is required' }, { status: 400 });
@@ -77,6 +77,7 @@ export async function PATCH(request: NextRequest) {
 
     const updateData: Record<string, unknown> = {};
     if (username !== undefined) updateData.username = username;
+    if (avatar !== undefined) updateData.avatar = avatar;
     if (bio !== undefined) updateData.bio = bio;
     if (phone !== undefined) updateData.phone = phone;
     if (whatsapp !== undefined) updateData.whatsapp = whatsapp;

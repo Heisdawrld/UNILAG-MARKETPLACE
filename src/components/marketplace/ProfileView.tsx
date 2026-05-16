@@ -52,6 +52,7 @@ export default function ProfileView({
   // Edit form state
   const [editForm, setEditForm] = useState({
     username: user.username,
+    avatar: user.avatar || '',
     bio: user.bio || '',
     phone: user.phone || '',
     whatsapp: user.whatsapp || '',
@@ -75,7 +76,7 @@ export default function ProfileView({
         userId: user.id,
         ...editForm,
       });
-      setUser({ ...user, ...updated });
+      setUser({ ...user, ...updated, avatar: editForm.avatar || user.avatar });
       setShowEdit(false);
       toast({ title: 'Profile updated!' });
     } catch (e) {
@@ -167,8 +168,8 @@ export default function ProfileView({
               )}
             </div>
 
-            {/* Prompt to complete profile */}
-            {(!user.faculty || !user.phone || !user.hostel) && (
+            {/* Profile completion status */}
+            {(!user.faculty || !user.phone || !user.hostel) ? (
               <button onClick={() => setShowEdit(true)} className="mt-3 w-full flex items-center justify-between p-2.5 rounded-lg bg-primary/5 border border-primary/20 text-left">
                 <div>
                   <p className="text-xs font-medium text-primary">Complete your profile</p>
@@ -176,6 +177,11 @@ export default function ProfileView({
                 </div>
                 <ChevronRight className="w-4 h-4 text-primary" />
               </button>
+            ) : (
+              <div className="mt-3 w-full flex items-center gap-2 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                <Shield className="w-4 h-4 text-emerald-500" />
+                <p className="text-xs font-medium text-emerald-600">Profile completed ✅</p>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -240,6 +246,20 @@ export default function ProfileView({
             <DialogTitle>Edit Profile</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            {/* Avatar Picker */}
+            <div>
+              <Label className="text-xs font-medium mb-2 block">Choose Avatar</Label>
+              <div className="grid grid-cols-6 gap-2">
+                {['alpha', 'bravo', 'coral', 'delta', 'echo', 'frost', 'gold', 'haze', 'iris', 'jade', 'kite', 'luna'].map(seed => {
+                  const url = `https://api.dicebear.com/9.x/notionists/svg?seed=${seed}`;
+                  return (
+                    <button key={seed} onClick={() => setEditForm(p => ({ ...p, avatar: url }))} className={`w-11 h-11 rounded-full overflow-hidden border-2 transition-all ${editForm.avatar === url ? 'border-primary ring-2 ring-primary/30 scale-110' : 'border-muted hover:border-primary/40'}`}>
+                      <img src={url} alt={seed} className="w-full h-full" />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             <div>
               <Label className="text-xs font-medium mb-1.5 block">Username</Label>
               <Input value={editForm.username} onChange={e => setEditForm(p => ({ ...p, username: e.target.value }))} />
