@@ -5,7 +5,7 @@ services:
     rootDir: .
     repo: https://github.com/Heisdawrld/UNILAG-MARKETPLACE
     branch: main
-    buildCommand: npm install && npm run build:render
+    buildCommand: npm install && npm run build
     startCommand: npm run start
     plan: free
     envVars:

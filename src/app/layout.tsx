@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
-import { ClerkProvider } from "@clerk/nextjs";
 import { Toaster } from "@/components/ui/toaster";
 import "./globals.css";
 
@@ -40,8 +39,15 @@ export const metadata: Metadata = {
 };
 
 function AuthProvider({ children }: { children: React.ReactNode }) {
-  if (clerkKey && clerkKey !== 'undefined') {
-    return <ClerkProvider>{children}</ClerkProvider>;
+  if (clerkKey && clerkKey !== 'undefined' && clerkKey.trim() !== '') {
+    try {
+      // Dynamic require to avoid crash when Clerk isn't configured
+      const { ClerkProvider } = require("@clerk/nextjs");
+      return <ClerkProvider>{children}</ClerkProvider>;
+    } catch {
+      // Clerk not available, render without auth
+      return <>{children}</>;
+    }
   }
   return <>{children}</>;
 }

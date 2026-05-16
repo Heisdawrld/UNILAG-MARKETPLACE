@@ -1,23 +1,42 @@
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 
-const isPublicRoute = createRouteMatcher([
-  '/api/auth/(.*)',
-  '/api/listings',
-  '/api/seed',
-  '/api/payments/webhook',
-])
+// Check if Clerk is configured before importing it
+const clerkKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+const clerkSecret = process.env.CLERK_SECRET_KEY
+const clerkConfigured = !!(
+  clerkKey && clerkKey !== 'undefined' && clerkKey.trim() !== '' &&
+  clerkSecret && clerkSecret !== 'undefined' && clerkSecret.trim() !== ''
+)
 
-// If Clerk keys aren't configured, skip auth and let the app load
-const clerkConfigured = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY
+async function middleware() {
+  // If Clerk isn't configured, just pass through
+  if (!clerkConfigured) {
+    return NextResponse.next()
+  }
 
-export default clerkConfigured
-  ? clerkMiddleware(async (auth, request) => {
+  try {
+    const { clerkMiddleware, createRouteMatcher } = await import('@clerk/nextjs/server')
+
+    const isPublicRoute = createRouteMatcher([
+      '/api/auth/(.*)',
+      '/api/listings',
+      '/api/seed',
+      '/api/payments/webhook',
+      '/api/health',
+    ])
+
+    return clerkMiddleware(async (auth, request) => {
       if (!isPublicRoute(request)) {
         auth().protect()
       }
-    })
-  : async () => NextResponse.next()
+    }) as any
+  } catch (err) {
+    console.error('[middleware] Clerk import failed, skipping auth:', err)
+    return NextResponse.next()
+  }
+}
+
+export default middleware
 
 export const config = {
   matcher: ['/((?!.*\\..*|_next).*)', '/', '/(api|trpc)(.*)'],
