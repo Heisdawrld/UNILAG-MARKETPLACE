@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useUser, useClerk } from '@clerk/nextjs';
 import { Home, Search, PlusCircle, Zap, MessageCircle, User } from 'lucide-react';
 import { api } from '@/lib/api';
-import { User as UserType, ViewTab, SavedListing, Chat, Notification } from '@/lib/types';
+import { User as UserType, ViewTab, SavedListing } from '@/lib/types';
 
 // Lazy load tab components
 const HomeFeed = lazy(() => import('@/components/marketplace/HomeFeed'));
@@ -68,31 +69,62 @@ function TabLoading() {
 
 // ── Main App ──
 export default function MarketplaceApp() {
+  const { user: clerkUser, isLoaded: clerkLoaded, isSignedIn } = useUser();
+  const { signOut } = useClerk();
   const [user, setUser] = useState<UserType | null>(null);
   const [activeTab, setActiveTab] = useState<ViewTab>('home');
-  const [selectedListingId, setSelectedListingId] = useState<string | null>(null);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
 
-  // Load user
+  // Sync Clerk user → DB user
   useEffect(() => {
-    const loadUser = async () => {
-      try {
-        // Try demo user first
-        const data = await api.get('/api/auth/me?email=chidi.okonkwo@unilag.edu.ng');
-        if (data?.id) { setUser(data); setLoading(false); return; }
-      } catch {}
+    if (!clerkLoaded) return;
+    if (!isSignedIn || !clerkUser) {
+      setLoading(false);
+      return;
+    }
 
-      // Seed and retry
+    const syncUser = async () => {
       try {
-        await api.post('/api/seed');
-        const data = await api.get('/api/auth/me?email=chidi.okonkwo@unilag.edu.ng');
-        if (data?.id) setUser(data);
-      } catch (e) { console.error('Failed to load user:', e); }
+        // Try clerk-me route which auto-creates DB user from Clerk
+        const data = await api.get('/api/auth/clerk-me');
+        if (data?.id) {
+          setUser(data);
+          setLoading(false);
+          return;
+        }
+      } catch {
+        // clerk-me might fail if middleware not ready, try manual sync
+      }
+
+      // Fallback: find/create user by email
+      const email = clerkUser.primaryEmailAddress?.emailAddress;
+      if (email) {
+        try {
+          const data = await api.get(`/api/auth/me?email=${encodeURIComponent(email)}`);
+          if (data?.id) {
+            setUser(data);
+            setLoading(false);
+            return;
+          }
+        } catch {}
+
+        // Register new user
+        try {
+          const data = await api.post('/api/auth/register', {
+            clerkId: clerkUser.id,
+            username: clerkUser.username || clerkUser.firstName || email.split('@')[0],
+            email,
+            avatar: clerkUser.imageUrl,
+          });
+          if (data?.id) setUser(data);
+        } catch (e) { console.error('Failed to register user:', e); }
+      }
       setLoading(false);
     };
-    loadUser();
-  }, []);
+
+    syncUser();
+  }, [clerkLoaded, isSignedIn, clerkUser]);
 
   // Load saved listings
   useEffect(() => {
@@ -118,17 +150,14 @@ export default function MarketplaceApp() {
 
   const handleTabChange = useCallback((tab: ViewTab) => {
     setActiveTab(tab);
-    setSelectedListingId(null);
   }, []);
 
   // Loading screen
-  if (loading) {
+  if (!clerkLoaded || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
-          <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center mx-auto mb-4 shadow-lg">
-            <span className="text-primary-foreground font-bold text-2xl">U</span>
-          </div>
+          <img src="/logo.png" alt="UNILAG" className="w-16 h-16 rounded-2xl mx-auto mb-4 shadow-lg" />
           <h1 className="font-bold text-xl mb-1">UNILAG Marketplace</h1>
           <p className="text-sm text-muted-foreground">Loading campus marketplace...</p>
           <div className="mt-4 w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
@@ -137,16 +166,14 @@ export default function MarketplaceApp() {
     );
   }
 
-  // No user
+  // No user after loading
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <div className="text-center max-w-sm">
-          <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center mx-auto mb-4">
-            <span className="text-primary-foreground font-bold text-2xl">U</span>
-          </div>
+          <img src="/logo.png" alt="UNILAG" className="w-16 h-16 rounded-2xl mx-auto mb-4" />
           <h1 className="font-bold text-xl mb-2">UNILAG Marketplace</h1>
-          <p className="text-sm text-muted-foreground mb-4">Could not connect. Check your database configuration.</p>
+          <p className="text-sm text-muted-foreground mb-4">Setting up your account...</p>
           <button onClick={() => window.location.reload()} className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium">
             Retry
           </button>
@@ -160,10 +187,10 @@ export default function MarketplaceApp() {
       <main className="flex-1 min-h-0 overflow-y-auto">
         <Suspense fallback={<TabLoading />}>
           {activeTab === 'home' && (
-            <HomeFeed user={user} onSelectListing={setSelectedListingId} onToggleSave={handleToggleSave} savedIds={savedIds} />
+            <HomeFeed user={user} onSelectListing={() => {}} onToggleSave={handleToggleSave} savedIds={savedIds} />
           )}
           {activeTab === 'search' && (
-            <SearchView user={user} onSelectListing={setSelectedListingId} onToggleSave={handleToggleSave} savedIds={savedIds} />
+            <SearchView user={user} onSelectListing={() => {}} onToggleSave={handleToggleSave} savedIds={savedIds} />
           )}
           {activeTab === 'sell' && (
             <SellView user={user} onListingCreated={() => setActiveTab('home')} />
@@ -171,7 +198,7 @@ export default function MarketplaceApp() {
           {activeTab === 'tasks' && <TasksView user={user} />}
           {activeTab === 'messages' && <MessagesView user={user} />}
           {activeTab === 'profile' && (
-            <ProfileView user={user} setUser={setUser} onSelectListing={setSelectedListingId} savedIds={savedIds} onToggleSave={handleToggleSave} />
+            <ProfileView user={user} setUser={setUser} onSelectListing={() => {}} savedIds={savedIds} onToggleSave={handleToggleSave} />
           )}
         </Suspense>
       </main>
