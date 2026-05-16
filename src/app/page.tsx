@@ -943,9 +943,9 @@ function MessagesView({ user, initialChat }: { user: UserType; initialChat?: Cha
   if (activeChat) {
     const otherUser = getOtherUser(activeChat);
     return (
-      <div style={{ height: 'calc(100dvh - 5rem)', position: 'sticky', top: 0 }} className="flex flex-col">
+      <div className="h-full flex flex-col">
         {/* Chat Header */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b bg-background">
+        <div className="flex-shrink-0 flex items-center gap-3 px-4 py-3 border-b bg-background">
           <button onClick={() => setActiveChat(null)} className="p-1">
             <ArrowLeft className="w-5 h-5" />
           </button>
@@ -991,7 +991,7 @@ function MessagesView({ user, initialChat }: { user: UserType; initialChat?: Cha
         </ScrollArea>
 
         {/* Message Input */}
-        <div className="px-4 py-3 border-t bg-background">
+        <div className="flex-shrink-0 px-4 py-3 border-t bg-background">
           <div className="flex gap-2">
             <Input
               placeholder="Type a message..."
@@ -1936,7 +1936,7 @@ function BottomNav({
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-t safe-bottom">
+    <nav className="flex-shrink-0 bg-background/95 backdrop-blur-sm border-t safe-bottom z-50">
       <div className="flex items-center justify-around max-w-lg mx-auto">
         {tabs.map(({ id, icon: Icon, label }) => {
           const isSell = id === 'sell';
@@ -1965,10 +1965,7 @@ function BottomNav({
                 </span>
               )}
               {isActive && !isSell && (
-                <motion.div
-                  layoutId="activeTab"
-                  className="absolute -top-px left-3 right-3 h-0.5 bg-primary rounded-full"
-                />
+                <div className="absolute -top-px left-3 right-3 h-0.5 bg-primary rounded-full" />
               )}
             </button>
           );
@@ -1993,12 +1990,19 @@ export default function Home() {
   // Load user on mount — try Clerk first, then demo user, then seed
   useEffect(() => {
     const fetchUser = async () => {
+      // Safety timeout: don't stay stuck on loading forever
+      const timeout = setTimeout(() => {
+        console.warn('[app] User loading timed out after 10s');
+        setUserLoading(false);
+      }, 10000);
+
       try {
         // 1) Try Clerk-authenticated user first
         try {
           const clerkData = await api.get('/api/auth/clerk-me');
           if (clerkData && clerkData.id) {
             setUser(clerkData);
+            clearTimeout(timeout);
             setUserLoading(false);
             return;
           }
@@ -2011,6 +2015,7 @@ export default function Home() {
           let data = await api.get('/api/auth/me?email=chidi.okonkwo@unilag.edu.ng');
           if (data && data.id) {
             setUser(data);
+            clearTimeout(timeout);
             setUserLoading(false);
             return;
           }
@@ -2045,6 +2050,7 @@ export default function Home() {
       } catch (err) {
         console.error('[app] Unexpected error loading user:', err);
       } finally {
+        clearTimeout(timeout);
         setUserLoading(false);
       }
     };
@@ -2098,7 +2104,6 @@ export default function Home() {
   const handleTabChange = useCallback((tab: ViewTab) => {
     setActiveTab(tab);
     setSelectedListingId(null);
-    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
   }, []);
 
   // Calculate unread messages count for badge
@@ -2173,23 +2178,27 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Main Content */}
-      <main className="pb-20">
+    <div className="h-screen flex flex-col overflow-hidden bg-background">
+      {/* Main Content — fills all space between header and bottom nav */}
+      <main className="flex-1 min-h-0 overflow-hidden relative">
         {selectedListingId ? (
-          <ListingDetail
-            listingId={selectedListingId}
-            user={user}
-            onBack={() => setSelectedListingId(null)}
-            onToggleSave={() => handleToggleSave(selectedListingId)}
-            isSaved={savedIds.has(selectedListingId)}
-            onOpenChat={handleOpenChat}
-          />
+          <div className="absolute inset-0 overflow-y-auto">
+            <ListingDetail
+              listingId={selectedListingId}
+              user={user}
+              onBack={() => setSelectedListingId(null)}
+              onToggleSave={() => handleToggleSave(selectedListingId)}
+              isSaved={savedIds.has(selectedListingId)}
+              onOpenChat={handleOpenChat}
+            />
+          </div>
         ) : showAdmin ? (
-          <AdminDashboard user={user} onClose={() => setShowAdmin(false)} />
+          <div className="absolute inset-0 overflow-y-auto">
+            <AdminDashboard user={user} onClose={() => setShowAdmin(false)} />
+          </div>
         ) : (
-          <div>
-            {activeTab === 'home' && (
+          <>
+            <div className="absolute inset-0 overflow-y-auto" style={{ display: activeTab === 'home' ? 'block' : 'none' }}>
               <HomeFeed
                 user={user}
                 onSelectListing={handleSelectListing}
@@ -2197,23 +2206,25 @@ export default function Home() {
                 savedIds={savedIds}
                 unreadNotifications={unreadNotifs}
               />
-            )}
-            {activeTab === 'search' && (
+            </div>
+            <div className="absolute inset-0 overflow-y-auto" style={{ display: activeTab === 'search' ? 'block' : 'none' }}>
               <SearchView
                 user={user}
                 onSelectListing={handleSelectListing}
                 onToggleSave={handleToggleSave}
                 savedIds={savedIds}
               />
-            )}
-            {activeTab === 'sell' && (
+            </div>
+            <div className="absolute inset-0 overflow-y-auto" style={{ display: activeTab === 'sell' ? 'block' : 'none' }}>
               <SellView
                 user={user}
                 onListingCreated={() => setActiveTab('home')}
               />
-            )}
-            {activeTab === 'messages' && <MessagesView user={user} initialChat={activeChatFromDetail} />}
-            {activeTab === 'profile' && (
+            </div>
+            <div className="absolute inset-0 overflow-y-auto" style={{ display: activeTab === 'messages' ? 'block' : 'none' }}>
+              <MessagesView user={user} initialChat={activeChatFromDetail} />
+            </div>
+            <div className="absolute inset-0 overflow-y-auto" style={{ display: activeTab === 'profile' ? 'block' : 'none' }}>
               <ProfileView
                 user={user}
                 setUser={setUser}
@@ -2222,8 +2233,8 @@ export default function Home() {
                 onToggleSave={handleToggleSave}
                 onShowAdmin={() => setShowAdmin(true)}
               />
-            )}
-          </div>
+            </div>
+          </>
         )}
       </main>
 
