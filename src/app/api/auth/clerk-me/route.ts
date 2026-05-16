@@ -1,12 +1,19 @@
 import { db, isDatabaseAvailable } from '@/lib/db';
 import { NextResponse } from 'next/server';
 
-// Check if Clerk is configured
+// Check if Clerk is configured with REAL keys (not placeholders)
+const clerkPubKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || '';
+const clerkSecKey = process.env.CLERK_SECRET_KEY || '';
 const isClerkConfigured = !!(
-  process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY &&
-  process.env.CLERK_SECRET_KEY &&
-  process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY !== 'undefined' &&
-  process.env.CLERK_SECRET_KEY !== 'undefined'
+  clerkPubKey &&
+  clerkSecKey &&
+  clerkPubKey !== 'undefined' &&
+  clerkSecKey !== 'undefined' &&
+  !clerkPubKey.includes('your_key') &&
+  !clerkPubKey.includes('your-key') &&
+  !clerkSecKey.includes('your_key') &&
+  !clerkSecKey.includes('your-key') &&
+  clerkPubKey.startsWith('pk_')
 );
 
 export async function GET() {

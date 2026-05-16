@@ -1,0 +1,122 @@
+'use client';
+
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Send, ArrowLeft } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { api } from '@/lib/api';
+import { User as UserType, Chat, Message } from '@/lib/types';
+import { timeAgo, getInitials, getListingFirstImage } from '@/lib/marketplace-utils';
+
+function ChatDetail({ chat, user, onBack }: { chat: Chat; user: UserType; onBack: () => void }) {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMsg, setNewMsg] = useState('');
+  const [sending, setSending] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const other = chat.buyerId === user.id ? chat.seller : chat.buyer;
+
+  const fetchMessages = useCallback(async () => {
+    try {
+      const data = await api.get(`/api/messages?chatId=${chat.id}`);
+      setMessages(data || []);
+    } catch (e) { console.error(e); }
+  }, [chat.id]);
+
+  useEffect(() => { fetchMessages(); const i = setInterval(fetchMessages, 10000); return () => clearInterval(i); }, [fetchMessages]);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+
+  const handleSend = async () => {
+    if (!newMsg.trim() || sending) return;
+    setSending(true);
+    try {
+      await api.post('/api/messages', { chatId: chat.id, senderId: user.id, message: newMsg.trim() });
+      setNewMsg('');
+      fetchMessages();
+    } catch (e) { console.error(e); }
+    finally { setSending(false); }
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center gap-3 p-3 border-b bg-background/95 backdrop-blur-md">
+        <button onClick={onBack} className="p-1"><ArrowLeft className="w-5 h-5" /></button>
+        <Avatar className="w-8 h-8"><AvatarImage src={other.avatar || undefined} /><AvatarFallback>{getInitials(other.username)}</AvatarFallback></Avatar>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium truncate">{other.username}</p>
+          <p className="text-[10px] text-muted-foreground truncate">{chat.listing.title}</p>
+        </div>
+      </div>
+      <ScrollArea className="flex-1 p-3">
+        <div className="space-y-2">
+          {messages.map(msg => (
+            <div key={msg.id} className={`flex ${msg.senderId === user.id ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[75%] px-3 py-2 rounded-2xl text-sm ${msg.senderId === user.id ? 'bg-primary text-primary-foreground rounded-br-md' : 'bg-muted rounded-bl-md'}`}>
+                <p>{msg.message}</p>
+                <p className={`text-[9px] mt-0.5 ${msg.senderId === user.id ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>{timeAgo(msg.createdAt)}</p>
+              </div>
+            </div>
+          ))}
+          <div ref={bottomRef} />
+        </div>
+      </ScrollArea>
+      <div className="p-3 border-t flex gap-2">
+        <Input value={newMsg} onChange={e => setNewMsg(e.target.value)} placeholder="Type a message..." className="flex-1" onKeyDown={e => e.key === 'Enter' && handleSend()} />
+        <button onClick={handleSend} disabled={sending || !newMsg.trim()} className="p-2 bg-primary text-primary-foreground rounded-full disabled:opacity-50">
+          <Send className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default function MessagesView({ user }: { user: UserType }) {
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeChat, setActiveChat] = useState<Chat | null>(null);
+
+  useEffect(() => {
+    api.get(`/api/chats?userId=${user.id}`).then(setChats).catch(console.error).finally(() => setLoading(false));
+  }, [user.id]);
+
+  if (activeChat) return <ChatDetail chat={activeChat} user={user} onBack={() => setActiveChat(null)} />;
+
+  return (
+    <div>
+      <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b px-4 py-3">
+        <h1 className="font-bold text-lg">Messages</h1>
+      </div>
+      {loading ? (
+        <div className="p-8 text-center text-muted-foreground">Loading chats...</div>
+      ) : chats.length === 0 ? (
+        <div className="p-8 text-center text-muted-foreground">
+          <p className="font-medium">No messages yet</p>
+          <p className="text-sm">Start a conversation by messaging a seller</p>
+        </div>
+      ) : (
+        <div>
+          {chats.map(chat => {
+            const other = chat.buyerId === user.id ? chat.seller : chat.buyer;
+            const img = getListingFirstImage(chat.listing.images, '');
+            return (
+              <button key={chat.id} onClick={() => setActiveChat(chat)} className="w-full flex items-center gap-3 p-4 hover:bg-muted/50 transition-colors border-b text-left">
+                <div className="relative">
+                  <Avatar className="w-12 h-12"><AvatarImage src={other.avatar || undefined} /><AvatarFallback>{getInitials(other.username)}</AvatarFallback></Avatar>
+                  {chat.unreadCount > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-primary text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center">{chat.unreadCount}</span>}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <p className="font-medium text-sm truncate">{other.username}</p>
+                    {chat.lastMessage && <span className="text-[10px] text-muted-foreground">{timeAgo(chat.lastMessage.createdAt)}</span>}
+                  </div>
+                  <p className="text-xs text-muted-foreground truncate">{chat.listing.title}</p>
+                  {chat.lastMessage && <p className="text-xs text-muted-foreground truncate mt-0.5">{chat.lastMessage.message}</p>}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -17,6 +17,9 @@ export interface User {
   ratingAverage: number;
   totalReviews: number;
   role: string;
+  isRunner: boolean;
+  runnerRating: number;
+  tasksCompleted: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -52,6 +55,59 @@ export interface Listing {
   createdAt: string;
   updatedAt: string;
   seller: ListingSeller;
+}
+
+export interface Task {
+  id: string;
+  creatorId: string;
+  assignedRunnerId: string | null;
+  title: string;
+  description: string;
+  reward: number;
+  category: string;
+  location: string | null;
+  pickupLocation: string | null;
+  urgency: string;
+  status: string;
+  deadline: string | null;
+  images: string;
+  createdAt: string;
+  updatedAt: string;
+  creator: {
+    id: string;
+    username: string;
+    avatar: string | null;
+    verificationStatus: string;
+    trustScore: number;
+    hostel: string | null;
+  };
+  assignedRunner?: {
+    id: string;
+    username: string;
+    avatar: string | null;
+    runnerRating: number;
+    tasksCompleted: number;
+  } | null;
+  applications?: TaskApplication[];
+  _count?: { applications: number };
+}
+
+export interface TaskApplication {
+  id: string;
+  taskId: string;
+  runnerId: string;
+  message: string | null;
+  status: string;
+  createdAt: string;
+  runner: {
+    id: string;
+    username: string;
+    avatar: string | null;
+    runnerRating: number;
+    tasksCompleted: number;
+    trustScore: number;
+    verificationStatus: string;
+  };
 }
 
 export interface Chat {
@@ -158,9 +214,11 @@ export interface AdminStats {
   pendingReports: number;
   totalListings: number;
   soldListings: number;
+  openTasks: number;
+  completedTasks: number;
 }
 
-export type ViewTab = 'home' | 'search' | 'sell' | 'messages' | 'profile';
+export type ViewTab = 'home' | 'search' | 'sell' | 'tasks' | 'messages' | 'profile';
 
 export const CATEGORIES = [
   'Electronics',
@@ -174,6 +232,42 @@ export const CATEGORIES = [
   'Sports',
   'Others',
 ] as const;
+
+export const TASK_CATEGORIES = [
+  'Delivery',
+  'Food Pickup',
+  'Printing',
+  'Tutoring',
+  'Shopping',
+  'Queue Holding',
+  'Cleaning',
+  'Moving Help',
+  'Miscellaneous',
+] as const;
+
+export const URGENCY_LEVELS = ['low', 'medium', 'high', 'urgent'] as const;
+
+export const URGENCY_LABELS: Record<string, string> = {
+  low: 'Low',
+  medium: 'Normal',
+  high: 'High',
+  urgent: '🔥 Urgent',
+};
+
+export const URGENCY_COLORS: Record<string, string> = {
+  low: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+  medium: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  high: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+  urgent: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+};
+
+export const TASK_STATUS_LABELS: Record<string, string> = {
+  open: 'Open',
+  assigned: 'Assigned',
+  in_progress: 'In Progress',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+};
 
 export const CONDITIONS = [
   'brand_new',

@@ -1,20 +1,13 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/toaster";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-const clerkKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -27,54 +20,25 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: "UNILAG Marketplace",
-  description: "The campus marketplace for University of Lagos students",
-  keywords: ["UNILAG", "marketplace", "students", "University of Lagos", "campus", "buy", "sell"],
+  description: "Buy, sell & run errands on campus — University of Lagos",
+  keywords: ["UNILAG", "marketplace", "students", "University of Lagos", "campus", "buy", "sell", "errands"],
   authors: [{ name: "UNILAG Marketplace" }],
-  icons: {
-    icon: "/logo.svg",
-  },
+  icons: { icon: "/logo.png" },
   openGraph: {
     title: "UNILAG Marketplace",
-    description: "The campus marketplace for University of Lagos students",
+    description: "Buy, sell & run errands on campus — University of Lagos",
     type: "website",
   },
 };
 
-function AuthProvider({ children }: { children: React.ReactNode }) {
-  if (clerkKey && clerkKey !== 'undefined' && clerkKey.trim() !== '') {
-    try {
-      // Dynamic require to avoid crash when Clerk isn't configured
-      const { ClerkProvider } = require("@clerk/nextjs");
-      return <ClerkProvider>{children}</ClerkProvider>;
-    } catch {
-      // Clerk not available, render without auth
-      return <>{children}</>;
-    }
-  }
-  return <>{children}</>;
-}
-
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
-      >
-        <AuthProvider>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="light"
-            enableSystem
-            disableTransitionOnChange
-          >
-            {children}
-            <Toaster />
-          </ThemeProvider>
-        </AuthProvider>
+      <body className={`${inter.variable} font-sans antialiased`}>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
+          {children}
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );
