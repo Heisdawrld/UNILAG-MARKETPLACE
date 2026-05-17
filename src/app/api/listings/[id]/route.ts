@@ -74,7 +74,7 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { title, description, price, category, condition, negotiable, location, status, images } = body;
+    const { title, description, price, category, condition, negotiable, location, status, images, boosted, boostedUntil } = body;
 
     // Check if listing exists
     const existingListing = await db.listing.findUnique({ where: { id } });
@@ -95,6 +95,8 @@ export async function PATCH(
     if (location !== undefined) updateData.location = location;
     if (status !== undefined) updateData.status = status;
     if (images !== undefined) updateData.images = JSON.stringify(images);
+    if (boosted !== undefined) updateData.boosted = boosted;
+    if (boostedUntil !== undefined) updateData.boostedUntil = boostedUntil ? new Date(boostedUntil) : null;
 
     const updatedListing = await db.listing.update({
       where: { id },

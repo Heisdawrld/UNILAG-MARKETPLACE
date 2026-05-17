@@ -28,6 +28,7 @@ export default function ListingDetail({
   const [currentImage, setCurrentImage] = useState(0);
   const [showPayment, setShowPayment] = useState(false);
   const [showReport, setShowReport] = useState(false);
+  const [showBoost, setShowBoost] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -228,6 +229,11 @@ export default function ListingDetail({
         <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t px-4 py-3 safe-bottom z-50">
           <div className="flex gap-2 max-w-lg mx-auto">
             {listing.status === 'active' && (
+              <Button onClick={() => setShowBoost(true)} className="h-11 flex-1 bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-md shadow-amber-500/20">
+                <Zap className="w-4 h-4 mr-1.5 fill-current" /> Boost Listing
+              </Button>
+            )}
+            {listing.status === 'active' && (
               <Button variant="outline" className="h-11 flex-1" onClick={async () => {
                 try {
                   await api.patch(`/api/listings/${listing.id}`, { status: 'sold' });
@@ -235,10 +241,10 @@ export default function ListingDetail({
                   onBack();
                 } catch { toast({ title: 'Failed to update', variant: 'destructive' }); }
               }}>
-                Mark as Sold
+                Mark Sold
               </Button>
             )}
-            <Button variant="destructive" className="h-11 flex-1" onClick={async () => {
+            <Button variant="destructive" className="h-11 px-3" onClick={async () => {
               if (!confirm('Delete this listing?')) return;
               try {
                 await api.del(`/api/listings/${listing.id}`);
@@ -246,7 +252,7 @@ export default function ListingDetail({
                 onBack();
               } catch { toast({ title: 'Failed to delete', variant: 'destructive' }); }
             }}>
-              Delete Listing
+              Delete
             </Button>
           </div>
         </div>
@@ -329,6 +335,66 @@ export default function ListingDetail({
             }}>
               <MessageCircle className="w-4 h-4 mr-2" /> Message Seller Instead
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Boost Modal */}
+      <Dialog open={showBoost} onOpenChange={setShowBoost}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <Zap className="w-5 h-5 text-amber-500 fill-amber-500" /> Boost Listing
+            </DialogTitle>
+            <DialogDescription>
+              Get more visibility and sell faster by boosting your listing to the top.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            {[
+              { id: 'basic', name: 'BASIC BOOST', price: '₦300', duration: '6 hours', desc: 'Slight feed priority • Boosted section • Increased visibility' },
+              { id: 'standard', name: 'STANDARD BOOST', price: '₦700', duration: '24 hours', desc: 'Homepage priority • Category priority • More impressions', popular: true },
+              { id: 'premium', name: 'PREMIUM BOOST', price: '₦1,500', duration: '3 days', desc: 'Top search visibility • Homepage placement • Featured badge' },
+              { id: 'ultra', name: 'ULTRA BOOST', price: '₦3,000', duration: '7 days', desc: 'Aggressive feed distribution • Top ranking • Premium visibility' },
+            ].map(plan => (
+              <div key={plan.id} className={`relative p-4 rounded-xl border-2 transition-all cursor-pointer ${plan.popular ? 'border-amber-500 bg-amber-500/5' : 'border-muted hover:border-amber-500/50'}`}>
+                {plan.popular && (
+                  <span className="absolute -top-3 right-4 px-2 py-0.5 bg-amber-500 text-white text-[10px] font-bold rounded-full uppercase tracking-wider">
+                    Most Popular
+                  </span>
+                )}
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <h3 className="font-bold text-sm tracking-tight">{plan.name}</h3>
+                    <p className="text-xs text-muted-foreground font-medium">{plan.duration}</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="font-black text-lg text-primary">{plan.price}</span>
+                  </div>
+                </div>
+                <div className="space-y-1 mt-3">
+                  {plan.desc.split(' • ').map((benefit, i) => (
+                    <div key={i} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Zap className="w-3 h-3 text-amber-500" /> {benefit}
+                    </div>
+                  ))}
+                </div>
+                <Button className="w-full mt-4 bg-primary hover:bg-primary/90" onClick={async () => {
+                  try {
+                    const durationHours = plan.id === 'basic' ? 6 : plan.id === 'standard' ? 24 : plan.id === 'premium' ? 72 : 168;
+                    const boostedUntil = new Date(Date.now() + durationHours * 60 * 60 * 1000).toISOString();
+                    await api.patch(`/api/listings/${listing.id}`, { boosted: true, boostedUntil });
+                    toast({ title: 'Listing Boosted 🚀', description: `Your listing is boosted for ${plan.duration}!` });
+                    setShowBoost(false);
+                    onBack();
+                  } catch {
+                    toast({ title: 'Boost Failed', variant: 'destructive' });
+                  }
+                }}>
+                  Pay {plan.price}
+                </Button>
+              </div>
+            ))}
           </div>
         </DialogContent>
       </Dialog>

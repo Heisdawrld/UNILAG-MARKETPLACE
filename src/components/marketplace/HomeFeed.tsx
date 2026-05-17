@@ -135,17 +135,23 @@ export default function HomeFeed({
 
         {/* Trending */}
         {boosted.length > 0 && (
-          <section>
+          <section className="overflow-hidden relative -mx-4 px-4">
             <div className="flex items-center gap-2 mb-3">
               <TrendingUp className="w-5 h-5 text-amber-500" />
               <h2 className="font-bold text-lg">Trending 🔥</h2>
             </div>
-            <div className="flex gap-3 overflow-x-auto hide-scrollbar pb-2">
-              {boosted.map(listing => (
-                <div key={listing.id} className="flex-shrink-0 w-44">
-                  <ListingCard listing={listing} onClick={() => onSelectListing(listing.id)} isSaved={savedIds.has(listing.id)} onToggleSave={() => onToggleSave(listing.id)} />
-                </div>
-              ))}
+            {/* Fade edges */}
+            <div className="absolute left-0 top-10 bottom-0 w-8 bg-gradient-to-r from-background to-transparent z-10" />
+            <div className="absolute right-0 top-10 bottom-0 w-8 bg-gradient-to-l from-background to-transparent z-10" />
+            
+            <div className="overflow-hidden pb-2">
+              <div className="animate-marquee hover:[animation-play-state:paused] flex gap-3">
+                {[...boosted, ...boosted, ...boosted].map((listing, i) => (
+                  <div key={`${listing.id}-${i}`} className="flex-shrink-0 w-44">
+                    <ListingCard listing={listing} onClick={() => onSelectListing(listing.id)} isSaved={savedIds.has(listing.id)} onToggleSave={() => onToggleSave(listing.id)} />
+                  </div>
+                ))}
+              </div>
             </div>
           </section>
         )}

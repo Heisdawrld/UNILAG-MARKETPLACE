@@ -251,9 +251,34 @@ export default function ProfileView({
           <div className="space-y-4">
             {/* Avatar Picker */}
             <div>
-              <Label className="text-xs font-medium mb-2 block">Choose Avatar</Label>
-              <div className="grid grid-cols-6 gap-2">
-                {['alpha', 'bravo', 'coral', 'delta', 'echo', 'frost', 'gold', 'haze', 'iris', 'jade', 'kite', 'luna'].map(seed => {
+              <Label className="text-xs font-medium mb-2 block">Choose Avatar or Upload</Label>
+              <div className="grid grid-cols-6 gap-2 mb-2">
+                {/* Custom Upload Button */}
+                <label className="w-11 h-11 rounded-full border-2 border-dashed flex items-center justify-center cursor-pointer hover:border-primary transition-colors bg-muted/30">
+                  <Camera className="w-4 h-4 text-muted-foreground" />
+                  <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                      const img = new Image();
+                      img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const MAX = 400;
+                        let w = img.width; let h = img.height;
+                        if (w > h) { if (w > MAX) { h *= MAX / w; w = MAX; } }
+                        else { if (h > MAX) { w *= MAX / h; h = MAX; } }
+                        canvas.width = w; canvas.height = h;
+                        const ctx = canvas.getContext('2d');
+                        ctx?.drawImage(img, 0, 0, w, h);
+                        setEditForm(p => ({ ...p, avatar: canvas.toDataURL('image/webp', 0.8) }));
+                      };
+                      img.src = event.target?.result as string;
+                    };
+                    reader.readAsDataURL(file);
+                  }} />
+                </label>
+                {['alpha', 'bravo', 'coral', 'delta', 'echo', 'frost', 'gold', 'haze', 'iris', 'jade', 'luna'].map(seed => {
                   const url = `https://api.dicebear.com/9.x/notionists/svg?seed=${seed}`;
                   return (
                     <button key={seed} onClick={() => setEditForm(p => ({ ...p, avatar: url }))} className={`w-11 h-11 rounded-full overflow-hidden border-2 transition-all ${editForm.avatar === url ? 'border-primary ring-2 ring-primary/30 scale-110' : 'border-muted hover:border-primary/40'}`}>
