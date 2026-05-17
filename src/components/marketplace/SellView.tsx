@@ -27,9 +27,41 @@ export default function SellView({ user, onListingCreated }: { user: UserType; o
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
+    
     Array.from(files).slice(0, 5 - images.length).forEach(file => {
       const reader = new FileReader();
-      reader.onloadend = () => setImages(prev => prev.length >= 5 ? prev : [...prev, reader.result as string]);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 800;
+          const MAX_HEIGHT = 800;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          
+          // Compress to webp for premium fast-loading images
+          const dataUrl = canvas.toDataURL('image/webp', 0.8);
+          setImages(prev => prev.length >= 5 ? prev : [...prev, dataUrl]);
+        };
+        img.src = event.target?.result as string;
+      };
       reader.readAsDataURL(file);
     });
   };

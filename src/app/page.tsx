@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
-import { useUser } from '@clerk/nextjs';
+import { useUser, SignInButton } from '@clerk/nextjs';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Home, Search, PlusCircle, Zap, MessageCircle, User } from 'lucide-react';
 import { api } from '@/lib/api';
 import { User as UserType, ViewTab, SavedListing } from '@/lib/types';
@@ -37,9 +38,8 @@ function BottomNav({ activeTab, onTabChange }: { activeTab: ViewTab; onTabChange
             <button
               key={id}
               onClick={() => onTabChange(id)}
-              className={`relative flex flex-col items-center justify-center py-2.5 transition-all ${
-                isActive ? 'text-primary' : 'text-muted-foreground'
-              }`}
+              className={`relative flex flex-col items-center justify-center py-2.5 transition-all ${isActive ? 'text-primary' : 'text-muted-foreground'
+                }`}
             >
               {isSell ? (
                 <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center -mt-4 shadow-lg">
@@ -88,14 +88,14 @@ export default function MarketplaceApp() {
       try {
         const data = await api.get('/api/auth/clerk-me');
         if (data?.id) { setUser(data); setLoading(false); return; }
-      } catch {}
+      } catch { }
 
       const email = clerkUser.primaryEmailAddress?.emailAddress;
       if (email) {
         try {
           const data = await api.get(`/api/auth/me?email=${encodeURIComponent(email)}`);
           if (data?.id) { setUser(data); setLoading(false); return; }
-        } catch {}
+        } catch { }
 
         try {
           const data = await api.post('/api/auth/register', {
@@ -176,10 +176,23 @@ export default function MarketplaceApp() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <div className="text-center max-w-sm">
-          <img src="/logo.png" alt="UNILAG" className="w-16 h-16 rounded-2xl mx-auto mb-4" />
-          <h1 className="font-bold text-xl mb-2">UNILAG Marketplace</h1>
-          <p className="text-sm text-muted-foreground mb-4">Setting up your account...</p>
-          <button onClick={() => window.location.reload()} className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium">Retry</button>
+          <img src="/logo.png" alt="UNILAG" className="w-16 h-16 rounded-2xl mx-auto mb-4 shadow-lg" />
+          <h1 className="font-bold text-2xl mb-2">UNILAG Marketplace</h1>
+          {!isSignedIn ? (
+            <>
+              <p className="text-sm text-muted-foreground mb-8">Buy, sell & run errands safely on campus.</p>
+              <SignInButton mode="modal">
+                <button className="w-full py-3 bg-primary text-primary-foreground rounded-xl text-base font-bold shadow-md hover:bg-primary/90 transition-colors">
+                  Get Started
+                </button>
+              </SignInButton>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground mb-4 animate-pulse">Setting up your account...</p>
+              <div className="mt-4 w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+            </>
+          )}
         </div>
       </div>
     );
@@ -208,22 +221,33 @@ export default function MarketplaceApp() {
   return (
     <div className="h-[100dvh] flex flex-col bg-background">
       {!onboarded && <Onboarding onComplete={() => setOnboarded(true)} />}
-      <main className="flex-1 min-h-0 overflow-y-auto">
+      <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden relative">
         <Suspense fallback={<TabLoading />}>
-          {activeTab === 'home' && (
-            <HomeFeed user={user} onSelectListing={handleSelectListing} onToggleSave={handleToggleSave} savedIds={savedIds} />
-          )}
-          {activeTab === 'search' && (
-            <SearchView user={user} onSelectListing={handleSelectListing} onToggleSave={handleToggleSave} savedIds={savedIds} initialCategory={selectedCategory} />
-          )}
-          {activeTab === 'sell' && (
-            <SellView user={user} onListingCreated={() => setActiveTab('home')} />
-          )}
-          {activeTab === 'tasks' && <TasksView user={user} />}
-          {activeTab === 'messages' && <MessagesView user={user} />}
-          {activeTab === 'profile' && (
-            <ProfileView user={user} setUser={setUser} onSelectListing={setSelectedListingId} savedIds={savedIds} onToggleSave={handleToggleSave} />
-          )}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, x: 10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -10 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className="h-full"
+            >
+              {activeTab === 'home' && (
+                <HomeFeed user={user} onSelectListing={handleSelectListing} onToggleSave={handleToggleSave} savedIds={savedIds} />
+              )}
+              {activeTab === 'search' && (
+                <SearchView user={user} onSelectListing={handleSelectListing} onToggleSave={handleToggleSave} savedIds={savedIds} initialCategory={selectedCategory} />
+              )}
+              {activeTab === 'sell' && (
+                <SellView user={user} onListingCreated={() => setActiveTab('home')} />
+              )}
+              {activeTab === 'tasks' && <TasksView user={user} />}
+              {activeTab === 'messages' && <MessagesView user={user} />}
+              {activeTab === 'profile' && (
+                <ProfileView user={user} setUser={setUser} onSelectListing={setSelectedListingId} savedIds={savedIds} onToggleSave={handleToggleSave} />
+              )}
+            </motion.div>
+          </AnimatePresence>
         </Suspense>
       </main>
       <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />
