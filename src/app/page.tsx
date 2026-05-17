@@ -19,42 +19,41 @@ import Onboarding from '@/components/marketplace/Onboarding';
 
 // ── Bottom Navigation ──
 function BottomNav({ activeTab, onTabChange }: { activeTab: ViewTab; onTabChange: (tab: ViewTab) => void }) {
-  const tabs: { id: ViewTab; icon: typeof Home; label: string }[] = [
+  const leftTabs: { id: ViewTab; icon: typeof Home; label: string }[] = [
     { id: 'home', icon: Home, label: 'Home' },
-    { id: 'search', icon: Search, label: 'Search' },
-    { id: 'sell', icon: PlusCircle, label: 'Sell' },
+    { id: 'search', icon: Search, label: 'Explore' },
+  ];
+  const rightTabs: { id: ViewTab; icon: typeof Home; label: string }[] = [
     { id: 'tasks', icon: Zap, label: 'Tasks' },
     { id: 'messages', icon: MessageCircle, label: 'Chat' },
     { id: 'profile', icon: User, label: 'Me' },
   ];
 
+  const renderTab = (id: ViewTab, Icon: typeof Home, label: string) => {
+    const isActive = activeTab === id;
+    return (
+      <button key={id} onClick={() => onTabChange(id)} className={`relative flex flex-col items-center justify-center py-2.5 px-2 transition-all ${isActive ? 'text-primary' : 'text-muted-foreground'}`}>
+        <Icon className={`w-5 h-5 ${isActive ? 'scale-110' : ''} transition-transform`} />
+        <span className="text-[9px] mt-0.5 font-medium">{label}</span>
+        {isActive && <div className="absolute top-0 left-1/4 right-1/4 h-0.5 bg-primary rounded-full" />}
+      </button>
+    );
+  };
+
   return (
     <nav className="flex-shrink-0 bg-background/95 backdrop-blur-md border-t safe-bottom z-50 w-full">
-      <div className="grid grid-cols-6 max-w-lg mx-auto">
-        {tabs.map(({ id, icon: Icon, label }) => {
-          const isActive = activeTab === id;
-          const isSell = id === 'sell';
-          return (
-            <button
-              key={id}
-              onClick={() => onTabChange(id)}
-              className={`relative flex flex-col items-center justify-center py-2.5 transition-all ${isActive ? 'text-primary' : 'text-muted-foreground'
-                }`}
-            >
-              {isSell ? (
-                <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center -mt-4 shadow-lg">
-                  <Icon className="w-5 h-5" />
-                </div>
-              ) : (
-                <Icon className={`w-5 h-5 ${isActive ? 'scale-110' : ''} transition-transform`} />
-              )}
-              <span className="text-[9px] mt-0.5 font-medium">{isSell ? '' : label}</span>
-              {isActive && !isSell && (
-                <div className="absolute top-0 left-1/4 right-1/4 h-0.5 bg-primary rounded-full" />
-              )}
-            </button>
-          );
-        })}
+      <div className="flex items-center justify-between max-w-lg mx-auto px-1">
+        <div className="flex flex-1 justify-around">
+          {leftTabs.map(({ id, icon, label }) => renderTab(id, icon, label))}
+        </div>
+        <button onClick={() => onTabChange('sell')} className="relative -mt-5 mx-1 flex-shrink-0">
+          <div className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all ${activeTab === 'sell' ? 'bg-primary scale-110 shadow-primary/30' : 'bg-primary hover:scale-105'}`}>
+            <PlusCircle className="w-7 h-7 text-primary-foreground" />
+          </div>
+        </button>
+        <div className="flex flex-1 justify-around">
+          {rightTabs.map(({ id, icon, label }) => renderTab(id, icon, label))}
+        </div>
       </div>
     </nav>
   );
