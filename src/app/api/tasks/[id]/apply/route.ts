@@ -11,7 +11,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   try {
     const body = await req.json();
-    const { runnerId, message } = body;
+    const { runnerId, message, proposedPrice } = body;
 
     if (!runnerId) {
       return NextResponse.json({ error: 'runnerId is required' }, { status: 400 });
@@ -26,8 +26,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Create application (upsert in case they already applied)
     const application = await (db as any).taskApplication.upsert({
       where: { taskId_runnerId: { taskId, runnerId } },
-      create: { taskId, runnerId, message: message?.trim() || null },
-      update: { message: message?.trim() || null },
+      create: { taskId, runnerId, message: message?.trim() || null, proposedPrice: proposedPrice ? parseFloat(proposedPrice) : null },
+      update: { message: message?.trim() || null, proposedPrice: proposedPrice ? parseFloat(proposedPrice) : null, status: 'pending' },
       include: {
         runner: {
           select: { id: true, username: true, avatar: true, runnerRating: true, tasksCompleted: true, trustScore: true, verificationStatus: true },
@@ -69,6 +69,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     if (action === 'accept') {
       // Accept this runner, reject all others, assign runner to task
+      // If runner proposed a price, update the task reward to that price
+      const finalReward = application.proposedPrice || undefined;
       await Promise.all([
         (db as any).taskApplication.update({
           where: { id: applicationId },
@@ -80,9 +82,26 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         }),
         (db as any).task.update({
           where: { id: taskId },
-          data: { status: 'assigned', assignedRunnerId: application.runnerId },
+          data: {
+            status: 'assigned',
+            assignedRunnerId: application.runnerId,
+            ...(finalReward ? { reward: finalReward } : {}),
+          },
         }),
       ]);
+
+      // Notify the runner they got accepted
+      try {
+        await (db as any).notification.create({
+          data: {
+            userId: application.runnerId,
+            type: 'task_accepted',
+            title: '🎉 Task Accepted!',
+            message: `Your offer was accepted! Check your active tasks.`,
+            data: JSON.stringify({ taskId }),
+          },
+        });
+      } catch {}
     } else {
       await (db as any).taskApplication.update({
         where: { id: applicationId },

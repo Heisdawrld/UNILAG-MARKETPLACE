@@ -150,6 +150,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const {
       sellerId,
+      storeId,
       title,
       description,
       price,
@@ -179,6 +180,7 @@ export async function POST(request: NextRequest) {
     const listing = await db.listing.create({
       data: {
         sellerId,
+        storeId: storeId || null,
         title,
         description,
         price: parseFloat(price),

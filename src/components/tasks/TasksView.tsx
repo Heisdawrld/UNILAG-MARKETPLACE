@@ -322,6 +322,7 @@ function TaskDetail({ taskId, user, onBack }: { taskId: string; user: UserType; 
   const [task, setTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
   const [applyMsg, setApplyMsg] = useState('');
+  const [proposedPrice, setProposedPrice] = useState('');
   const [applying, setApplying] = useState(false);
 
   useEffect(() => {
@@ -331,7 +332,11 @@ function TaskDetail({ taskId, user, onBack }: { taskId: string; user: UserType; 
   const handleApply = async () => {
     setApplying(true);
     try {
-      await api.post(`/api/tasks/${taskId}/apply`, { runnerId: user.id, message: applyMsg });
+      await api.post(`/api/tasks/${taskId}/apply`, {
+        runnerId: user.id,
+        message: applyMsg,
+        proposedPrice: proposedPrice || null,
+      });
       toast({ title: 'Applied!', description: 'The task creator will review your application' });
       const updated = await api.get(`/api/tasks/${taskId}`);
       setTask(updated);
@@ -405,10 +410,18 @@ function TaskDetail({ taskId, user, onBack }: { taskId: string; user: UserType; 
         user.isRunner ? (
           <Card className="border-0 shadow-sm">
             <CardContent className="p-4 space-y-3">
-              <h4 className="font-semibold text-sm">Apply as Runner</h4>
+              <h4 className="font-semibold text-sm">Make Your Offer 💰</h4>
+              <p className="text-[11px] text-muted-foreground">Accept the posted price or propose your own — like InDrive!</p>
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1 block">Your Price (leave blank to accept ₦{task.reward.toLocaleString()})</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium text-sm">₦</span>
+                  <Input type="number" placeholder={String(task.reward)} value={proposedPrice} onChange={(e) => setProposedPrice(e.target.value)} className="pl-8" min="0" />
+                </div>
+              </div>
               <Textarea placeholder="Why should they pick you? (optional)" value={applyMsg} onChange={(e) => setApplyMsg(e.target.value)} rows={2} />
               <Button onClick={handleApply} disabled={applying} className="w-full">
-                <Send className="w-4 h-4 mr-2" />{applying ? 'Applying...' : 'Apply Now'}
+                <Send className="w-4 h-4 mr-2" />{applying ? 'Sending...' : proposedPrice ? `Offer ₦${parseInt(proposedPrice).toLocaleString()}` : `Accept ₦${task.reward.toLocaleString()}`}
               </Button>
             </CardContent>
           </Card>
@@ -449,18 +462,25 @@ function TaskDetail({ taskId, user, onBack }: { taskId: string; user: UserType; 
           <CardContent className="p-4 space-y-3">
             <h4 className="font-semibold text-sm">Applications ({task.applications.length})</h4>
             {task.applications.map((app) => (
-              <div key={app.id} className="flex items-center gap-3 p-2 rounded-lg bg-muted/50">
-                <Avatar className="w-8 h-8">
+              <div key={app.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                <Avatar className="w-9 h-9">
                   <AvatarImage src={app.runner.avatar || undefined} />
                   <AvatarFallback>{getInitials(app.runner.username)}</AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium">{app.runner.username}</p>
-                  <p className="text-[10px] text-muted-foreground">{app.runner.tasksCompleted} tasks done · ★ {app.runner.runnerRating.toFixed(1)}</p>
-                  {app.message && <p className="text-xs text-muted-foreground mt-0.5">{app.message}</p>}
+                  <p className="text-[10px] text-muted-foreground">{app.runner.tasksCompleted} tasks · ★ {app.runner.runnerRating.toFixed(1)}</p>
+                  {app.proposedPrice && app.proposedPrice !== task.reward ? (
+                    <p className="text-xs font-bold text-amber-600 mt-0.5">Offers ₦{app.proposedPrice.toLocaleString()}
+                      {app.proposedPrice > task.reward ? <span className="text-[10px] text-muted-foreground font-normal"> (+₦{(app.proposedPrice - task.reward).toLocaleString()})</span> : <span className="text-[10px] text-emerald-600 font-normal"> (saves ₦{(task.reward - app.proposedPrice).toLocaleString()})</span>}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-emerald-600 mt-0.5">Accepts ₦{task.reward.toLocaleString()}</p>
+                  )}
+                  {app.message && <p className="text-[11px] text-muted-foreground mt-0.5 italic">&ldquo;{app.message}&rdquo;</p>}
                 </div>
                 {app.status === 'pending' && task.status === 'open' && (
-                  <Button size="sm" className="h-7 text-xs" onClick={() => handleAccept(app.id)}>Accept</Button>
+                  <Button size="sm" className="h-8 text-xs px-3" onClick={() => handleAccept(app.id)}>Accept</Button>
                 )}
                 {app.status === 'accepted' && <Badge className="bg-emerald-100 text-emerald-700 text-[10px]">Accepted</Badge>}
                 {app.status === 'rejected' && <Badge variant="secondary" className="text-[10px]">Rejected</Badge>}

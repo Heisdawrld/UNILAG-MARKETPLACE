@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Home, Search, PlusCircle, Zap, MessageCircle, User, X, ChevronRight, ChevronLeft, Sparkles } from 'lucide-react';
+import { Home, Search, PlusCircle, Zap, MessageCircle, User, X, ChevronRight, ChevronLeft, Sparkles, Store } from 'lucide-react';
 
 const STEPS = [
   {
@@ -26,16 +26,23 @@ const STEPS = [
     iconColor: 'text-purple-500',
   },
   {
-    icon: PlusCircle,
-    title: 'Sell Your Items 💰',
-    description: 'Got stuff to sell? Post a listing in seconds — add photos, set your price, and reach buyers across campus instantly.',
+    icon: Store,
+    title: 'Create Your Store 🏪',
+    description: 'Want to sell? First, create your store — give it a name, pick your niche, add your logo. Your store is your brand on campus!',
     color: 'from-emerald-500/20 to-emerald-500/5',
     iconColor: 'text-emerald-500',
   },
   {
+    icon: PlusCircle,
+    title: 'List Products 💰',
+    description: 'Once your store is set up, tap the + button to list items. Add photos (we auto-enhance them!), set your price, and go live instantly.',
+    color: 'from-green-500/20 to-green-500/5',
+    iconColor: 'text-green-500',
+  },
+  {
     icon: Zap,
-    title: 'Tasks & Errands ⚡',
-    description: 'Need someone to pick up food, print documents, or run errands? Post a task! Verified campus runners will handle it for you.',
+    title: 'Tasks & Runners ⚡',
+    description: 'Post errands and verified runners will bid on them — like InDrive! They propose their price, you pick the best offer. Become a runner to earn money too!',
     color: 'from-amber-500/20 to-amber-500/5',
     iconColor: 'text-amber-500',
   },

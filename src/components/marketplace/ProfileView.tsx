@@ -205,6 +205,35 @@ export default function ProfileView({
           </CardContent></Card>
         </div>
 
+        {/* My Store Section */}
+        <Card className="border-0 shadow-sm overflow-hidden">
+          <CardContent className="p-0">
+            {myListings.length > 0 ? (
+              <div className="p-3 flex items-center gap-3 bg-gradient-to-r from-primary/5 to-amber-500/5">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <Settings className="w-5 h-5 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold">My Store</p>
+                  <p className="text-[10px] text-muted-foreground">{myListings.length} products listed</p>
+                </div>
+                <Badge variant="outline" className="text-[10px]">Seller</Badge>
+              </div>
+            ) : (
+              <div className="p-3 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center flex-shrink-0">
+                  <Settings className="w-5 h-5 text-muted-foreground" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">Create Your Store</p>
+                  <p className="text-[10px] text-muted-foreground">Tap the + button to set up your shop and start selling</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground" />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Tabs: My Listings / Saved */}
         <div>
           <div className="flex gap-1 mb-3 bg-muted/50 rounded-lg p-0.5">
