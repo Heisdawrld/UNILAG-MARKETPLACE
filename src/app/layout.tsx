@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   description: "Buy, sell & run errands on campus — University of Lagos",
   keywords: ["UNILAG", "marketplace", "students", "University of Lagos", "campus", "buy", "sell", "errands"],
   authors: [{ name: "UNILAG Marketplace" }],
-  icons: { icon: "/logo.png", apple: "/logo.png" },
+  icons: { icon: "/logo.png", apple: "/apple-touch-icon.png" },
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
