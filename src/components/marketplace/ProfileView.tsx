@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Settings, Star, Shield, Edit3, LogOut, Save, X, ChevronRight } from 'lucide-react';
+import { Settings, Star, Shield, Edit3, LogOut, Save, X, ChevronRight, Camera } from 'lucide-react';
 import { useClerk } from '@clerk/nextjs';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';

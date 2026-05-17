@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Heart, Share2, MapPin, Clock, Eye, Shield, Star, MessageCircle, Phone, ChevronLeft, ChevronRight, CreditCard, Banknote, Lock, AlertTriangle, Flag, MessageSquare } from 'lucide-react';
+import { ArrowLeft, Heart, Share2, MapPin, Clock, Eye, Shield, Star, MessageCircle, Phone, ChevronLeft, ChevronRight, CreditCard, Banknote, Lock, AlertTriangle, Flag, MessageSquare, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';

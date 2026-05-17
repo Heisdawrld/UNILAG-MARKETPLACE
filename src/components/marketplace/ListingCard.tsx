@@ -20,12 +20,12 @@ export function ListingCard({
 
   return (
     <motion.div whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} className="cursor-pointer" onClick={onClick}>
-      <Card className="overflow-hidden border-0 shadow-sm hover:shadow-md transition-shadow h-full">
+      <Card className={`overflow-hidden border-0 shadow-sm hover:shadow-md transition-shadow h-full ${listing.boosted ? 'ring-1 ring-amber-400/40' : ''}`}>
         <div className="relative aspect-[4/3] bg-muted">
           <img src={image} alt={listing.title} className="w-full h-full object-cover" loading="lazy" />
           {listing.boosted && (
-            <Badge className="absolute top-2 left-2 bg-amber-500 text-white text-[10px] px-1.5 py-0.5">
-              <Zap className="w-2.5 h-2.5 mr-0.5" /> Boosted
+            <Badge className="absolute top-2 left-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] px-1.5 py-0.5 shadow-sm">
+              <Zap className="w-2.5 h-2.5 mr-0.5 fill-current" /> Featured
             </Badge>
           )}
           <Badge className={`absolute top-2 right-2 text-[10px] px-1.5 py-0.5 ${conditionClass}`}>

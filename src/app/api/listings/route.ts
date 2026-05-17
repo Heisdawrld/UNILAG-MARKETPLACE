@@ -88,6 +88,15 @@ export async function GET(request: NextRequest) {
 
     const skip = (page - 1) * limit;
 
+    // Auto-expire stale boosts
+    await db.listing.updateMany({
+      where: {
+        boosted: true,
+        boostedUntil: { lt: new Date() },
+      },
+      data: { boosted: false, boostedUntil: null },
+    });
+
     const [listings, total] = await Promise.all([
       db.listing.findMany({
         where,
@@ -104,7 +113,10 @@ export async function GET(request: NextRequest) {
             },
           },
         },
-        orderBy,
+        orderBy: [
+          { boosted: 'desc' },
+          orderBy,
+        ],
         skip,
         take: limit,
       }),
