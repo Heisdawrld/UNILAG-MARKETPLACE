@@ -24,6 +24,49 @@ export default function SellView({ user, onListingCreated }: { user: UserType; o
   const [images, setImages] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
+  // Detect blur using Laplacian variance on grayscale
+  const detectBlur = (ctx: CanvasRenderingContext2D, w: number, h: number): number => {
+    const imageData = ctx.getImageData(0, 0, w, h);
+    const data = imageData.data;
+    let sum = 0; let sumSq = 0; let count = 0;
+    // Convert to grayscale and compute Laplacian
+    const gray = new Float32Array(w * h);
+    for (let i = 0; i < w * h; i++) {
+      gray[i] = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
+    }
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        const lap = gray[(y - 1) * w + x] + gray[(y + 1) * w + x] + gray[y * w + x - 1] + gray[y * w + x + 1] - 4 * gray[y * w + x];
+        sum += lap; sumSq += lap * lap; count++;
+      }
+    }
+    return count > 0 ? (sumSq / count) - (sum / count) ** 2 : 0;
+  };
+
+  // Sharpen image using unsharp mask
+  const sharpenImage = (ctx: CanvasRenderingContext2D, w: number, h: number) => {
+    const imageData = ctx.getImageData(0, 0, w, h);
+    const data = imageData.data;
+    const copy = new Uint8ClampedArray(data);
+    const amount = 0.6;
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        for (let c = 0; c < 3; c++) {
+          const i = (y * w + x) * 4 + c;
+          const blur = (copy[((y - 1) * w + x) * 4 + c] + copy[((y + 1) * w + x) * 4 + c] + copy[(y * w + x - 1) * 4 + c] + copy[(y * w + x + 1) * 4 + c]) / 4;
+          data[i] = Math.min(255, Math.max(0, copy[i] + (copy[i] - blur) * amount));
+        }
+      }
+    }
+    // Slight contrast boost
+    for (let i = 0; i < data.length; i += 4) {
+      for (let c = 0; c < 3; c++) {
+        data[i + c] = Math.min(255, Math.max(0, ((data[i + c] / 255 - 0.5) * 1.1 + 0.5) * 255));
+      }
+    }
+    ctx.putImageData(imageData, 0, 0);
+  };
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
@@ -40,23 +83,24 @@ export default function SellView({ user, onListingCreated }: { user: UserType; o
           let height = img.height;
 
           if (width > height) {
-            if (width > MAX_WIDTH) {
-              height *= MAX_WIDTH / width;
-              width = MAX_WIDTH;
-            }
+            if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
           } else {
-            if (height > MAX_HEIGHT) {
-              width *= MAX_HEIGHT / height;
-              height = MAX_HEIGHT;
-            }
+            if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
           }
 
           canvas.width = width;
           canvas.height = height;
           const ctx = canvas.getContext('2d');
-          ctx?.drawImage(img, 0, 0, width, height);
+          if (!ctx) return;
+          ctx.drawImage(img, 0, 0, width, height);
           
-          // Compress to webp for premium fast-loading images
+          // Detect blur and auto-enhance if needed
+          const variance = detectBlur(ctx, width, height);
+          if (variance < 100) {
+            sharpenImage(ctx, width, height);
+            toast({ title: '✨ Image Enhanced', description: 'We improved your photo quality automatically' });
+          }
+          
           const dataUrl = canvas.toDataURL('image/webp', 0.8);
           setImages(prev => prev.length >= 5 ? prev : [...prev, dataUrl]);
         };

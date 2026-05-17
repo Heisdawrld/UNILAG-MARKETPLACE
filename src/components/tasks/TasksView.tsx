@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   MapPin, Clock, Zap, ArrowLeft, Send, CheckCircle2,
-  Plus, Filter, Users, Award, AlertTriangle, ChevronRight,
+  Plus, Filter, Users, Award, AlertTriangle, ChevronRight, Camera,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -58,19 +58,61 @@ function RunnerApplicationCard({ user, onApplied }: { user: UserType; onApplied:
   const [studentId, setStudentId] = useState('');
   const [motivation, setMotivation] = useState('');
   const [availability, setAvailability] = useState('');
+  const [emergencyContact, setEmergencyContact] = useState('');
+  const [selfie, setSelfie] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [applied, setApplied] = useState(false);
+
+  const handleSelfie = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX = 500;
+        let w = img.width; let h = img.height;
+        if (w > h) { if (w > MAX) { h *= MAX / w; w = MAX; } }
+        else { if (h > MAX) { w *= MAX / h; h = MAX; } }
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, w, h);
+        setSelfie(canvas.toDataURL('image/webp', 0.85));
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleApply = async () => {
     if (!studentId.trim()) {
       toast({ title: 'Student ID required', variant: 'destructive' }); return;
+    }
+    if (!selfie) {
+      toast({ title: 'Selfie/ID photo required', description: 'Upload a clear photo for verification', variant: 'destructive' }); return;
+    }
+    if (!emergencyContact.trim()) {
+      toast({ title: 'Emergency contact required', variant: 'destructive' }); return;
     }
     setSubmitting(true);
     try {
       await fetch('/api/runner-applications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, studentId, motivation, availability }),
+        body: JSON.stringify({
+          userId: user.id,
+          studentId,
+          motivation,
+          availability,
+          emergencyContact,
+          selfie,
+          username: user.username,
+          email: user.email,
+          phone: user.phone || '',
+          faculty: user.faculty || '',
+          hostel: user.hostel || '',
+        }),
       });
       setApplied(true);
       onApplied();
@@ -86,7 +128,7 @@ function RunnerApplicationCard({ user, onApplied }: { user: UserType; onApplied:
           <CheckCircle2 className="w-5 h-5 text-amber-600 flex-shrink-0" />
           <div>
             <p className="text-sm font-medium text-amber-700 dark:text-amber-400">Application submitted!</p>
-            <p className="text-xs text-muted-foreground">Admin will review and approve you as a runner</p>
+            <p className="text-xs text-muted-foreground">Admin will review your details and approve you as a runner</p>
           </div>
         </CardContent>
       </Card>
@@ -100,12 +142,36 @@ function RunnerApplicationCard({ user, onApplied }: { user: UserType; onApplied:
           <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
           <div>
             <h4 className="font-semibold text-sm">Become a Verified Runner</h4>
-            <p className="text-xs text-muted-foreground">Only verified runners can accept tasks. Apply below and get approved by admin.</p>
+            <p className="text-xs text-muted-foreground">Runners handle real products. We verify your identity for safety.</p>
           </div>
         </div>
+
+        {/* Selfie / ID Photo */}
+        <div>
+          <Label className="text-xs font-medium mb-1 block">Your Photo / Student ID Card *</Label>
+          <div className="flex items-center gap-3">
+            {selfie ? (
+              <div className="w-16 h-16 rounded-lg overflow-hidden border-2 border-amber-400">
+                <img src={selfie} alt="Selfie" className="w-full h-full object-cover" />
+              </div>
+            ) : (
+              <label className="w-16 h-16 rounded-lg border-2 border-dashed flex flex-col items-center justify-center cursor-pointer hover:border-amber-400 transition-colors">
+                <Camera className="w-5 h-5 text-muted-foreground" />
+                <span className="text-[9px] text-muted-foreground">Upload</span>
+                <input type="file" accept="image/*" className="hidden" onChange={handleSelfie} />
+              </label>
+            )}
+            <p className="text-[10px] text-muted-foreground flex-1">Clear photo of yourself or your student ID card. This helps us verify your identity.</p>
+          </div>
+        </div>
+
         <div>
           <Label className="text-xs font-medium mb-1 block">Student ID / Matric Number *</Label>
           <Input placeholder="e.g. 190405001" value={studentId} onChange={e => setStudentId(e.target.value)} />
+        </div>
+        <div>
+          <Label className="text-xs font-medium mb-1 block">Emergency Contact (Parent/Guardian) *</Label>
+          <Input placeholder="e.g. 08012345678" value={emergencyContact} onChange={e => setEmergencyContact(e.target.value)} />
         </div>
         <div>
           <Label className="text-xs font-medium mb-1 block">Why do you want to be a runner?</Label>
@@ -418,6 +484,7 @@ export default function TasksView({ user }: { user: UserType }) {
   const [showCreate, setShowCreate] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [showRunnerApply, setShowRunnerApply] = useState(false);
 
   const fetchTasks = useCallback(async () => {
     try {
@@ -448,9 +515,21 @@ export default function TasksView({ user }: { user: UserType }) {
             <h1 className="font-bold text-lg">Campus Tasks</h1>
             <p className="text-[10px] text-muted-foreground">Errands & micro-jobs by students</p>
           </div>
-          <Button size="sm" onClick={() => setShowCreate(true)} className="h-8 gap-1">
-            <Plus className="w-3.5 h-3.5" />Post Task
-          </Button>
+          <div className="flex items-center gap-2">
+            {!user.isRunner && (
+              <Button size="sm" variant="outline" onClick={() => setShowRunnerApply(!showRunnerApply)} className="h-8 gap-1 border-amber-400 text-amber-600 hover:bg-amber-50">
+                <Zap className="w-3.5 h-3.5" />Become Runner
+              </Button>
+            )}
+            {user.isRunner && (
+              <Badge className="bg-amber-500/10 text-amber-600 border-amber-300 text-[10px]">
+                <Zap className="w-3 h-3 mr-0.5" /> Verified Runner
+              </Badge>
+            )}
+            <Button size="sm" onClick={() => setShowCreate(true)} className="h-8 gap-1">
+              <Plus className="w-3.5 h-3.5" />Post Task
+            </Button>
+          </div>
         </div>
         <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
           <Badge variant={categoryFilter === '' ? 'default' : 'outline'} className="cursor-pointer flex-shrink-0" onClick={() => setCategoryFilter('')}>All</Badge>
@@ -462,6 +541,11 @@ export default function TasksView({ user }: { user: UserType }) {
 
       {/* Task List */}
       <div className="px-4 py-4 space-y-3">
+        {/* Runner Application */}
+        {showRunnerApply && !user.isRunner && (
+          <RunnerApplicationCard user={user} onApplied={() => setShowRunnerApply(false)} />
+        )}
+
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => (
             <Card key={i} className="border-0 shadow-sm"><CardContent className="p-4 space-y-2">

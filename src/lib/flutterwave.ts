@@ -21,10 +21,10 @@ function getAppUrl(): string {
 // Boost Pricing Constants
 // ──────────────────────────────────────────────
 export const BOOST_PRICING = {
-  3: 500,    // 3-day boost: ₦500
-  7: 1000,   // 7-day boost: ₦1,000
-  14: 1800,  // 14-day boost: ₦1,800
-  30: 3000,  // 30-day boost: ₦3,000
+  basic:    { name: 'BASIC BOOST',    price: 300,  durationHours: 6   },
+  standard: { name: 'STANDARD BOOST', price: 700,  durationHours: 24  },
+  premium:  { name: 'PREMIUM BOOST',  price: 1500, durationHours: 72  },
+  ultra:    { name: 'ULTRA BOOST',    price: 3000, durationHours: 168 },
 } as const;
 
 export type BoostDuration = keyof typeof BOOST_PRICING;
