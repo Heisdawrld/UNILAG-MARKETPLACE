@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, isDatabaseAvailable } from '@/lib/db';
+import { sendPushToUser } from '@/lib/push';
 
 // POST /api/tasks/:id/apply — runner applies for a task
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -40,6 +41,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       where: { id: runnerId },
       data: { isRunner: true },
     });
+
+    // Notify task creator that a runner applied
+    const runner = await (db as any).user.findUnique({ where: { id: runnerId }, select: { username: true } });
+    await (db as any).notification.create({
+      data: {
+        userId: task.creatorId,
+        type: 'task_application',
+        title: '🏃 New Runner Offer!',
+        message: `${runner?.username || 'A runner'} wants to do your task${proposedPrice ? ` for ₦${parseFloat(proposedPrice).toLocaleString()}` : ''}`,
+        data: JSON.stringify({ taskId }),
+      },
+    }).catch(() => {});
+
+    // Push notification to task creator
+    sendPushToUser(task.creatorId, {
+      title: '🏃 New Runner Offer!',
+      body: `${runner?.username || 'A runner'} wants to do your task${proposedPrice ? ` for ₦${parseFloat(proposedPrice).toLocaleString()}` : ''}`,
+      type: 'task_application',
+      tag: `task-${taskId}`,
+      data: { taskId },
+    }).catch(() => {});
 
     return NextResponse.json(application, { status: 201 });
   } catch (err) {
@@ -101,6 +123,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
             data: JSON.stringify({ taskId }),
           },
         });
+
+        // Push notification to accepted runner
+        sendPushToUser(application.runnerId, {
+          title: '🎉 You Got the Job!',
+          body: 'Your offer was accepted! Tap to see details.',
+          type: 'task_accepted',
+          tag: `task-${taskId}`,
+          requireInteraction: true,
+          data: { taskId },
+        }).catch(() => {});
       } catch {}
     } else {
       await (db as any).taskApplication.update({

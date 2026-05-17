@@ -3,9 +3,10 @@
 import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useUser, SignInButton } from '@clerk/nextjs';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Home, Search, PlusCircle, Zap, MessageCircle, User } from 'lucide-react';
+import { Home, Search, PlusCircle, Zap, MessageCircle, User, Bell } from 'lucide-react';
 import { api } from '@/lib/api';
 import { User as UserType, ViewTab, SavedListing } from '@/lib/types';
+import { usePushNotifications } from '@/hooks/use-push';
 
 // Lazy load tab components
 const HomeFeed = lazy(() => import('@/components/marketplace/HomeFeed'));
@@ -77,6 +78,8 @@ export default function MarketplaceApp() {
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [onboarded, setOnboarded] = useState(false);
+  const [showPushPrompt, setShowPushPrompt] = useState(false);
+  const { permission, isSubscribed, isSupported, subscribe } = usePushNotifications(user?.id || null);
 
   // Sync Clerk user → DB user
   useEffect(() => {
@@ -217,9 +220,59 @@ export default function MarketplaceApp() {
     );
   }
 
+  // Show push prompt after a delay if not subscribed
+  useEffect(() => {
+    if (!user || !isSupported || isSubscribed || permission === 'denied') return;
+    const dismissed = localStorage.getItem('push_prompt_dismissed');
+    if (dismissed) return;
+    const timer = setTimeout(() => setShowPushPrompt(true), 5000);
+    return () => clearTimeout(timer);
+  }, [user, isSupported, isSubscribed, permission]);
+
   return (
     <div className="h-[100dvh] flex flex-col bg-background">
       {!onboarded && <Onboarding onComplete={() => setOnboarded(true)} />}
+
+      {/* Push Notification Prompt */}
+      <AnimatePresence>
+        {showPushPrompt && (
+          <motion.div
+            initial={{ y: -80, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -80, opacity: 0 }}
+            className="absolute top-0 left-0 right-0 z-[90] p-3 bg-primary/95 backdrop-blur-sm text-primary-foreground shadow-lg"
+          >
+            <div className="flex items-center gap-3 max-w-lg mx-auto">
+              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
+                <Bell className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold">Enable Notifications 🔔</p>
+                <p className="text-[11px] opacity-80">Get alerts for messages, task updates & more</p>
+              </div>
+              <button
+                onClick={async () => {
+                  await subscribe();
+                  setShowPushPrompt(false);
+                }}
+                className="px-3 py-1.5 rounded-lg bg-white text-primary text-xs font-bold flex-shrink-0"
+              >
+                Enable
+              </button>
+              <button
+                onClick={() => {
+                  setShowPushPrompt(false);
+                  localStorage.setItem('push_prompt_dismissed', 'true');
+                }}
+                className="text-white/60 text-xs"
+              >
+                ✕
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden relative">
         <Suspense fallback={<TabLoading />}>
           <AnimatePresence mode="wait">

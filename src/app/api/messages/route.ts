@@ -1,6 +1,7 @@
 import { db, isDatabaseAvailable } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
+import { sendPushToUser } from '@/lib/push';
 
 export async function GET(request: NextRequest) {
   if (!isDatabaseAvailable()) {
@@ -145,14 +146,25 @@ export async function POST(request: NextRequest) {
 
     // Create notification for the other user
     const recipientId = senderId === chat.buyerId ? chat.sellerId : chat.buyerId;
+    const senderUser = await db.user.findUnique({ where: { id: senderId }, select: { username: true } });
     await db.notification.create({
       data: {
         userId: recipientId,
         type: 'new_message',
-        title: 'New Message',
-        message: `You have a new message about a listing`,
+        title: 'New Message 💬',
+        message: `${senderUser?.username || 'Someone'}: ${message.slice(0, 80)}`,
+        data: JSON.stringify({ chatId }),
       },
     });
+
+    // Push notification
+    sendPushToUser(recipientId, {
+      title: `💬 ${senderUser?.username || 'New Message'}`,
+      body: message.slice(0, 100),
+      type: 'new_message',
+      tag: `chat-${chatId}`,
+      data: { chatId },
+    }).catch(() => {});
 
     return NextResponse.json(newMessage, { status: 201 });
   } catch (error) {

@@ -1,5 +1,6 @@
 import { db, isDatabaseAvailable } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
+import { sendPushToUser } from '@/lib/push';
 
 // GET /api/stores/[id] - Get store by ID or slug
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -121,6 +122,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           data: JSON.stringify({ storeId }),
         },
       });
+
+      // Push notification
+      sendPushToUser(store.ownerId, {
+        title: '🎉 New Follower!',
+        body: `${follower?.username || 'Someone'} is now following ${store.name}`,
+        type: 'new_follower',
+        tag: 'follower',
+        data: { storeId },
+      }).catch(() => {});
     }
 
     return NextResponse.json({ followed: true });
