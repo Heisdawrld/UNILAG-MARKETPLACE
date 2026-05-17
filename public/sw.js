@@ -1,20 +1,81 @@
-// UNILAG Marketplace Push Notification Service Worker
-// This runs in the background to receive push notifications
+// UNILAG Marketplace Service Worker
+// Handles push notifications and PWA install requirements
 
+const CACHE_NAME = 'unilag-v1';
+
+// Install: cache essential assets
+self.addEventListener('install', function(event) {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(function(cache) {
+      return cache.addAll([
+        '/logo.png',
+        '/icon-192.png',
+        '/icon-512.png',
+      ]);
+    })
+  );
+  self.skipWaiting();
+});
+
+// Activate: clean old caches
+self.addEventListener('activate', function(event) {
+  event.waitUntil(
+    caches.keys().then(function(names) {
+      return Promise.all(
+        names.filter(function(name) { return name !== CACHE_NAME; })
+             .map(function(name) { return caches.delete(name); })
+      );
+    }).then(function() { return self.clients.claim(); })
+  );
+});
+
+// Fetch: network-first with cache fallback for images
+self.addEventListener('fetch', function(event) {
+  // Only cache GET requests
+  if (event.request.method !== 'GET') return;
+
+  // For navigation requests, always go to network
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).catch(function() {
+        return caches.match('/') || new Response('Offline', { status: 503 });
+      })
+    );
+    return;
+  }
+
+  // For static assets, try cache first then network
+  if (event.request.url.match(/\.(png|jpg|jpeg|svg|ico|webp)$/)) {
+    event.respondWith(
+      caches.match(event.request).then(function(cached) {
+        return cached || fetch(event.request).then(function(response) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(function(cache) {
+            cache.put(event.request, clone);
+          });
+          return response;
+        });
+      })
+    );
+    return;
+  }
+});
+
+// Push notification received
 self.addEventListener('push', function(event) {
   if (!event.data) return;
 
-  let data;
+  var data;
   try {
     data = event.data.json();
-  } catch {
+  } catch(e) {
     data = { title: 'UNILAG Marketplace', body: event.data.text() };
   }
 
-  const options = {
+  var options = {
     body: data.body || data.message || '',
-    icon: '/logo.png',
-    badge: '/logo.png',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
     vibrate: [100, 50, 100],
     data: data.data || {},
     actions: data.actions || [],
@@ -28,36 +89,29 @@ self.addEventListener('push', function(event) {
   );
 });
 
-// Handle notification click
+// Notification click — deep link into the app
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();
 
-  const data = event.notification.data || {};
-  let url = '/';
+  var data = event.notification.data || {};
+  var url = '/';
 
-  // Deep link based on notification type
   if (data.type === 'new_message') url = '/?tab=messages';
-  else if (data.type === 'task_accepted') url = '/?tab=tasks';
+  else if (data.type === 'task_accepted' || data.type === 'task_application') url = '/?tab=tasks';
   else if (data.type === 'new_follower') url = '/?tab=profile';
   else if (data.type === 'boost_expiry') url = '/?tab=profile';
   else if (data.url) url = data.url;
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
-      // Focus existing window if open
-      for (const client of clientList) {
+      for (var i = 0; i < clientList.length; i++) {
+        var client = clientList[i];
         if (client.url.includes(self.location.origin) && 'focus' in client) {
           client.navigate(url);
           return client.focus();
         }
       }
-      // Otherwise open new window
       return clients.openWindow(url);
     })
   );
-});
-
-// Activate immediately
-self.addEventListener('activate', function(event) {
-  event.waitUntil(self.clients.claim());
 });

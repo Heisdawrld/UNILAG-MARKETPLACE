@@ -123,6 +123,14 @@ export default function MarketplaceApp() {
       .catch(console.error);
   }, [user]);
 
+  // Self-ping to keep Render from sleeping (every 4 min)
+  useEffect(() => {
+    const ping = () => fetch('/api/health').catch(() => {});
+    ping(); // immediate ping on load
+    const interval = setInterval(ping, 4 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Show push prompt after a delay if not subscribed
   useEffect(() => {
     if (!user || !isSupported || isSubscribed || permission === 'denied') return;
