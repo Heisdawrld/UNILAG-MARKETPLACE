@@ -54,6 +54,62 @@ const migrations = [
   `CREATE UNIQUE INDEX IF NOT EXISTS TaskApplication_taskId_runnerId_key ON TaskApplication(taskId, runnerId)`,
   `CREATE INDEX IF NOT EXISTS TaskApplication_taskId_idx ON TaskApplication(taskId)`,
   `CREATE INDEX IF NOT EXISTS TaskApplication_runnerId_idx ON TaskApplication(runnerId)`,
+
+  // ── New: Store table ──
+  `CREATE TABLE IF NOT EXISTS Store (
+    id TEXT NOT NULL PRIMARY KEY,
+    ownerId TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    slug TEXT NOT NULL UNIQUE,
+    category TEXT NOT NULL,
+    description TEXT,
+    logo TEXT,
+    banner TEXT,
+    phone TEXT,
+    whatsapp TEXT,
+    instagram TEXT,
+    twitter TEXT,
+    address TEXT,
+    openHours TEXT,
+    isVerified INTEGER NOT NULL DEFAULT 0,
+    followCount INTEGER NOT NULL DEFAULT 0,
+    totalSales INTEGER NOT NULL DEFAULT 0,
+    rating REAL NOT NULL DEFAULT 0,
+    createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT Store_ownerId_fkey FOREIGN KEY (ownerId) REFERENCES User (id) ON DELETE RESTRICT ON UPDATE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS Store_category_idx ON Store(category)`,
+  `CREATE INDEX IF NOT EXISTS Store_slug_idx ON Store(slug)`,
+
+  // ── New: StoreFollow table ──
+  `CREATE TABLE IF NOT EXISTS StoreFollow (
+    id TEXT NOT NULL PRIMARY KEY,
+    userId TEXT NOT NULL,
+    storeId TEXT NOT NULL,
+    createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT StoreFollow_userId_fkey FOREIGN KEY (userId) REFERENCES User (id) ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT StoreFollow_storeId_fkey FOREIGN KEY (storeId) REFERENCES Store (id) ON DELETE RESTRICT ON UPDATE CASCADE
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS StoreFollow_userId_storeId_key ON StoreFollow(userId, storeId)`,
+  `CREATE INDEX IF NOT EXISTS StoreFollow_storeId_idx ON StoreFollow(storeId)`,
+
+  // ── New: PushSubscription table ──
+  `CREATE TABLE IF NOT EXISTS PushSubscription (
+    id TEXT NOT NULL PRIMARY KEY,
+    userId TEXT NOT NULL,
+    endpoint TEXT NOT NULL UNIQUE,
+    keys TEXT NOT NULL,
+    createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT PushSubscription_userId_fkey FOREIGN KEY (userId) REFERENCES User (id) ON DELETE RESTRICT ON UPDATE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS PushSubscription_userId_idx ON PushSubscription(userId)`,
+
+  // ── New columns ──
+  `ALTER TABLE Listing ADD COLUMN storeId TEXT`,
+  `ALTER TABLE TaskApplication ADD COLUMN proposedPrice REAL`,
+  `ALTER TABLE Notification ADD COLUMN data TEXT`,
+  `ALTER TABLE Boost ADD COLUMN planId TEXT`,
 ];
 
 console.log('🚀 Running migrations on Turso...\n');

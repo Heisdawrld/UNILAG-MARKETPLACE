@@ -97,6 +97,7 @@ export interface TaskApplication {
   taskId: string;
   runnerId: string;
   message: string | null;
+  proposedPrice: number | null;
   status: string;
   createdAt: string;
   runner: {
@@ -108,6 +109,38 @@ export interface TaskApplication {
     trustScore: number;
     verificationStatus: string;
   };
+}
+
+export interface Store {
+  id: string;
+  ownerId: string;
+  name: string;
+  slug: string;
+  category: string;
+  description: string | null;
+  logo: string | null;
+  banner: string | null;
+  phone: string | null;
+  whatsapp: string | null;
+  instagram: string | null;
+  twitter: string | null;
+  address: string | null;
+  openHours: string | null;
+  isVerified: boolean;
+  followCount: number;
+  totalSales: number;
+  rating: number;
+  createdAt: string;
+  updatedAt: string;
+  owner: {
+    id: string;
+    username: string;
+    avatar: string | null;
+    verificationStatus: string;
+    ratingAverage: number;
+  };
+  listings?: Listing[];
+  _count?: { listings: number; followers: number };
 }
 
 export interface Chat {
@@ -299,3 +332,21 @@ export const CATEGORY_PLACEHOLDER_IMAGES: Record<string, string> = {
   'Sports': 'https://placehold.co/400x400/3d5a80/eee?text=Sports',
   'Others': 'https://placehold.co/400x400/666/eee?text=Other',
 };
+
+export const STORE_CATEGORIES = [
+  'Electronics & Gadgets',
+  'Fashion & Thrift',
+  'Food & Snacks',
+  'Beauty & Skincare',
+  'Phone Repair',
+  'Laundry Services',
+  'Printing & Design',
+  'Tutoring & Lessons',
+  'Photography',
+  'Barbing & Hair',
+  'Tech Accessories',
+  'Hostel Essentials',
+  'Fitness & Health',
+  'Art & Crafts',
+  'Others',
+] as const;

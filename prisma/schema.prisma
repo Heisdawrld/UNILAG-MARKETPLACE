@@ -41,7 +41,9 @@ model User {
   reviewsReceived     Review[]          @relation("ReviewTarget")
   reportsMade         Report[]          @relation("ReportAuthor")
   notifications       Notification[]
-  vendor              Vendor?
+  store               Store?
+  storeFollows        StoreFollow[]
+  pushSubscriptions   PushSubscription[]
   tasksCreated        Task[]            @relation("TaskCreator")
   taskApplications    TaskApplication[] @relation("RunnerApplications")
   assignedTasks       Task[]            @relation("AssignedRunner")
@@ -50,6 +52,7 @@ model User {
 model Listing {
   id          String   @id @default(cuid())
   sellerId    String
+  storeId     String?
   title       String
   description String
   price       Float
@@ -67,6 +70,7 @@ model Listing {
   updatedAt   DateTime @updatedAt
 
   seller        User          @relation(fields: [sellerId], references: [id])
+  store         Store?        @relation(fields: [storeId], references: [id])
   chatListings  Chat[]
   savedBy       SavedListing[]
   listingReports Report[]
@@ -74,6 +78,7 @@ model Listing {
   @@index([category])
   @@index([status])
   @@index([sellerId])
+  @@index([storeId])
 }
 
 model Chat {
@@ -147,10 +152,11 @@ model Report {
 model Notification {
   id        String   @id @default(cuid())
   userId    String
-  type      String   // new_message, item_sold, boost_expiry, new_follower
+  type      String   // new_message, item_sold, boost_expiry, new_follower, task_accepted, system
   title     String
   message   String
   read      Boolean  @default(false)
+  data      String?  // JSON metadata for deep links
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
@@ -158,16 +164,61 @@ model Notification {
   @@index([userId])
 }
 
-model Vendor {
-  id           String   @id @default(cuid())
-  ownerId      String   @unique
-  businessName String
-  businessLogo String?
-  description  String?
-  verified     Boolean  @default(false)
-  createdAt    DateTime @default(now())
+// ── Store / Shop Profile ──
+model Store {
+  id          String   @id @default(cuid())
+  ownerId     String   @unique
+  name        String
+  slug        String   @unique
+  category    String   // electronics, fashion, food, beauty, repair, laundry, printing, tutoring, photography, barbing, others
+  description String?
+  logo        String?  // compressed webp
+  banner      String?  // compressed webp
+  phone       String?
+  whatsapp    String?
+  instagram   String?
+  twitter     String?
+  address     String?  // campus location
+  openHours   String?  // e.g. "Mon-Fri 9am-6pm"
+  isVerified  Boolean  @default(false)
+  followCount Int      @default(0)
+  totalSales  Int      @default(0)
+  rating      Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  owner User @relation(fields: [ownerId], references: [id])
+  owner     User          @relation(fields: [ownerId], references: [id])
+  listings  Listing[]
+  followers StoreFollow[]
+
+  @@index([category])
+  @@index([slug])
+}
+
+model StoreFollow {
+  id        String   @id @default(cuid())
+  userId    String
+  storeId   String
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id])
+  store Store @relation(fields: [storeId], references: [id])
+
+  @@unique([userId, storeId])
+  @@index([storeId])
+}
+
+// ── Push Notifications ──
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  keys      String   // JSON: { p256dh, auth }
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
 }
 
 model Boost {
@@ -176,6 +227,7 @@ model Boost {
   paymentReference String?
   flutterwaveTxRef String?
   amount           Float    @default(0)
+  planId           String?  // basic, standard, premium, ultra
   expiresAt        DateTime
   createdAt        DateTime @default(now())
 
@@ -207,7 +259,7 @@ model Task {
   title            String
   description      String
   reward           Float
-  category         String   // delivery, food_pickup, printing, tutoring, shopping, queue_holding, cleaning, moving, misc
+  category         String
   location         String?
   pickupLocation   String?
   urgency          String   @default("medium") // low, medium, high, urgent
@@ -227,12 +279,13 @@ model Task {
 }
 
 model TaskApplication {
-  id        String   @id @default(cuid())
-  taskId    String
-  runnerId  String
-  message   String?
-  status    String   @default("pending") // pending, accepted, rejected
-  createdAt DateTime @default(now())
+  id            String   @id @default(cuid())
+  taskId        String
+  runnerId      String
+  message       String?
+  proposedPrice Float?   // Runner's counter-offer (InDrive style)
+  status        String   @default("pending") // pending, accepted, rejected, countered, expired
+  createdAt     DateTime @default(now())
 
   task   Task @relation(fields: [taskId], references: [id])
   runner User @relation("RunnerApplications", fields: [runnerId], references: [id])
