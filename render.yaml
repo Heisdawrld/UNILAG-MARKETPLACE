@@ -5,40 +5,40 @@ services:
     rootDir: .
     repo: https://github.com/Heisdawrld/UNILAG-MARKETPLACE
     branch: main
-    buildCommand: npm install --ignore-scripts && npx prisma generate && npm run build
+    buildCommand: npm install && npx prisma generate && npm run build
     startCommand: npm run start
     plan: free
     envVars:
       - key: NODE_ENV
         value: production
-      # ── Database (REQUIRED for the app to work) ──────────────────────────
-      # You MUST set these in the Render Dashboard manually.
-      # TURSO_DATABASE_URL = your Turso database URL (e.g., libsql://your-db.turso.io)
-      # TURSO_AUTH_TOKEN = your Turso auth token
-      # DATABASE_URL = same as TURSO_DATABASE_URL (required by Prisma internally)
+      # ── Database (REQUIRED) ──
       - key: TURSO_DATABASE_URL
         sync: false
       - key: TURSO_AUTH_TOKEN
         sync: false
       - key: DATABASE_URL
         sync: false
-      # ── Clerk Auth (Optional — app works without it in demo mode) ────────
+      # ── Clerk Auth ──
       - key: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
         sync: false
       - key: CLERK_SECRET_KEY
         sync: false
       - key: CLERK_WEBHOOK_SECRET
         sync: false
-      # ── Flutterwave Payments (Optional — needed for payments) ────────────
+      # ── Flutterwave Payments ──
       - key: NEXT_PUBLIC_FLUTTERWAVE_PUBLIC_KEY
         sync: false
       - key: FLUTTERWAVE_SECRET_KEY
         sync: false
       - key: FLUTTERWAVE_WEBHOOK_HASH
         sync: false
-      # ── App Config ───────────────────────────────────────────────────────
+      # ── Push Notifications ──
+      - key: NEXT_PUBLIC_VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      # ── App Config ──
       - key: NEXT_PUBLIC_APP_URL
         sync: false
-      # ── Seed Secret (protects /api/seed in production) ───────────────────
       - key: SEED_SECRET_KEY
         sync: false

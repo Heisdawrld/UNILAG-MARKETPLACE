@@ -17,6 +17,7 @@ const MessagesView = lazy(() => import('@/components/marketplace/MessagesView'))
 const ProfileView = lazy(() => import('@/components/marketplace/ProfileView'));
 const ListingDetail = lazy(() => import('@/components/marketplace/ListingDetail'));
 import Onboarding from '@/components/marketplace/Onboarding';
+import PWAInstallPrompt from '@/components/PWAInstallPrompt';
 
 // ── Bottom Navigation ──
 function BottomNav({ activeTab, onTabChange }: { activeTab: ViewTab; onTabChange: (tab: ViewTab) => void }) {
@@ -122,6 +123,15 @@ export default function MarketplaceApp() {
       .catch(console.error);
   }, [user]);
 
+  // Show push prompt after a delay if not subscribed
+  useEffect(() => {
+    if (!user || !isSupported || isSubscribed || permission === 'denied') return;
+    const dismissed = localStorage.getItem('push_prompt_dismissed');
+    if (dismissed) return;
+    const timer = setTimeout(() => setShowPushPrompt(true), 5000);
+    return () => clearTimeout(timer);
+  }, [user, isSupported, isSubscribed, permission]);
+
   const handleToggleSave = useCallback(async (listingId: string) => {
     if (!user) return;
     const isSaved = savedIds.has(listingId);
@@ -220,14 +230,6 @@ export default function MarketplaceApp() {
     );
   }
 
-  // Show push prompt after a delay if not subscribed
-  useEffect(() => {
-    if (!user || !isSupported || isSubscribed || permission === 'denied') return;
-    const dismissed = localStorage.getItem('push_prompt_dismissed');
-    if (dismissed) return;
-    const timer = setTimeout(() => setShowPushPrompt(true), 5000);
-    return () => clearTimeout(timer);
-  }, [user, isSupported, isSubscribed, permission]);
 
   return (
     <div className="h-[100dvh] flex flex-col bg-background">
@@ -302,6 +304,7 @@ export default function MarketplaceApp() {
           </AnimatePresence>
         </Suspense>
       </main>
+      <PWAInstallPrompt />
       <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />
     </div>
   );

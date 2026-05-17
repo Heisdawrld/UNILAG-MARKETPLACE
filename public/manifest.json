@@ -1,0 +1,28 @@
+{
+  "name": "UNILAG Marketplace",
+  "short_name": "UNILAG Market",
+  "description": "Buy, sell & get things done on campus — UNILAG's #1 marketplace",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#f97316",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "categories": ["shopping", "marketplace", "education"],
+  "prefer_related_applications": false
+}

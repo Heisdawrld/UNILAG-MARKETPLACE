@@ -16,7 +16,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
-  themeColor: "#6B1D2A",
+  themeColor: [{media: '(prefers-color-scheme: light)', color: '#f97316'}, {media: '(prefers-color-scheme: dark)', color: '#0a0a0a'}],
 };
 
 export const metadata: Metadata = {
@@ -24,7 +24,13 @@ export const metadata: Metadata = {
   description: "Buy, sell & run errands on campus — University of Lagos",
   keywords: ["UNILAG", "marketplace", "students", "University of Lagos", "campus", "buy", "sell", "errands"],
   authors: [{ name: "UNILAG Marketplace" }],
-  icons: { icon: "/logo.png" },
+  icons: { icon: "/logo.png", apple: "/logo.png" },
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "UNILAG Market",
+  },
   openGraph: {
     title: "UNILAG Marketplace",
     description: "Buy, sell & run errands on campus — University of Lagos",
