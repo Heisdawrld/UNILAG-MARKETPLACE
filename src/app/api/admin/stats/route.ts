@@ -1,7 +1,7 @@
 import { db, isDatabaseAvailable } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { notifyUser } from '@/lib/push';
+import { requireAdminUser } from '@/lib/admin-auth';
 
 // GET /api/admin/stats — dashboard overview
 export async function GET(req: NextRequest) {
@@ -10,15 +10,11 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // ── SECURITY: verify Clerk session & Admin role ──
-    const { userId: clerkId } = await auth();
-    if (!clerkId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const adminResult = await requireAdminUser();
+    if (!adminResult.ok) {
+      return NextResponse.json({ error: adminResult.error }, { status: adminResult.status });
     }
-    const admin = await db.user.findUnique({ where: { clerkId } });
-    if (!admin || admin.role !== 'admin') {
-      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
-    }
+
     const [
       totalUsers, totalListings, activeListings, soldListings,
       totalReviews, totalReports, pendingReports, totalChats,
@@ -72,14 +68,9 @@ export async function PATCH(req: NextRequest) {
   }
 
   try {
-    // ── SECURITY: verify Clerk session & Admin role ──
-    const { userId: clerkId } = await auth();
-    if (!clerkId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    const admin = await db.user.findUnique({ where: { clerkId } });
-    if (!admin || admin.role !== 'admin') {
-      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    const adminResult = await requireAdminUser();
+    if (!adminResult.ok) {
+      return NextResponse.json({ error: adminResult.error }, { status: adminResult.status });
     }
 
     const body = await req.json();

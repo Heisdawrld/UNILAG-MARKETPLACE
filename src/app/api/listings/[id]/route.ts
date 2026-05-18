@@ -44,6 +44,17 @@ export async function GET(
             hostel: true,
           },
         },
+        store: {
+          select: {
+            id: true,
+            name: true,
+            logo: true,
+            slug: true,
+            isVerified: true,
+            phone: true,
+            whatsapp: true,
+          },
+        },
       },
     });
 
@@ -134,6 +145,17 @@ export async function PATCH(
             department: true,
             verificationStatus: true,
             ratingAverage: true,
+          },
+        },
+        store: {
+          select: {
+            id: true,
+            name: true,
+            logo: true,
+            slug: true,
+            isVerified: true,
+            phone: true,
+            whatsapp: true,
           },
         },
       },

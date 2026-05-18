@@ -1,4 +1,5 @@
 import { db, isDatabaseAvailable } from '@/lib/db';
+import { requireAdminUser } from '@/lib/admin-auth';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(request: NextRequest) {
@@ -9,6 +10,11 @@ export async function GET(request: NextRequest) {
     );
   }
   try {
+    const adminResult = await requireAdminUser();
+    if (!adminResult.ok) {
+      return NextResponse.json({ error: adminResult.error }, { status: adminResult.status });
+    }
+
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
     const page = parseInt(searchParams.get('page') || '1');

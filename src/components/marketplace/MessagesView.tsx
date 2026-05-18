@@ -10,6 +10,25 @@ import { api } from '@/lib/api';
 import { User as UserType, Chat, Message } from '@/lib/types';
 import { timeAgo, getInitials, getListingFirstImage } from '@/lib/marketplace-utils';
 
+function getChatCounterparty(chat: Chat, currentUserId: string) {
+  const other = chat.buyerId === currentUserId ? chat.seller : chat.buyer;
+  const isBuyerView = chat.buyerId === currentUserId;
+
+  if (isBuyerView && chat.listing.store) {
+    return {
+      id: other.id,
+      name: chat.listing.store.name,
+      avatar: chat.listing.store.logo,
+    };
+  }
+
+  return {
+    id: other.id,
+    name: other.username,
+    avatar: other.avatar,
+  };
+}
+
 function ReviewModal({ seller, onSubmit, onClose }: { seller: any; onSubmit: (rating: number, comment: string) => void; onClose: () => void }) {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
@@ -69,6 +88,7 @@ function ChatDetail({ chat, user, onBack }: { chat: Chat; user: UserType; onBack
   const [dealCompleted, setDealCompleted] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const other = chat.buyerId === user.id ? chat.seller : chat.buyer;
+  const counterparty = getChatCounterparty(chat, user.id);
   const isBuyer = chat.buyerId === user.id;
 
   const fetchMessages = useCallback(async () => {
@@ -138,9 +158,9 @@ function ChatDetail({ chat, user, onBack }: { chat: Chat; user: UserType; onBack
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-3 safe-top p-3 border-b bg-background/95 backdrop-blur-md">
         <button onClick={onBack} className="p-1"><ArrowLeft className="w-5 h-5" /></button>
-        <Avatar className="w-8 h-8"><AvatarImage src={other.avatar || undefined} /><AvatarFallback>{getInitials(other.username)}</AvatarFallback></Avatar>
+        <Avatar className="w-8 h-8"><AvatarImage src={counterparty.avatar || undefined} /><AvatarFallback>{getInitials(counterparty.name)}</AvatarFallback></Avatar>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium truncate">{other.username}</p>
+          <p className="text-sm font-medium truncate">{counterparty.name}</p>
           <p className="text-[10px] text-muted-foreground truncate">{chat.listing.title}</p>
         </div>
       </div>
@@ -215,7 +235,7 @@ function ChatDetail({ chat, user, onBack }: { chat: Chat; user: UserType; onBack
         </button>
       </div>
 
-      {showReview && <ReviewModal seller={other} onSubmit={handleSubmitReview} onClose={() => setShowReview(false)} />}
+      {showReview && <ReviewModal seller={{ username: counterparty.name }} onSubmit={handleSubmitReview} onClose={() => setShowReview(false)} />}
     </div>
   );
 }
@@ -268,22 +288,22 @@ export default function MessagesView({
       ) : chats.length === 0 ? (
         <div className="p-8 text-center text-muted-foreground">
           <p className="font-medium">No messages yet</p>
-          <p className="text-sm">Start a conversation by messaging a seller</p>
+          <p className="text-sm">Start a conversation by messaging a store</p>
         </div>
       ) : (
         <div>
           {chats.map(chat => {
-            const other = chat.buyerId === user.id ? chat.seller : chat.buyer;
+            const counterparty = getChatCounterparty(chat, user.id);
             const img = getListingFirstImage(chat.listing.images, '');
             return (
               <button key={chat.id} onClick={() => setActiveChat(chat)} className="w-full flex items-center gap-3 p-4 hover:bg-muted/50 transition-colors border-b text-left">
                 <div className="relative">
-                  <Avatar className="w-12 h-12"><AvatarImage src={other.avatar || undefined} /><AvatarFallback>{getInitials(other.username)}</AvatarFallback></Avatar>
+                  <Avatar className="w-12 h-12"><AvatarImage src={counterparty.avatar || undefined} /><AvatarFallback>{getInitials(counterparty.name)}</AvatarFallback></Avatar>
                   {chat.unreadCount > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-primary text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center">{chat.unreadCount}</span>}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
-                    <p className="font-medium text-sm truncate">{other.username}</p>
+                    <p className="font-medium text-sm truncate">{counterparty.name}</p>
                     {chat.lastMessage && <span className="text-[10px] text-muted-foreground">{timeAgo(chat.lastMessage.createdAt)}</span>}
                   </div>
                   <p className="text-xs text-muted-foreground truncate">{chat.listing.title}</p>

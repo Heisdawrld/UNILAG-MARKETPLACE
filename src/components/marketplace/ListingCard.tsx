@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Listing, CONDITION_LABELS, CONDITION_COLORS } from '@/lib/types';
-import { formatPrice, getListingFirstImage, getInitials } from '@/lib/marketplace-utils';
+import { formatPrice, getInitials, getListingDisplayAvatar, getListingDisplayName, getListingFirstImage, isListingDisplayVerified } from '@/lib/marketplace-utils';
 
 export function ListingCard({
   listing, onClick, isSaved, onToggleSave,
@@ -17,6 +17,9 @@ export function ListingCard({
 }) {
   const image = getListingFirstImage(listing.images, listing.category);
   const conditionClass = CONDITION_COLORS[listing.condition] || CONDITION_COLORS.fairly_used;
+  const displayName = getListingDisplayName(listing);
+  const displayAvatar = getListingDisplayAvatar(listing);
+  const isVerifiedDisplay = isListingDisplayVerified(listing);
 
   return (
     <motion.div whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} className="cursor-pointer" onClick={onClick}>
@@ -48,11 +51,11 @@ export function ListingCard({
           <p className="text-primary font-bold text-base mb-1.5">{formatPrice(listing.price)}</p>
           <div className="flex items-center gap-1.5">
             <Avatar className="w-5 h-5">
-              <AvatarImage src={listing.seller.avatar || undefined} />
-              <AvatarFallback className="text-[8px]">{getInitials(listing.seller.username)}</AvatarFallback>
+              <AvatarImage src={displayAvatar} />
+              <AvatarFallback className="text-[8px]">{getInitials(displayName)}</AvatarFallback>
             </Avatar>
-            <span className="text-xs text-muted-foreground truncate">{listing.seller.username}</span>
-            {listing.seller.verificationStatus === 'unilag_verified' && (
+            <span className="text-xs text-muted-foreground truncate">{displayName}</span>
+            {isVerifiedDisplay && (
               <Shield className="w-3 h-3 text-emerald-500 flex-shrink-0" />
             )}
           </div>

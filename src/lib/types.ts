@@ -37,9 +37,20 @@ export interface ListingSeller {
   hostel?: string;
 }
 
+export interface ListingStore {
+  id: string;
+  name: string;
+  logo: string | null;
+  slug: string;
+  isVerified: boolean;
+  phone?: string | null;
+  whatsapp?: string | null;
+}
+
 export interface Listing {
   id: string;
   sellerId: string;
+  storeId?: string | null;
   title: string;
   description: string;
   price: number;
@@ -55,6 +66,7 @@ export interface Listing {
   createdAt: string;
   updatedAt: string;
   seller: ListingSeller;
+  store?: ListingStore | null;
 }
 
 export interface Task {
@@ -155,6 +167,7 @@ export interface Chat {
     price: number;
     images: string;
     status: string;
+    store?: ListingStore | null;
   };
   buyer: {
     id: string;

@@ -39,7 +39,22 @@ export async function GET(request: NextRequest) {
       },
       include: {
         listing: {
-          select: { id: true, title: true, price: true, images: true, status: true },
+          select: {
+            id: true,
+            title: true,
+            price: true,
+            images: true,
+            status: true,
+            store: {
+              select: {
+                id: true,
+                name: true,
+                logo: true,
+                slug: true,
+                isVerified: true,
+              },
+            },
+          },
         },
         buyer: {
           select: { id: true, username: true, avatar: true },
@@ -132,6 +147,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (listing.sellerId !== sellerId) {
+      return NextResponse.json({ error: 'Seller does not match listing owner' }, { status: 400 });
+    }
+
     // Check if chat already exists (unique constraint on [listingId, buyerId, sellerId])
     const existingChat = await db.chat.findUnique({
       where: {
@@ -149,6 +168,15 @@ export async function POST(request: NextRequest) {
             price: true,
             images: true,
             status: true,
+            store: {
+              select: {
+                id: true,
+                name: true,
+                logo: true,
+                slug: true,
+                isVerified: true,
+              },
+            },
           },
         },
         buyer: {
@@ -191,6 +219,15 @@ export async function POST(request: NextRequest) {
             price: true,
             images: true,
             status: true,
+            store: {
+              select: {
+                id: true,
+                name: true,
+                logo: true,
+                slug: true,
+                isVerified: true,
+              },
+            },
           },
         },
         buyer: {

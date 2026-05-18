@@ -4,7 +4,10 @@ const BASE = '';
 export const api = {
   get: async (url: string) => {
     const res = await fetch(BASE + url);
-    if (!res.ok) throw new Error(`API Error: ${res.status}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: `API Error: ${res.status}` }));
+      throw new Error(err.error || `API Error: ${res.status}`);
+    }
     return res.json();
   },
   post: async (url: string, body?: unknown) => {

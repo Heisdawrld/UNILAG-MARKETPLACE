@@ -1,4 +1,5 @@
 import { db, isDatabaseAvailable } from '@/lib/db';
+import { requireAdminUser } from '@/lib/admin-auth';
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 
@@ -142,15 +143,12 @@ export async function GET() {
   }
 
   try {
-    const { userId: clerkId } = await auth();
-    if (!clerkId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const adminResult = await requireAdminUser();
+    if (!adminResult.ok) {
+      return NextResponse.json({ error: adminResult.error }, { status: adminResult.status });
     }
 
-    const admin = await db.user.findUnique({ where: { clerkId } });
-    if (!admin || admin.role !== 'admin') {
-      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
-    }
+    const admin = adminResult.user;
 
     const applications = await db.notification.findMany({
       where: { userId: admin.id, type: 'runner_application' },

@@ -103,6 +103,15 @@ export async function GET(request: NextRequest) {
               ratingAverage: true,
             },
           },
+          store: {
+            select: {
+              id: true,
+              name: true,
+              logo: true,
+              slug: true,
+              isVerified: true,
+            },
+          },
         },
         orderBy: [{ boosted: 'desc' }, orderBy],
         skip,
@@ -208,6 +217,17 @@ export async function POST(request: NextRequest) {
             department: true,
             verificationStatus: true,
             ratingAverage: true,
+          },
+        },
+        store: {
+          select: {
+            id: true,
+            name: true,
+            logo: true,
+            slug: true,
+            isVerified: true,
+            phone: true,
+            whatsapp: true,
           },
         },
       },

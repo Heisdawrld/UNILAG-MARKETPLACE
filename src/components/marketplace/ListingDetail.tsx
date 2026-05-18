@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
 import { User as UserType, Listing, Review, CONDITION_LABELS, CONDITION_COLORS } from '@/lib/types';
-import { formatPrice, timeAgo, getListingImages, getInitials } from '@/lib/marketplace-utils';
+import { formatPrice, timeAgo, getListingImages, getInitials, getListingDisplayAvatar, getListingDisplayName, isListingDisplayVerified } from '@/lib/marketplace-utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function ListingDetail({
@@ -64,6 +64,11 @@ export default function ListingDetail({
   const images = getListingImages(listing.images, listing.category);
   const isOwner = listing.sellerId === user.id;
   const conditionClass = CONDITION_COLORS[listing.condition] || CONDITION_COLORS.fairly_used;
+  const displayName = getListingDisplayName(listing);
+  const displayAvatar = getListingDisplayAvatar(listing);
+  const isVerifiedDisplay = isListingDisplayVerified(listing);
+  const contactPhone = listing.store?.phone || listing.seller.phone;
+  const contactWhatsapp = listing.store?.whatsapp || listing.seller.whatsapp;
 
   return (
     <div className="h-full overflow-y-auto bg-background">
@@ -151,18 +156,18 @@ export default function ListingDetail({
 
         <Separator />
 
-        {/* Seller Card */}
+        {/* Store Card */}
         <Card className="border shadow-sm">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <Avatar className="w-12 h-12">
-                <AvatarImage src={listing.seller.avatar || undefined} />
-                <AvatarFallback>{getInitials(listing.seller.username)}</AvatarFallback>
+                <AvatarImage src={displayAvatar} />
+                <AvatarFallback>{getInitials(displayName)}</AvatarFallback>
               </Avatar>
               <div className="flex-1">
                 <div className="flex items-center gap-1.5">
-                  <span className="font-semibold text-sm">{listing.seller.username}</span>
-                  {listing.seller.verificationStatus === 'unilag_verified' && (
+                  <span className="font-semibold text-sm">{displayName}</span>
+                  {isVerifiedDisplay && (
                     <Shield className="w-4 h-4 text-emerald-500" />
                   )}
                 </div>
@@ -171,7 +176,9 @@ export default function ListingDetail({
                     <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
                     <span className="text-xs font-medium">{listing.seller.ratingAverage.toFixed(1)}</span>
                   </div>
-                  {listing.seller.faculty && (
+                  {listing.store ? (
+                    <span className="text-xs text-muted-foreground">Official store</span>
+                  ) : listing.seller.faculty && (
                     <span className="text-xs text-muted-foreground">{listing.seller.faculty}</span>
                   )}
                 </div>
@@ -259,18 +266,18 @@ export default function ListingDetail({
       ) : (
         <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t px-4 py-3 safe-bottom z-50">
           <div className="flex gap-2 max-w-lg mx-auto">
-            {listing.seller.phone && (
-              <Button variant="outline" size="icon" className="h-11 w-11" onClick={() => window.open(`tel:${listing.seller.phone}`)}>
+            {contactPhone && (
+              <Button variant="outline" size="icon" className="h-11 w-11" onClick={() => window.open(`tel:${contactPhone}`)}>
                 <Phone className="w-5 h-5" />
               </Button>
             )}
-            {listing.seller.whatsapp && (
-              <Button variant="outline" size="icon" className="h-11 w-11 text-emerald-600" onClick={() => window.open(`https://wa.me/${listing.seller.whatsapp.replace(/^0/, '234')}?text=${encodeURIComponent(`Hi, I'm interested in your listing: ${listing.title} (${formatPrice(listing.price)}) on UNILAG Marketplace`)}`)}>
+            {contactWhatsapp && (
+              <Button variant="outline" size="icon" className="h-11 w-11 text-emerald-600" onClick={() => window.open(`https://wa.me/${contactWhatsapp.replace(/^0/, '234')}?text=${encodeURIComponent(`Hi, I'm interested in your listing: ${listing.title} (${formatPrice(listing.price)}) on UNILAG Marketplace`)}`)}>
                 <MessageSquare className="w-5 h-5" />
               </Button>
             )}
             <Button variant="outline" className="h-11 flex-1" onClick={() => onStartChat(listing.seller.id, listing.id)}>
-              <MessageCircle className="w-4 h-4 mr-2" /> Message
+              <MessageCircle className="w-4 h-4 mr-2" /> Message Store
             </Button>
             <Button className="h-11 flex-1" onClick={() => setShowPayment(true)}>
               <CreditCard className="w-4 h-4 mr-2" /> Buy Now
@@ -325,7 +332,7 @@ export default function ListingDetail({
               <Lock className="w-6 h-6 text-primary mx-auto mb-1.5" />
               <p className="text-sm font-semibold text-primary">Coming Soon</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Secure payments powered by Flutterwave will be available soon. For now, message the seller directly to arrange payment.
+                Secure payments powered by Flutterwave will be available soon. For now, message the store directly to arrange payment.
               </p>
             </div>
 
@@ -333,7 +340,7 @@ export default function ListingDetail({
               setShowPayment(false);
               onStartChat(listing.seller.id, listing.id);
             }}>
-              <MessageCircle className="w-4 h-4 mr-2" /> Message Seller Instead
+              <MessageCircle className="w-4 h-4 mr-2" /> Message Store Instead
             </Button>
           </div>
         </DialogContent>

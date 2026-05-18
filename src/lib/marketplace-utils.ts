@@ -1,4 +1,4 @@
-import { CATEGORY_PLACEHOLDER_IMAGES } from './types';
+import { CATEGORY_PLACEHOLDER_IMAGES, Listing } from './types';
 
 // Format price with Naira symbol and commas
 export function formatPrice(price: number): string {
@@ -71,6 +71,18 @@ export function getInitials(name: string): string {
     .join('')
     .toUpperCase()
     .slice(0, 2);
+}
+
+export function getListingDisplayName(listing: Pick<Listing, 'seller' | 'store'>): string {
+  return listing.store?.name || listing.seller.username;
+}
+
+export function getListingDisplayAvatar(listing: Pick<Listing, 'seller' | 'store'>): string | undefined {
+  return listing.store?.logo || listing.seller.avatar || undefined;
+}
+
+export function isListingDisplayVerified(listing: Pick<Listing, 'seller' | 'store'>): boolean {
+  return Boolean(listing.store?.isVerified) || listing.seller.verificationStatus === 'unilag_verified';
 }
 
 // Verification badge label

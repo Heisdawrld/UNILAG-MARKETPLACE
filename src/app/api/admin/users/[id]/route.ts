@@ -1,4 +1,5 @@
 import { db, isDatabaseAvailable } from '@/lib/db';
+import { requireAdminUser } from '@/lib/admin-auth';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function PATCH(
@@ -12,6 +13,11 @@ export async function PATCH(
     );
   }
   try {
+    const adminResult = await requireAdminUser();
+    if (!adminResult.ok) {
+      return NextResponse.json({ error: adminResult.error }, { status: adminResult.status });
+    }
+
     const { id } = await params;
     const body = await request.json();
     const { role, verificationStatus, trustScore, banned } = body;

@@ -35,7 +35,7 @@ export default function AdminPage() {
       if (result.error) { setError(result.error); return; }
       setData(result);
       setRunnerApps(apps || []);
-    } catch { setError('Access denied or fetch failed'); }
+    } catch (err) { setError(err instanceof Error ? err.message : 'Access denied or fetch failed'); }
     finally { setLoading(false); }
   }, [dbUser?.id]);
 
@@ -46,7 +46,7 @@ export default function AdminPage() {
     try {
       await api.patch('/api/admin/stats', { action, targetId, data: extra }); // Now uses auth()
       await fetchData();
-    } catch { alert('Action failed'); }
+    } catch (err) { alert(err instanceof Error ? err.message : 'Action failed'); }
     finally { setActionLoading(''); }
   };
 

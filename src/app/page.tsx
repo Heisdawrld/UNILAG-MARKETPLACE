@@ -48,7 +48,7 @@ function BottomNav({ activeTab, onTabChange }: { activeTab: ViewTab; onTabChange
         <div className="flex flex-1 justify-around">
           {leftTabs.map(({ id, icon, label }) => renderTab(id, icon, label))}
         </div>
-        <button onClick={() => onTabChange('sell')} className="relative -mt-5 mx-1 flex-shrink-0">
+        <button onClick={() => onTabChange('sell')} className="relative -mt-4 mx-1 flex-shrink-0">
           <div className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all ${activeTab === 'sell' ? 'bg-primary scale-110 shadow-primary/30' : 'bg-primary hover:scale-105'}`}>
             <PlusCircle className="w-7 h-7 text-primary-foreground" />
           </div>

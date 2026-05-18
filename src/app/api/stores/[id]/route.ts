@@ -54,6 +54,15 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
             seller: {
               select: { id: true, username: true, avatar: true, verificationStatus: true, ratingAverage: true },
             },
+            store: {
+              select: {
+                id: true,
+                name: true,
+                logo: true,
+                slug: true,
+                isVerified: true,
+              },
+            },
           },
           orderBy: [{ boosted: 'desc' }, { createdAt: 'desc' }],
           take: 50,
