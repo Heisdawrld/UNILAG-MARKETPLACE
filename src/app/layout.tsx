@@ -24,7 +24,16 @@ export const metadata: Metadata = {
   description: "Buy, sell & run errands on campus — University of Lagos",
   keywords: ["UNILAG", "marketplace", "students", "University of Lagos", "campus", "buy", "sell", "errands"],
   authors: [{ name: "UNILAG Marketplace" }],
-  icons: { icon: "/logo.png", apple: "/apple-touch-icon.png" },
+  icons: {
+    icon: [
+      { url: "/logo.png", sizes: "any" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -42,6 +51,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <ClerkProvider>
       <html lang="en" suppressHydrationWarning>
+        <head>
+          {/* Explicit apple-touch-icon for iOS home screen */}
+          <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+          <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+          <link rel="apple-touch-icon" sizes="152x152" href="/apple-icon-152.png" />
+          <link rel="apple-touch-icon" sizes="120x120" href="/apple-icon-120.png" />
+        </head>
         <body className={`${inter.variable} font-sans antialiased`}>
           <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
             {children}
