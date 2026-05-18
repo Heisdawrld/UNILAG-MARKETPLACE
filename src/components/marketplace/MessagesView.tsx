@@ -136,7 +136,7 @@ function ChatDetail({ chat, user, onBack }: { chat: Chat; user: UserType; onBack
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center gap-3 p-3 border-b bg-background/95 backdrop-blur-md">
+      <div className="flex items-center gap-3 safe-top p-3 border-b bg-background/95 backdrop-blur-md">
         <button onClick={onBack} className="p-1"><ArrowLeft className="w-5 h-5" /></button>
         <Avatar className="w-8 h-8"><AvatarImage src={other.avatar || undefined} /><AvatarFallback>{getInitials(other.username)}</AvatarFallback></Avatar>
         <div className="flex-1 min-w-0">
@@ -260,7 +260,7 @@ export default function MessagesView({
 
   return (
     <div>
-      <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b px-4 py-3">
+      <div className="sticky top-0 z-30 safe-top bg-background/95 backdrop-blur-md border-b px-4 py-3">
         <h1 className="font-bold text-lg">Messages</h1>
       </div>
       {loading ? (

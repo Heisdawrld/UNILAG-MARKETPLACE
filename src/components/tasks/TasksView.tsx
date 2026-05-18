@@ -272,7 +272,7 @@ function CreateTaskForm({ user, onCreated, onCancel }: { user: UserType; onCreat
   };
 
   return (
-    <div className="p-4 space-y-4 max-w-lg mx-auto">
+    <div className="safe-top p-4 space-y-4 max-w-lg mx-auto">
       <div className="flex items-center gap-2 mb-2">
         <button onClick={onCancel} className="p-1.5 rounded-full hover:bg-muted"><ArrowLeft className="w-5 h-5" /></button>
         <h2 className="font-bold text-xl">Post a Task</h2>
@@ -388,7 +388,7 @@ function TaskDetail({ taskId, user, onBack }: { taskId: string; user: UserType; 
   const isAssigned = task.assignedRunnerId === user.id;
 
   return (
-    <div className="p-4 max-w-lg mx-auto space-y-4">
+    <div className="safe-top p-4 max-w-lg mx-auto space-y-4">
       <div className="flex items-center gap-2">
         <button onClick={onBack} className="p-1.5 rounded-full hover:bg-muted"><ArrowLeft className="w-5 h-5" /></button>
         <h2 className="font-bold text-lg flex-1">Task Details</h2>
@@ -557,7 +557,7 @@ export default function TasksView({
   return (
     <div>
       {/* Header */}
-      <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-sm border-b px-4 py-3">
+      <div className="sticky top-0 z-30 safe-top bg-background/95 backdrop-blur-sm border-b px-4 py-3">
         <div className="flex items-center justify-between mb-3">
           <div>
             <h1 className="font-bold text-lg">Campus Tasks</h1>

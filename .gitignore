@@ -100,3 +100,6 @@ generate_report.py
 
 # Examples
 /examples/
+
+# clerk configuration (can include secrets)
+/.clerk/

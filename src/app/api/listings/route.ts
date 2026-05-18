@@ -1,6 +1,19 @@
+import { auth } from '@clerk/nextjs/server';
 import { db, isDatabaseAvailable } from '@/lib/db';
+import { enhanceMarketplaceImages } from '@/lib/image-processing';
 import { NextRequest, NextResponse } from 'next/server';
 
+async function getAuthUser() {
+  const { userId: clerkId } = await auth();
+  if (!clerkId) return null;
+
+  return db.user.findUnique({
+    where: { clerkId },
+    select: { id: true, role: true },
+  });
+}
+
+// GET /api/listings
 export async function GET(request: NextRequest) {
   if (!isDatabaseAvailable()) {
     return NextResponse.json(
@@ -19,53 +32,32 @@ export async function GET(request: NextRequest) {
     const negotiable = searchParams.get('negotiable');
     const status = searchParams.get('status') || 'active';
     const sellerId = searchParams.get('sellerId');
+    const storeId = searchParams.get('storeId');
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
 
     const where: Record<string, unknown> = {};
-
-    // Filter by status (default to active listings)
-    if (status) {
-      where.status = status;
-    }
-
-    // Filter by category
-    if (category && category !== 'All') {
-      where.category = category;
-    }
-
-    // Filter by condition
-    if (condition && condition !== 'All') {
-      where.condition = condition;
-    }
-
-    // Filter by price range
+    if (status && status !== 'all') where.status = status;
+    if (category && category !== 'All') where.category = category;
+    if (condition && condition !== 'All') where.condition = condition;
     if (minPrice || maxPrice) {
       const priceFilter: Record<string, number> = {};
       if (minPrice) priceFilter.gte = parseFloat(minPrice);
       if (maxPrice) priceFilter.lte = parseFloat(maxPrice);
       where.price = priceFilter;
     }
-
-    // Search by title and description
     if (search) {
       where.OR = [
         { title: { contains: search } },
         { description: { contains: search } },
       ];
     }
-
-    // Filter by negotiable
     if (negotiable !== null && negotiable !== undefined) {
       where.negotiable = negotiable === 'true';
     }
+    if (sellerId) where.sellerId = sellerId;
+    if (storeId) where.storeId = storeId;
 
-    // Filter by seller
-    if (sellerId) {
-      where.sellerId = sellerId;
-    }
-
-    // Sorting
     const orderBy: Record<string, string> = {};
     switch (sort) {
       case 'oldest':
@@ -88,7 +80,6 @@ export async function GET(request: NextRequest) {
 
     const skip = (page - 1) * limit;
 
-    // Auto-expire stale boosts
     await db.listing.updateMany({
       where: {
         boosted: true,
@@ -113,10 +104,7 @@ export async function GET(request: NextRequest) {
             },
           },
         },
-        orderBy: [
-          { boosted: 'desc' },
-          orderBy,
-        ],
+        orderBy: [{ boosted: 'desc' }, orderBy],
         skip,
         take: limit,
       }),
@@ -132,13 +120,11 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error fetching listings:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch listings' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch listings' }, { status: 500 });
   }
 }
 
+// POST /api/listings
 export async function POST(request: NextRequest) {
   if (!isDatabaseAvailable()) {
     return NextResponse.json(
@@ -147,6 +133,15 @@ export async function POST(request: NextRequest) {
     );
   }
   try {
+    const authUser = await getAuthUser();
+    if (!authUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (authUser.role === 'banned') {
+      return NextResponse.json({ error: 'Banned users cannot create listings' }, { status: 403 });
+    }
+
     const body = await request.json();
     const {
       sellerId,
@@ -161,34 +156,46 @@ export async function POST(request: NextRequest) {
       images,
     } = body;
 
-    if (!sellerId || !title || !description || !price || !category || !condition) {
+    if (!sellerId || !storeId || !title || !description || !price || !category || !condition) {
       return NextResponse.json(
-        { error: 'Missing required fields: sellerId, title, description, price, category, condition' },
+        { error: 'Missing required fields: sellerId, storeId, title, description, price, category, condition' },
         { status: 400 }
       );
     }
 
-    // Verify seller exists
+    if (sellerId !== authUser.id) {
+      return NextResponse.json({ error: 'Forbidden — you can only create listings as yourself' }, { status: 403 });
+    }
+
     const seller = await db.user.findUnique({ where: { id: sellerId } });
     if (!seller) {
-      return NextResponse.json(
-        { error: 'Seller not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Seller not found' }, { status: 404 });
     }
+
+    const store = await db.store.findUnique({ where: { id: storeId } });
+    if (!store || store.ownerId !== sellerId) {
+      return NextResponse.json({ error: 'Only your store can post products or services' }, { status: 403 });
+    }
+
+    const parsedPrice = parseFloat(price);
+    if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+      return NextResponse.json({ error: 'Price must be greater than zero' }, { status: 400 });
+    }
+
+    const processedImages = await enhanceMarketplaceImages(images, { maxWidth: 1600, maxHeight: 1600, quality: 84 });
 
     const listing = await db.listing.create({
       data: {
         sellerId,
-        storeId: storeId || null,
-        title,
-        description,
-        price: parseFloat(price),
+        storeId,
+        title: String(title).trim(),
+        description: String(description).trim(),
+        price: parsedPrice,
         category,
         condition,
         negotiable: negotiable !== undefined ? negotiable : true,
-        location: location || null,
-        images: images ? JSON.stringify(images) : '[]',
+        location: typeof location === 'string' && location.trim() ? location.trim() : null,
+        images: processedImages.length > 0 ? JSON.stringify(processedImages) : '[]',
         status: 'active',
       },
       include: {
@@ -209,9 +216,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(listing, { status: 201 });
   } catch (error) {
     console.error('Error creating listing:', error);
-    return NextResponse.json(
-      { error: 'Failed to create listing' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to create listing' }, { status: 500 });
   }
 }

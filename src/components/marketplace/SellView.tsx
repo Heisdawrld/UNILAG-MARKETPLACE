@@ -113,7 +113,7 @@ function StoreSetupFlow({ user, onStoreCreated }: { user: UserType; onStoreCreat
   };
 
   return (
-    <div className="p-4 space-y-5 max-w-lg mx-auto">
+    <div className="safe-top p-4 space-y-5 max-w-lg mx-auto">
       {/* Header */}
       <div className="text-center py-4">
         <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-amber-500/20 flex items-center justify-center mx-auto mb-3">
@@ -309,7 +309,7 @@ export default function SellView({ user, onListingCreated }: { user: UserType; o
 
   // Has store → show listing form with store badge
   return (
-    <div className="p-4 space-y-5 max-w-lg mx-auto">
+    <div className="safe-top p-4 space-y-5 max-w-lg mx-auto">
       {/* Store header */}
       <Card className="border-0 shadow-sm bg-gradient-to-r from-primary/5 to-amber-500/5">
         <CardContent className="p-3 flex items-center gap-3">
@@ -333,6 +333,7 @@ export default function SellView({ user, onListingCreated }: { user: UserType; o
       {/* Photos */}
       <div>
         <Label className="text-sm font-medium mb-2 block">Photos (max 5)</Label>
+        <p className="text-[11px] text-muted-foreground mb-2">We automatically clean up, sharpen, and optimize your product photos before they go live.</p>
         <div className="flex gap-2 flex-wrap">
           {images.map((img, i) => (
             <div key={i} className="relative w-20 h-20 rounded-lg overflow-hidden border">

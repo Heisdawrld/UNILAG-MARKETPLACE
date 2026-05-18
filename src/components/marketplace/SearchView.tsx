@@ -120,7 +120,7 @@ export default function SearchView({
           {selectedStore.banner && (
             <img src={selectedStore.banner} alt="" className="w-full h-full object-cover" />
           )}
-          <button onClick={() => setSelectedStore(null)} className="absolute top-3 left-3 p-2 rounded-full bg-background/80 backdrop-blur-sm">
+          <button onClick={() => setSelectedStore(null)} style={{ top: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }} className="absolute left-3 p-2 rounded-full bg-background/80 backdrop-blur-sm">
             <Search className="w-4 h-4" />
           </button>
         </div>
@@ -215,7 +215,7 @@ export default function SearchView({
 
   return (
     <div>
-      <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b px-4 py-3 space-y-3">
+      <div className="sticky top-0 z-30 safe-top bg-background/95 backdrop-blur-md border-b px-4 py-3 space-y-3">
         <div className="flex items-center gap-2">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />

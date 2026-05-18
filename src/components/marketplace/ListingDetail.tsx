@@ -83,7 +83,7 @@ export default function ListingDetail({
         </AnimatePresence>
 
         {/* Nav overlay */}
-        <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-3 bg-gradient-to-b from-black/40 to-transparent">
+        <div className="absolute top-0 left-0 right-0 safe-top flex items-center justify-between p-3 bg-gradient-to-b from-black/40 to-transparent">
           <button onClick={onBack} className="p-2 rounded-full bg-black/30 backdrop-blur-sm text-white">
             <ArrowLeft className="w-5 h-5" />
           </button>

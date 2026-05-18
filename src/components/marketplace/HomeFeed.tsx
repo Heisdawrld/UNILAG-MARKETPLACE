@@ -166,7 +166,7 @@ export default function HomeFeed({
   return (
     <div>
       {/* Header */}
-      <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b px-4 py-3">
+      <div className="sticky top-0 z-30 safe-top bg-background/95 backdrop-blur-md border-b px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <img src="/logo.png" alt="UNILAG" className="w-8 h-8 rounded-lg object-cover" />

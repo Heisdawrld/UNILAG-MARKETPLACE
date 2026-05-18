@@ -220,6 +220,14 @@ export default function MarketplaceApp() {
     setActiveTab('tasks');
   }, []);
 
+  const handleOpenSell = useCallback(() => {
+    setSelectedListingId(null);
+    setSelectedChatId(null);
+    setSelectedTaskId(null);
+    setSelectedCategory('');
+    setActiveTab('sell');
+  }, []);
+
   const handleInitialChatOpened = useCallback(() => {
     setSelectedChatId(null);
   }, []);
@@ -271,7 +279,7 @@ export default function MarketplaceApp() {
   // Listing Detail View
   if (selectedListingId) {
     return (
-      <div className="h-[100dvh] flex flex-col bg-background">
+      <div className="h-[100svh] flex flex-col bg-background">
         <main className="flex-1 min-h-0 overflow-hidden">
           <Suspense fallback={<TabLoading />}>
             <ListingDetail
@@ -290,7 +298,7 @@ export default function MarketplaceApp() {
 
 
   return (
-    <div className="h-[100dvh] flex flex-col bg-background">
+    <div className="h-[100svh] flex flex-col bg-background">
       {!onboarded && <Onboarding onComplete={() => setOnboarded(true)} />}
 
       {/* Push Notification Prompt */}
@@ -300,7 +308,7 @@ export default function MarketplaceApp() {
             initial={{ y: -80, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -80, opacity: 0 }}
-            className="absolute top-0 left-0 right-0 z-[90] p-3 bg-primary/95 backdrop-blur-sm text-primary-foreground shadow-lg"
+            className="absolute top-0 left-0 right-0 z-[90] safe-top p-3 bg-primary/95 backdrop-blur-sm text-primary-foreground shadow-lg"
           >
             <div className="flex items-center gap-3 max-w-lg mx-auto">
               <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
@@ -367,7 +375,7 @@ export default function MarketplaceApp() {
                 <MessagesView user={user} initialChatId={selectedChatId} onInitialChatOpened={handleInitialChatOpened} />
               )}
               {activeTab === 'profile' && (
-                <ProfileView user={user} setUser={setUser} onSelectListing={setSelectedListingId} savedIds={savedIds} onToggleSave={handleToggleSave} />
+                <ProfileView user={user} setUser={setUser} onSelectListing={setSelectedListingId} savedIds={savedIds} onToggleSave={handleToggleSave} onOpenSell={handleOpenSell} />
               )}
             </motion.div>
           </AnimatePresence>
