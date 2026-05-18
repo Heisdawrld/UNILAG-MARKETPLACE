@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, isDatabaseAvailable } from '@/lib/db';
+import { auth } from '@clerk/nextjs/server';
 
 // GET /api/tasks — list tasks with filters
 export async function GET(req: NextRequest) {
@@ -71,6 +72,24 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const { userId: clerkId } = await auth();
+    if (!clerkId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const authUser = await db.user.findUnique({
+      where: { clerkId },
+      select: { id: true, role: true },
+    });
+
+    if (!authUser) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    if (authUser.role === 'banned') {
+      return NextResponse.json({ error: 'Banned users cannot post tasks' }, { status: 403 });
+    }
+
     const body = await req.json();
     const { creatorId, title, description, reward, category, location, pickupLocation, urgency, deadline, images } = body;
 
@@ -78,12 +97,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
+    if (creatorId !== authUser.id) {
+      return NextResponse.json({ error: 'Forbidden — you can only create tasks as yourself' }, { status: 403 });
+    }
+
+    const parsedReward = parseFloat(reward);
+    if (!Number.isFinite(parsedReward) || parsedReward <= 0) {
+      return NextResponse.json({ error: 'Reward must be a valid amount greater than zero' }, { status: 400 });
+    }
+
     const task = await (db as any).task.create({
       data: {
         creatorId,
         title: title.trim(),
         description: description.trim(),
-        reward: parseFloat(reward),
+        reward: parsedReward,
         category,
         location: location?.trim() || null,
         pickupLocation: pickupLocation?.trim() || null,

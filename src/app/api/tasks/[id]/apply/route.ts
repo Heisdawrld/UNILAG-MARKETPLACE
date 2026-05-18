@@ -1,8 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
 import { db, isDatabaseAvailable } from '@/lib/db';
-import { sendPushToUser } from '@/lib/push';
+import { notifyUser } from '@/lib/push';
 
-// POST /api/tasks/:id/apply — runner applies for a task
+async function getAuthUser() {
+  const { userId: clerkId } = await auth();
+  if (!clerkId) return null;
+
+  return db.user.findUnique({
+    where: { clerkId },
+    select: { id: true, username: true, role: true, isRunner: true },
+  });
+}
+
+// POST /api/tasks/:id/apply — approved runner applies for a task
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!isDatabaseAvailable()) {
     return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });
@@ -11,6 +22,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id: taskId } = await params;
 
   try {
+    const authUser = await getAuthUser();
+    if (!authUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (authUser.role === 'banned') {
+      return NextResponse.json({ error: 'Banned users cannot apply for tasks' }, { status: 403 });
+    }
+
     const body = await req.json();
     const { runnerId, message, proposedPrice } = body;
 
@@ -18,17 +38,37 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'runnerId is required' }, { status: 400 });
     }
 
-    // Check task is still open
+    if (runnerId !== authUser.id) {
+      return NextResponse.json({ error: 'Forbidden — you can only apply as yourself' }, { status: 403 });
+    }
+
+    if (!authUser.isRunner) {
+      return NextResponse.json({ error: 'Only approved runners can apply for tasks' }, { status: 403 });
+    }
+
+    const parsedPrice = proposedPrice ? parseFloat(proposedPrice) : null;
+    if (proposedPrice && (!Number.isFinite(parsedPrice) || parsedPrice! <= 0)) {
+      return NextResponse.json({ error: 'Proposed price must be greater than zero' }, { status: 400 });
+    }
+
     const task = await (db as any).task.findUnique({ where: { id: taskId } });
     if (!task) return NextResponse.json({ error: 'Task not found' }, { status: 404 });
     if (task.status !== 'open') return NextResponse.json({ error: 'Task is no longer accepting applications' }, { status: 400 });
     if (task.creatorId === runnerId) return NextResponse.json({ error: 'You cannot apply to your own task' }, { status: 400 });
 
-    // Create application (upsert in case they already applied)
     const application = await (db as any).taskApplication.upsert({
       where: { taskId_runnerId: { taskId, runnerId } },
-      create: { taskId, runnerId, message: message?.trim() || null, proposedPrice: proposedPrice ? parseFloat(proposedPrice) : null },
-      update: { message: message?.trim() || null, proposedPrice: proposedPrice ? parseFloat(proposedPrice) : null, status: 'pending' },
+      create: {
+        taskId,
+        runnerId,
+        message: message?.trim() || null,
+        proposedPrice: parsedPrice,
+      },
+      update: {
+        message: message?.trim() || null,
+        proposedPrice: parsedPrice,
+        status: 'pending',
+      },
       include: {
         runner: {
           select: { id: true, username: true, avatar: true, runnerRating: true, tasksCompleted: true, trustScore: true, verificationStatus: true },
@@ -36,32 +76,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       },
     });
 
-    // Mark runner as isRunner if not already
-    await (db as any).user.update({
-      where: { id: runnerId },
-      data: { isRunner: true },
-    });
-
-    // Notify task creator that a runner applied
-    const runner = await (db as any).user.findUnique({ where: { id: runnerId }, select: { username: true } });
-    await (db as any).notification.create({
-      data: {
-        userId: task.creatorId,
-        type: 'task_application',
-        title: '🏃 New Runner Offer!',
-        message: `${runner?.username || 'A runner'} wants to do your task${proposedPrice ? ` for ₦${parseFloat(proposedPrice).toLocaleString()}` : ''}`,
-        data: JSON.stringify({ taskId }),
-      },
-    }).catch(() => {});
-
-    // Push notification to task creator
-    sendPushToUser(task.creatorId, {
+    await notifyUser(task.creatorId, {
       title: '🏃 New Runner Offer!',
-      body: `${runner?.username || 'A runner'} wants to do your task${proposedPrice ? ` for ₦${parseFloat(proposedPrice).toLocaleString()}` : ''}`,
+      body: `${authUser.username} wants to do your task${parsedPrice ? ` for ₦${parsedPrice.toLocaleString()}` : ''}`,
       type: 'task_application',
-      tag: `task-${taskId}`,
       data: { taskId },
-    }).catch(() => {});
+    });
 
     return NextResponse.json(application, { status: 201 });
   } catch (err) {
@@ -70,7 +90,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 }
 
-// PATCH /api/tasks/:id/apply — accept or reject an application
+// PATCH /api/tasks/:id/apply — task creator accepts or rejects an application
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!isDatabaseAvailable()) {
     return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });
@@ -79,20 +99,59 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id: taskId } = await params;
 
   try {
+    const authUser = await getAuthUser();
+    if (!authUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await req.json();
-    const { applicationId, action } = body; // action: 'accept' | 'reject'
+    const { applicationId, action } = body;
 
     if (!applicationId || !action) {
       return NextResponse.json({ error: 'applicationId and action are required' }, { status: 400 });
     }
 
-    const application = await (db as any).taskApplication.findUnique({ where: { id: applicationId } });
-    if (!application) return NextResponse.json({ error: 'Application not found' }, { status: 404 });
+    if (!['accept', 'reject'].includes(action)) {
+      return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+    }
+
+    const task = await (db as any).task.findUnique({
+      where: { id: taskId },
+      select: { id: true, creatorId: true, status: true },
+    });
+
+    if (!task) {
+      return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+    }
+
+    if (authUser.role !== 'admin' && authUser.id !== task.creatorId) {
+      return NextResponse.json({ error: 'Only the task creator can review offers' }, { status: 403 });
+    }
+
+    const application = await (db as any).taskApplication.findUnique({
+      where: { id: applicationId },
+      include: {
+        runner: {
+          select: { id: true, username: true, role: true, isRunner: true },
+        },
+      },
+    });
+
+    if (!application || application.taskId !== taskId) {
+      return NextResponse.json({ error: 'Application not found' }, { status: 404 });
+    }
 
     if (action === 'accept') {
-      // Accept this runner, reject all others, assign runner to task
-      // If runner proposed a price, update the task reward to that price
-      const finalReward = application.proposedPrice || undefined;
+      if (task.status !== 'open') {
+        return NextResponse.json({ error: 'Task is no longer open for acceptance' }, { status: 400 });
+      }
+
+      if (!application.runner?.isRunner || application.runner.role === 'banned') {
+        return NextResponse.json({ error: 'This applicant is not an approved runner' }, { status: 400 });
+      }
+
+      const finalReward = application.proposedPrice && application.proposedPrice > 0 ? application.proposedPrice : undefined;
+
       await Promise.all([
         (db as any).taskApplication.update({
           where: { id: applicationId },
@@ -112,32 +171,24 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         }),
       ]);
 
-      // Notify the runner they got accepted
-      try {
-        await (db as any).notification.create({
-          data: {
-            userId: application.runnerId,
-            type: 'task_accepted',
-            title: '🎉 Task Accepted!',
-            message: `Your offer was accepted! Check your active tasks.`,
-            data: JSON.stringify({ taskId }),
-          },
-        });
-
-        // Push notification to accepted runner
-        sendPushToUser(application.runnerId, {
-          title: '🎉 You Got the Job!',
-          body: 'Your offer was accepted! Tap to see details.',
-          type: 'task_accepted',
-          tag: `task-${taskId}`,
-          requireInteraction: true,
-          data: { taskId },
-        }).catch(() => {});
-      } catch {}
+      await notifyUser(application.runnerId, {
+        title: '🎉 Task Accepted!',
+        body: 'Your runner offer was accepted. Open tasks to continue.',
+        type: 'task_accepted',
+        data: { taskId },
+        requireInteraction: true,
+      });
     } else {
       await (db as any).taskApplication.update({
         where: { id: applicationId },
         data: { status: 'rejected' },
+      });
+
+      await notifyUser(application.runnerId, {
+        title: 'Runner Offer Declined',
+        body: 'Your offer was not accepted for this task.',
+        type: 'system',
+        data: { taskId },
       });
     }
 

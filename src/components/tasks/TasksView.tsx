@@ -97,7 +97,7 @@ function RunnerApplicationCard({ user, onApplied }: { user: UserType; onApplied:
     }
     setSubmitting(true);
     try {
-      await fetch('/api/runner-applications', {
+      const res = await fetch('/api/runner-applications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -114,10 +114,20 @@ function RunnerApplicationCard({ user, onApplied }: { user: UserType; onApplied:
           hostel: user.hostel || '',
         }),
       });
+
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ error: 'Failed to submit application' }));
+        throw new Error(error.error || 'Failed to submit application');
+      }
+
       setApplied(true);
       onApplied();
-    } catch {
-      toast({ title: 'Failed to submit', variant: 'destructive' });
+    } catch (error) {
+      toast({
+        title: 'Failed to submit',
+        description: error instanceof Error ? error.message : 'Please try again',
+        variant: 'destructive',
+      });
     } finally { setSubmitting(false); }
   };
 

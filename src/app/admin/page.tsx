@@ -301,19 +301,22 @@ export default function AdminPage() {
               <p className="p-6 text-center text-sm text-white/40">No pending runner applications.</p>
             ) : (
               <div className="divide-y divide-white/5">
-                {runnerApps.map((app: any) => (
+                {runnerApps.map((app: any) => {
+                  const appData = app.data || {};
+
+                  return (
                   <div key={app.id} className="p-4 hover:bg-white/5 space-y-3">
                     {/* Header with photo */}
                     <div className="flex items-start gap-3">
-                      {app.data.selfie && (
-                        <img src={app.data.selfie} alt="Applicant" className="w-16 h-16 rounded-xl object-cover border-2 border-amber-400/30" />
+                      {appData.selfie && (
+                        <img src={appData.selfie} alt="Applicant" className="w-16 h-16 rounded-xl object-cover border-2 border-amber-400/30" />
                       )}
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-bold flex items-center gap-1.5">
                           <Zap className="w-3.5 h-3.5 text-amber-400" />
-                          {app.data.username}
+                          {appData.username || 'Unknown applicant'}
                         </p>
-                        <p className="text-[11px] text-white/60">{app.data.email}</p>
+                        <p className="text-[11px] text-white/60">{appData.email || 'No email provided'}</p>
                       </div>
                     </div>
 
@@ -321,59 +324,59 @@ export default function AdminPage() {
                     <div className="grid grid-cols-2 gap-2 text-[11px]">
                       <div className="bg-white/5 rounded-lg p-2">
                         <p className="text-white/40 text-[9px] uppercase tracking-wider">Matric No.</p>
-                        <p className="text-white/90 font-medium">{app.data.studentId}</p>
+                        <p className="text-white/90 font-medium">{appData.studentId || 'Not provided'}</p>
                       </div>
                       <div className="bg-white/5 rounded-lg p-2">
                         <p className="text-white/40 text-[9px] uppercase tracking-wider">Phone</p>
-                        <p className="text-white/90 font-medium">{app.data.phone || 'Not provided'}</p>
+                        <p className="text-white/90 font-medium">{appData.phone || 'Not provided'}</p>
                       </div>
                       <div className="bg-white/5 rounded-lg p-2">
                         <p className="text-white/40 text-[9px] uppercase tracking-wider">Faculty</p>
-                        <p className="text-white/90 font-medium">{app.data.faculty || 'Not set'}</p>
+                        <p className="text-white/90 font-medium">{appData.faculty || 'Not set'}</p>
                       </div>
                       <div className="bg-white/5 rounded-lg p-2">
                         <p className="text-white/40 text-[9px] uppercase tracking-wider">Hostel</p>
-                        <p className="text-white/90 font-medium">{app.data.hostel || 'Not set'}</p>
+                        <p className="text-white/90 font-medium">{appData.hostel || 'Not set'}</p>
                       </div>
                       <div className="bg-white/5 rounded-lg p-2 col-span-2">
                         <p className="text-white/40 text-[9px] uppercase tracking-wider">Emergency Contact</p>
-                        <p className="text-white/90 font-medium">{app.data.emergencyContact || 'Not provided'}</p>
+                        <p className="text-white/90 font-medium">{appData.emergencyContact || 'Not provided'}</p>
                       </div>
-                      {app.data.availability && (
+                      {appData.availability && (
                         <div className="bg-white/5 rounded-lg p-2 col-span-2">
                           <p className="text-white/40 text-[9px] uppercase tracking-wider">Availability</p>
-                          <p className="text-white/90 font-medium">{app.data.availability}</p>
+                          <p className="text-white/90 font-medium">{appData.availability}</p>
                         </div>
                       )}
                     </div>
 
                     {/* Motivation */}
-                    {app.data.motivation && (
+                    {appData.motivation && (
                       <div className="bg-white/5 p-2.5 rounded-lg border border-white/5">
                         <p className="text-[9px] text-white/40 uppercase tracking-wider mb-1">Why they want to be a runner</p>
-                        <p className="text-xs text-white/80 italic">&ldquo;{app.data.motivation}&rdquo;</p>
+                        <p className="text-xs text-white/80 italic">&ldquo;{appData.motivation}&rdquo;</p>
                       </div>
                     )}
 
                     {/* Actions */}
                     <div className="flex gap-2 pt-1">
                       <button 
-                        onClick={() => doAction('approve_runner', app.data.applicantId)} 
-                        disabled={actionLoading === app.data.applicantId}
+                        onClick={() => doAction('approve_runner', appData.applicantId)} 
+                        disabled={actionLoading === appData.applicantId}
                         className="flex-1 text-xs px-3 py-2 rounded-lg bg-emerald-500 text-white font-medium hover:bg-emerald-600 transition-colors shadow-sm disabled:opacity-50"
                       >
                         ✅ Approve Runner
                       </button>
                       <button 
-                        onClick={() => doAction('reject_runner', app.data.applicantId)} 
-                        disabled={actionLoading === app.data.applicantId}
+                        onClick={() => doAction('reject_runner', appData.applicantId)} 
+                        disabled={actionLoading === appData.applicantId}
                         className="flex-1 text-xs px-3 py-2 rounded-lg bg-red-500/20 text-red-400 font-medium hover:bg-red-500/30 transition-colors disabled:opacity-50"
                       >
                         ❌ Reject
                       </button>
                     </div>
                   </div>
-                ))}
+                )})}
               </div>
             )}
           </div>

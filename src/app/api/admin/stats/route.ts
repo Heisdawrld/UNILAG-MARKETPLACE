@@ -1,6 +1,7 @@
 import { db, isDatabaseAvailable } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
+import { notifyUser } from '@/lib/push';
 
 // GET /api/admin/stats — dashboard overview
 export async function GET(req: NextRequest) {
@@ -102,18 +103,43 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ success: true, message: 'User made admin' });
 
       case 'approve_runner':
-        await db.user.update({ where: { id: targetId }, data: { isRunner: true } });
-        // Also delete the runner application notification
+        await db.user.update({
+          where: { id: targetId },
+          data: { isRunner: true, trustScore: { increment: 10 } },
+        });
         await db.notification.deleteMany({
-          where: { type: 'runner_application', data: { contains: `"applicantId":"${targetId}"` } }
+          where: {
+            type: 'runner_application',
+            OR: [
+              { data: { contains: `"applicantId":"${targetId}"` } },
+              { message: { contains: `"applicantId":"${targetId}"` } },
+            ],
+          },
+        });
+        await notifyUser(targetId, {
+          title: 'Runner Application Approved ✅',
+          body: 'You are now an approved runner. You can start bidding on campus tasks.',
+          type: 'system',
+          data: { url: '/?tab=tasks' },
         });
         return NextResponse.json({ success: true, message: 'Runner approved' });
 
       case 'reject_runner':
         await db.user.update({ where: { id: targetId }, data: { isRunner: false } });
-        // Delete the runner application notification
         await db.notification.deleteMany({
-          where: { type: 'runner_application', data: { contains: `"applicantId":"${targetId}"` } }
+          where: {
+            type: 'runner_application',
+            OR: [
+              { data: { contains: `"applicantId":"${targetId}"` } },
+              { message: { contains: `"applicantId":"${targetId}"` } },
+            ],
+          },
+        });
+        await notifyUser(targetId, {
+          title: 'Runner Application Declined',
+          body: 'Your runner application was not approved yet. Update your details and apply again.',
+          type: 'system',
+          data: { url: '/?tab=tasks' },
         });
         return NextResponse.json({ success: true, message: 'Runner rejected' });
 

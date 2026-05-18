@@ -140,8 +140,18 @@ export default function HomeFeed({
 
     if (notif.type === 'task_application' || notif.type === 'task_accepted' || data.taskId) {
       onOpenTasks(data.taskId || null);
+      return;
     }
-  }, [markNotificationsRead, notifications, onOpenMessagesChat, onOpenTasks]);
+
+    if (data.listingId) {
+      onSelectListing(data.listingId);
+      return;
+    }
+
+    if (data.url) {
+      window.location.assign(data.url);
+    }
+  }, [markNotificationsRead, notifications, onOpenMessagesChat, onOpenTasks, onSelectListing]);
 
   if (loading) {
     return (

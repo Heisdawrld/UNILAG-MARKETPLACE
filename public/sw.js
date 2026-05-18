@@ -96,11 +96,11 @@ self.addEventListener('notificationclick', function(event) {
   var data = event.notification.data || {};
   var url = '/';
 
-  if (data.type === 'new_message') {
+  if (data.chatId) {
     url = '/?tab=messages';
     if (data.chatId) url += '&chatId=' + encodeURIComponent(data.chatId);
   }
-  else if (data.type === 'task_accepted' || data.type === 'task_application') {
+  else if (data.taskId) {
     url = '/?tab=tasks';
     if (data.taskId) url += '&taskId=' + encodeURIComponent(data.taskId);
   }
