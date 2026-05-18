@@ -5,7 +5,7 @@ import { TrendingUp, Clock, Eye, Award, RefreshCw, Star, Bell, Smartphone, Lapto
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/api';
-import { User as UserType, Listing, Notification } from '@/lib/types';
+import { User as UserType, Listing, Notification as AppNotification } from '@/lib/types';
 import { getInitials } from '@/lib/marketplace-utils';
 import { ListingCard, ListingCardSkeleton } from './ListingCard';
 
@@ -22,15 +22,39 @@ const CATEGORY_ICONS: Record<string, typeof Smartphone> = {
   'Others': LayoutGrid,
 };
 
+type NotificationData = {
+  chatId?: string;
+  taskId?: string;
+  listingId?: string;
+  storeId?: string;
+  url?: string;
+};
+
+function parseNotificationData(data: string | null | undefined): NotificationData {
+  if (!data) return {};
+
+  try {
+    const parsed = JSON.parse(data);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 export default function HomeFeed({
-  user, onSelectListing, onToggleSave, savedIds,
+  user, onSelectListing, onToggleSave, savedIds, onOpenMessagesChat, onOpenTasks,
 }: {
-  user: UserType; onSelectListing: (id: string) => void; onToggleSave: (id: string) => void; savedIds: Set<string>;
+  user: UserType;
+  onSelectListing: (id: string) => void;
+  onToggleSave: (id: string) => void;
+  savedIds: Set<string>;
+  onOpenMessagesChat: (chatId?: string | null) => void;
+  onOpenTasks: (taskId?: string | null) => void;
 }) {
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [showNotifs, setShowNotifs] = useState(false);
 
   const fetchListings = useCallback(async () => {
@@ -43,12 +67,17 @@ export default function HomeFeed({
 
   useEffect(() => { fetchListings(); }, [fetchListings]);
 
-  // Fetch notifications
-  useEffect(() => {
-    api.get(`/api/notifications?userId=${user.id}`)
-      .then((data: any) => setNotifications(Array.isArray(data) ? data : data?.notifications || []))
-      .catch(() => setNotifications([]));
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const data = await api.get(`/api/notifications?userId=${user.id}`);
+      setNotifications(Array.isArray(data) ? data : data?.notifications || []);
+    } catch {
+      setNotifications([]);
+    }
   }, [user.id]);
+
+  // Fetch notifications
+  useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
 
   const unreadCount = useMemo(() => (notifications || []).filter(n => !n.read).length, [notifications]);
   const boosted = useMemo(() => listings.filter(l => l.boosted), [listings]);
@@ -56,6 +85,63 @@ export default function HomeFeed({
   const popular = useMemo(() => [...listings].sort((a, b) => b.views - a.views).slice(0, 6), [listings]);
 
   const categories = Object.entries(CATEGORY_ICONS);
+
+  const markNotificationsRead = useCallback(async (notificationIds: string[]) => {
+    if (notificationIds.length === 0) return;
+
+    setNotifications(prev => prev.map(notif => notificationIds.includes(notif.id) ? { ...notif, read: true } : notif));
+    try {
+      await api.patch('/api/notifications/read', { userId: user.id, notificationIds });
+    } catch {
+      fetchNotifications();
+    }
+  }, [fetchNotifications, user.id]);
+
+  const handleMarkAllRead = useCallback(async () => {
+    if (unreadCount === 0) return;
+
+    setNotifications(prev => prev.map(notif => ({ ...notif, read: true })));
+    try {
+      await api.patch('/api/notifications/read', { userId: user.id, markAll: true });
+    } catch {
+      fetchNotifications();
+    }
+  }, [fetchNotifications, unreadCount, user.id]);
+
+  const handleNotificationClick = useCallback((notif: AppNotification) => {
+    const data = parseNotificationData(notif.data);
+    const relatedNotificationIds = notifications
+      .filter((candidate) => {
+        if (candidate.id === notif.id) return true;
+
+        const candidateData = parseNotificationData(candidate.data);
+        if (notif.type === 'new_message' && data.chatId) {
+          return candidate.type === 'new_message' && candidateData.chatId === data.chatId;
+        }
+
+        if (data.taskId) {
+          return candidateData.taskId === data.taskId;
+        }
+
+        return false;
+      })
+      .map((candidate) => candidate.id);
+
+    if (!notif.read || relatedNotificationIds.length > 1) {
+      markNotificationsRead(relatedNotificationIds);
+    }
+
+    setShowNotifs(false);
+
+    if (notif.type === 'new_message') {
+      onOpenMessagesChat(data.chatId || null);
+      return;
+    }
+
+    if (notif.type === 'task_application' || notif.type === 'task_accepted' || data.taskId) {
+      onOpenTasks(data.taskId || null);
+    }
+  }, [markNotificationsRead, notifications, onOpenMessagesChat, onOpenTasks]);
 
   if (loading) {
     return (
@@ -100,17 +186,29 @@ export default function HomeFeed({
         <div className="mx-4 mt-2 bg-card border rounded-xl shadow-lg overflow-hidden z-40 relative">
           <div className="p-3 border-b flex items-center justify-between">
             <p className="font-semibold text-sm">Notifications</p>
-            {unreadCount > 0 && <Badge variant="secondary" className="text-[10px]">{unreadCount} new</Badge>}
+            <div className="flex items-center gap-2">
+              {unreadCount > 0 && <Badge variant="secondary" className="text-[10px]">{unreadCount} new</Badge>}
+              {unreadCount > 0 && (
+                <button onClick={handleMarkAllRead} className="text-[10px] font-medium text-primary hover:underline">
+                  Mark all as read
+                </button>
+              )}
+            </div>
           </div>
           <div className="max-h-64 overflow-y-auto">
             {notifications.length === 0 ? (
               <p className="p-4 text-sm text-muted-foreground text-center">No notifications yet</p>
             ) : (
               notifications.slice(0, 10).map(notif => (
-                <div key={notif.id} className={`p-3 border-b last:border-0 text-left ${!notif.read ? 'bg-primary/5' : ''}`}>
+                <button
+                  key={notif.id}
+                  onClick={() => handleNotificationClick(notif)}
+                  className={`block w-full p-3 border-b last:border-0 text-left hover:bg-muted/60 transition-colors ${!notif.read ? 'bg-primary/5' : ''}`}
+                >
                   <p className="text-xs font-medium">{notif.title}</p>
                   <p className="text-[11px] text-muted-foreground mt-0.5">{notif.message}</p>
-                </div>
+                  {notif.type === 'new_message' && <p className="text-[10px] text-primary font-medium mt-1">Open message</p>}
+                </button>
               ))
             )}
           </div>

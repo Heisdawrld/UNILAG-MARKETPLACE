@@ -329,6 +329,10 @@ function TaskDetail({ taskId, user, onBack }: { taskId: string; user: UserType; 
     api.get(`/api/tasks/${taskId}`).then(setTask).catch(console.error).finally(() => setLoading(false));
   }, [taskId]);
 
+  useEffect(() => {
+    api.patch('/api/notifications/read', { userId: user.id, taskId }).catch(console.error);
+  }, [taskId, user.id]);
+
   const handleApply = async () => {
     setApplying(true);
     try {
@@ -498,7 +502,15 @@ function TaskDetail({ taskId, user, onBack }: { taskId: string; user: UserType; 
 }
 
 // ── Main Tasks View ──
-export default function TasksView({ user }: { user: UserType }) {
+export default function TasksView({
+  user,
+  initialTaskId,
+  onInitialTaskOpened,
+}: {
+  user: UserType;
+  initialTaskId?: string | null;
+  onInitialTaskOpened?: () => void;
+}) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -517,6 +529,12 @@ export default function TasksView({ user }: { user: UserType }) {
   }, [categoryFilter]);
 
   useEffect(() => { fetchTasks(); }, [fetchTasks]);
+
+  useEffect(() => {
+    if (!initialTaskId) return;
+    setSelectedTaskId(initialTaskId);
+    onInitialTaskOpened?.();
+  }, [initialTaskId, onInitialTaskOpened]);
 
   if (selectedTaskId) {
     return <TaskDetail taskId={selectedTaskId} user={user} onBack={() => { setSelectedTaskId(null); fetchTasks(); }} />;

@@ -75,12 +75,36 @@ export default function MarketplaceApp() {
   const [user, setUser] = useState<UserType | null>(null);
   const [activeTab, setActiveTab] = useState<ViewTab>('home');
   const [selectedListingId, setSelectedListingId] = useState<string | null>(null);
+  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [onboarded, setOnboarded] = useState(false);
   const [showPushPrompt, setShowPushPrompt] = useState(false);
   const { permission, isSubscribed, isSupported, subscribe } = usePushNotifications(user?.id || null);
+
+  // Honor deep links from web push notifications, e.g. /?tab=messages&chatId=...
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab') as ViewTab | null;
+    const chatId = params.get('chatId');
+    const taskId = params.get('taskId');
+    const validTabs: ViewTab[] = ['home', 'search', 'sell', 'tasks', 'messages', 'profile'];
+
+    if (tab && validTabs.includes(tab)) {
+      setActiveTab(tab);
+    }
+    if (tab === 'messages' && chatId) {
+      setSelectedChatId(chatId);
+    }
+    if (tab === 'tasks' && taskId) {
+      setSelectedTaskId(taskId);
+    }
+    if (params.has('tab') || params.has('chatId') || params.has('taskId')) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+    }
+  }, []);
 
   // Sync Clerk user → DB user
   useEffect(() => {
@@ -157,6 +181,8 @@ export default function MarketplaceApp() {
   const handleTabChange = useCallback((tab: ViewTab) => {
     setActiveTab(tab);
     setSelectedListingId(null);
+    setSelectedChatId(null);
+    setSelectedTaskId(null);
     setSelectedCategory('');
   }, []);
 
@@ -177,6 +203,30 @@ export default function MarketplaceApp() {
       setActiveTab('messages');
     } catch (e) { console.error(e); }
   }, [user]);
+
+  const handleOpenMessagesChat = useCallback((chatId?: string | null) => {
+    setSelectedListingId(null);
+    setSelectedTaskId(null);
+    setSelectedCategory('');
+    setSelectedChatId(chatId || null);
+    setActiveTab('messages');
+  }, []);
+
+  const handleOpenTasks = useCallback((taskId?: string | null) => {
+    setSelectedListingId(null);
+    setSelectedChatId(null);
+    setSelectedCategory('');
+    setSelectedTaskId(taskId || null);
+    setActiveTab('tasks');
+  }, []);
+
+  const handleInitialChatOpened = useCallback(() => {
+    setSelectedChatId(null);
+  }, []);
+
+  const handleInitialTaskOpened = useCallback(() => {
+    setSelectedTaskId(null);
+  }, []);
 
   // Loading screen
   if (!clerkLoaded || loading) {
@@ -295,7 +345,14 @@ export default function MarketplaceApp() {
               className="h-full"
             >
               {activeTab === 'home' && (
-                <HomeFeed user={user} onSelectListing={handleSelectListing} onToggleSave={handleToggleSave} savedIds={savedIds} />
+                <HomeFeed
+                  user={user}
+                  onSelectListing={handleSelectListing}
+                  onToggleSave={handleToggleSave}
+                  savedIds={savedIds}
+                  onOpenMessagesChat={handleOpenMessagesChat}
+                  onOpenTasks={handleOpenTasks}
+                />
               )}
               {activeTab === 'search' && (
                 <SearchView user={user} onSelectListing={handleSelectListing} onToggleSave={handleToggleSave} savedIds={savedIds} initialCategory={selectedCategory} />
@@ -303,8 +360,12 @@ export default function MarketplaceApp() {
               {activeTab === 'sell' && (
                 <SellView user={user} onListingCreated={() => setActiveTab('home')} />
               )}
-              {activeTab === 'tasks' && <TasksView user={user} />}
-              {activeTab === 'messages' && <MessagesView user={user} />}
+              {activeTab === 'tasks' && (
+                <TasksView user={user} initialTaskId={selectedTaskId} onInitialTaskOpened={handleInitialTaskOpened} />
+              )}
+              {activeTab === 'messages' && (
+                <MessagesView user={user} initialChatId={selectedChatId} onInitialChatOpened={handleInitialChatOpened} />
+              )}
               {activeTab === 'profile' && (
                 <ProfileView user={user} setUser={setUser} onSelectListing={setSelectedListingId} savedIds={savedIds} onToggleSave={handleToggleSave} />
               )}

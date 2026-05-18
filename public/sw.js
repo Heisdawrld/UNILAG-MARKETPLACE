@@ -96,8 +96,14 @@ self.addEventListener('notificationclick', function(event) {
   var data = event.notification.data || {};
   var url = '/';
 
-  if (data.type === 'new_message') url = '/?tab=messages';
-  else if (data.type === 'task_accepted' || data.type === 'task_application') url = '/?tab=tasks';
+  if (data.type === 'new_message') {
+    url = '/?tab=messages';
+    if (data.chatId) url += '&chatId=' + encodeURIComponent(data.chatId);
+  }
+  else if (data.type === 'task_accepted' || data.type === 'task_application') {
+    url = '/?tab=tasks';
+    if (data.taskId) url += '&taskId=' + encodeURIComponent(data.taskId);
+  }
   else if (data.type === 'new_follower') url = '/?tab=profile';
   else if (data.type === 'boost_expiry') url = '/?tab=profile';
   else if (data.url) url = data.url;

@@ -220,6 +220,7 @@ export interface Notification {
   title: string;
   message: string;
   read: boolean;
+  data: string | null;
   createdAt: string;
 }
 

@@ -78,7 +78,16 @@ function ChatDetail({ chat, user, onBack }: { chat: Chat; user: UserType; onBack
     } catch (e) { console.error(e); }
   }, [chat.id]);
 
+  const markChatNotificationsRead = useCallback(async () => {
+    try {
+      await api.patch('/api/notifications/read', { userId: user.id, chatId: chat.id });
+    } catch (e) {
+      console.error(e);
+    }
+  }, [chat.id, user.id]);
+
   useEffect(() => { fetchMessages(); const i = setInterval(fetchMessages, 10000); return () => clearInterval(i); }, [fetchMessages]);
+  useEffect(() => { markChatNotificationsRead(); }, [markChatNotificationsRead]);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
   const handleSend = async () => {
@@ -211,16 +220,43 @@ function ChatDetail({ chat, user, onBack }: { chat: Chat; user: UserType; onBack
   );
 }
 
-export default function MessagesView({ user }: { user: UserType }) {
+export default function MessagesView({
+  user,
+  initialChatId,
+  onInitialChatOpened,
+}: {
+  user: UserType;
+  initialChatId?: string | null;
+  onInitialChatOpened?: () => void;
+}) {
   const [chats, setChats] = useState<Chat[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
 
-  useEffect(() => {
-    api.get(`/api/chats?userId=${user.id}`).then(setChats).catch(console.error).finally(() => setLoading(false));
+  const fetchChats = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api.get(`/api/chats?userId=${user.id}`);
+      setChats(data || []);
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
   }, [user.id]);
 
-  if (activeChat) return <ChatDetail chat={activeChat} user={user} onBack={() => setActiveChat(null)} />;
+  useEffect(() => {
+    fetchChats();
+  }, [fetchChats]);
+
+  useEffect(() => {
+    if (!initialChatId || loading) return;
+
+    const chat = chats.find(c => c.id === initialChatId);
+    if (chat) setActiveChat(chat);
+    onInitialChatOpened?.();
+  }, [chats, initialChatId, loading, onInitialChatOpened]);
+
+  if (activeChat) {
+    return <ChatDetail chat={activeChat} user={user} onBack={() => { setActiveChat(null); fetchChats(); }} />;
+  }
 
   return (
     <div>
