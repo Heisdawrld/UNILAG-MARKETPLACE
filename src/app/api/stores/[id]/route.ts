@@ -67,11 +67,25 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
           orderBy: [{ boosted: 'desc' }, { createdAt: 'desc' }],
           take: 50,
         },
+        followers: {
+          where: { userId: viewer?.id ?? '__viewer_not_signed_in__' },
+          select: { userId: true },
+          take: 1,
+        },
         _count: { select: { listings: true, followers: true } },
       },
     });
 
-    return NextResponse.json(store);
+    if (!store) {
+      return NextResponse.json({ error: 'Store not found' }, { status: 404 });
+    }
+
+    const { followers, ...storeData } = store;
+
+    return NextResponse.json({
+      ...storeData,
+      isFollowing: followers.length > 0,
+    });
   } catch (error) {
     console.error('Error fetching store:', error);
     return NextResponse.json({ error: 'Failed to fetch store' }, { status: 500 });

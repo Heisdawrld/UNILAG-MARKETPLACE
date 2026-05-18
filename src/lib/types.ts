@@ -142,6 +142,7 @@ export interface Store {
   followCount: number;
   totalSales: number;
   rating: number;
+  isFollowing?: boolean;
   createdAt: string;
   updatedAt: string;
   owner: {

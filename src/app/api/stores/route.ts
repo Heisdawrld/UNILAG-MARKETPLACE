@@ -43,6 +43,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
   }
   try {
+    const viewer = await getAuthUser();
     const { searchParams } = new URL(request.url);
     const category = searchParams.get('category');
     const search = searchParams.get('search');
@@ -74,13 +75,23 @@ export async function GET(request: NextRequest) {
             ratingAverage: true,
           },
         },
+        followers: {
+          where: { userId: viewer?.id ?? '__viewer_not_signed_in__' },
+          select: { userId: true },
+          take: 1,
+        },
         _count: { select: { listings: true, followers: true } },
       },
       orderBy: [{ isVerified: 'desc' }, { followCount: 'desc' }, { createdAt: 'desc' }],
       take: limit,
     });
 
-    return NextResponse.json(stores);
+    return NextResponse.json(
+      stores.map(({ followers, ...store }) => ({
+        ...store,
+        isFollowing: followers.length > 0,
+      })),
+    );
   } catch (error) {
     console.error('Error fetching stores:', error);
     return NextResponse.json({ error: 'Failed to fetch stores' }, { status: 500 });

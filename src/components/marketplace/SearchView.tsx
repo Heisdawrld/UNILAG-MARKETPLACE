@@ -9,15 +9,22 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Card, CardContent } from '@/components/ui/card';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { api } from '@/lib/api';
 import { User as UserType, Listing, Store, CATEGORIES, STORE_CATEGORIES } from '@/lib/types';
-import { formatPrice, getInitials } from '@/lib/marketplace-utils';
+import { formatPrice } from '@/lib/marketplace-utils';
 import { ListingCard, ListingCardSkeleton } from './ListingCard';
 import { AnimatePresence, motion } from 'framer-motion';
 
 type SearchTab = 'products' | 'stores';
+
+function getStoreListingCount(store: Store) {
+  return store._count?.listings ?? 0;
+}
+
+function getStoreFollowerCount(store: Store) {
+  return store._count?.followers ?? store.followCount;
+}
 
 // ── Store Card ──
 function StoreCard({ store, onClick }: { store: Store; onClick: () => void }) {
@@ -44,10 +51,10 @@ function StoreCard({ store, onClick }: { store: Store; onClick: () => void }) {
               )}
               <div className="flex items-center gap-3 mt-2 text-[10px] text-muted-foreground">
                 <span className="flex items-center gap-0.5">
-                  <ShoppingBag className="w-3 h-3" /> {store._count?.listings || 0} items
+                  <ShoppingBag className="w-3 h-3" /> {getStoreListingCount(store)} items
                 </span>
                 <span className="flex items-center gap-0.5">
-                  <Users className="w-3 h-3" /> {store._count?.followers || store.followCount} followers
+                  <Users className="w-3 h-3" /> {getStoreFollowerCount(store)} followers
                 </span>
                 {store.rating > 0 && (
                   <span className="flex items-center gap-0.5">
@@ -80,7 +87,32 @@ export default function SearchView({
   const [negotiable, setNegotiable] = useState(false);
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 600000]);
   const [selectedStore, setSelectedStore] = useState<Store | null>(null);
+  const [followLoading, setFollowLoading] = useState(false);
   const debounceRef = useRef<NodeJS.Timeout>();
+
+  const updateStoreFollowState = useCallback((storeId: string, isFollowing: boolean) => {
+    const applyUpdate = (store: Store) => {
+      const wasFollowing = Boolean(store.isFollowing);
+
+      if (wasFollowing === isFollowing) {
+        return { ...store, isFollowing };
+      }
+
+      const countDelta = isFollowing ? 1 : -1;
+
+      return {
+        ...store,
+        isFollowing,
+        followCount: Math.max(0, store.followCount + countDelta),
+        _count: store._count
+          ? { ...store._count, followers: Math.max(0, store._count.followers + countDelta) }
+          : store._count,
+      };
+    };
+
+    setStoreResults(current => current.map(store => store.id === storeId ? applyUpdate(store) : store));
+    setSelectedStore(current => current && current.id === storeId ? applyUpdate(current) : current);
+  }, []);
 
   const doSearch = useCallback(async (term: string) => {
     setLoading(true);
@@ -151,11 +183,11 @@ export default function SearchView({
           {/* Stats */}
           <div className="flex items-center gap-4 mt-3 text-sm">
             <div className="text-center">
-              <p className="font-bold">{selectedStore._count?.listings || 0}</p>
+              <p className="font-bold">{getStoreListingCount(selectedStore)}</p>
               <p className="text-[10px] text-muted-foreground">Products</p>
             </div>
             <div className="text-center">
-              <p className="font-bold">{selectedStore._count?.followers || selectedStore.followCount}</p>
+              <p className="font-bold">{getStoreFollowerCount(selectedStore)}</p>
               <p className="text-[10px] text-muted-foreground">Followers</p>
             </div>
             {selectedStore.rating > 0 && (
@@ -187,13 +219,34 @@ export default function SearchView({
           )}
 
           {/* Follow Button */}
-          <Button className="w-full mt-4 h-10 gap-2" onClick={async () => {
-            try {
-              await api.post(`/api/stores/${selectedStore.id}`, { userId: user.id, action: 'follow' });
-              setSelectedStore({ ...selectedStore, followCount: selectedStore.followCount + 1 });
-            } catch {}
-          }}>
-            <Users className="w-4 h-4" /> Follow Store
+          <Button
+            className="w-full mt-4 h-10 gap-2"
+            variant={selectedStore.isFollowing ? 'outline' : 'default'}
+            disabled={followLoading || selectedStore.ownerId === user.id}
+            onClick={async () => {
+              const wasFollowing = Boolean(selectedStore.isFollowing);
+              const nextAction = selectedStore.isFollowing ? 'unfollow' : 'follow';
+              const nextIsFollowing = !wasFollowing;
+
+              try {
+                setFollowLoading(true);
+                updateStoreFollowState(selectedStore.id, nextIsFollowing);
+                const response = await api.post(`/api/stores/${selectedStore.id}`, { userId: user.id, action: nextAction });
+                updateStoreFollowState(selectedStore.id, Boolean(response.followed));
+              } catch {
+                updateStoreFollowState(selectedStore.id, wasFollowing);
+              }
+              finally {
+                setFollowLoading(false);
+              }
+            }}
+          >
+            <Users className="w-4 h-4" />
+            {selectedStore.ownerId === user.id
+              ? 'Your Store'
+              : selectedStore.isFollowing
+                ? 'Unfollow Store'
+                : 'Follow Store'}
           </Button>
         </div>
 
