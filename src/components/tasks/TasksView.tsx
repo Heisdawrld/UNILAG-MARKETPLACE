@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   MapPin,
@@ -24,6 +24,9 @@ import {
   Clock3,
   Star,
   Zap,
+  Radio,
+  RefreshCcw,
+  Search,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -63,6 +66,65 @@ const TRANSPORT_OPTIONS = [
 type RunnerEntryMode = 'intro' | 'customer' | 'runner_apply' | 'runner';
 
 type RequestBudgetTone = 'low' | 'fair' | 'premium';
+type MarketplaceSortMode = 'live' | 'urgent' | 'best_budget' | 'highest_budget';
+
+const LIVE_REQUEST_WINDOW_MS = 1000 * 60 * 45;
+const LIVE_OFFER_WINDOW_MS = 1000 * 60 * 12;
+
+function isFreshTimestamp(value?: string | null, freshnessWindowMs = LIVE_REQUEST_WINDOW_MS) {
+  if (!value) return false;
+
+  const timestamp = new Date(value).getTime();
+  if (Number.isNaN(timestamp)) return false;
+
+  return Date.now() - timestamp <= freshnessWindowMs;
+}
+
+function getUrgencyRank(urgency?: string | null) {
+  return {
+    urgent: 4,
+    high: 3,
+    medium: 2,
+    low: 1,
+  }[urgency || 'medium'] || 0;
+}
+
+function getTaskBudgetGap(task: Task) {
+  if (!task.pricingGuide) return Number.MAX_SAFE_INTEGER;
+  return Math.abs(task.reward - task.pricingGuide.recommended);
+}
+
+function sortMarketplaceTasks(tasks: Task[], mode: MarketplaceSortMode) {
+  return [...tasks].sort((left, right) => {
+    if (mode === 'urgent') {
+      return getUrgencyRank(right.urgency) - getUrgencyRank(left.urgency)
+        || new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+    }
+
+    if (mode === 'best_budget') {
+      return getTaskBudgetGap(left) - getTaskBudgetGap(right)
+        || new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+    }
+
+    if (mode === 'highest_budget') {
+      return right.reward - left.reward
+        || new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+    }
+
+    return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+  });
+}
+
+function formatLiveSyncLabel(lastSyncedAt: Date | null) {
+  if (!lastSyncedAt) return 'Waiting for first sync';
+
+  const secondsAgo = Math.max(0, Math.round((Date.now() - lastSyncedAt.getTime()) / 1000));
+  if (secondsAgo < 5) return 'Synced just now';
+  if (secondsAgo < 60) return `Synced ${secondsAgo}s ago`;
+
+  const minutesAgo = Math.round(secondsAgo / 60);
+  return `Synced ${minutesAgo}m ago`;
+}
 
 function getRunnerStorageKey(userId: string) {
   return `${RUNNER_STORAGE_KEY_PREFIX}${userId}`;
@@ -156,6 +218,26 @@ function getBudgetToneCopy(pricingGuide?: RunnerPricingGuide | null) {
     badgeClass: 'bg-primary/10 text-primary',
     description: 'This sits in the current guide range and should feel balanced to most runners.',
   };
+}
+
+function sortOfferApplications(task: Task, applications: Task['applications'] = []) {
+  return [...applications].sort((left, right) => {
+    const leftAccepted = left.status === 'accepted' ? 1 : 0;
+    const rightAccepted = right.status === 'accepted' ? 1 : 0;
+    if (leftAccepted !== rightAccepted) return rightAccepted - leftAccepted;
+
+    const leftPending = left.status === 'pending' ? 1 : 0;
+    const rightPending = right.status === 'pending' ? 1 : 0;
+    if (leftPending !== rightPending) return rightPending - leftPending;
+
+    const leftPrice = left.proposedPrice || task.reward;
+    const rightPrice = right.proposedPrice || task.reward;
+    const leftDelta = Math.abs(leftPrice - task.reward);
+    const rightDelta = Math.abs(rightPrice - task.reward);
+    if (leftDelta !== rightDelta) return leftDelta - rightDelta;
+
+    return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+  });
 }
 
 function RunnerStatusPanel({
@@ -625,10 +707,46 @@ function PricingGuidePanel({
   );
 }
 
+function OfferComparisonSummary({
+  task,
+  applications,
+}: {
+  task: Task;
+  applications: NonNullable<Task['applications']>;
+}) {
+  const pendingOffers = applications.filter((application) => application.status === 'pending');
+  const lowestOffer = pendingOffers.reduce<number | null>((best, application) => {
+    const currentValue = application.proposedPrice || task.reward;
+    return best === null || currentValue < best ? currentValue : best;
+  }, null);
+  const exactMatches = pendingOffers.filter((application) => !application.proposedPrice || application.proposedPrice === task.reward).length;
+  const freshOffers = pendingOffers.filter((application) => isFreshTimestamp(application.createdAt, LIVE_OFFER_WINDOW_MS)).length;
+
+  return (
+    <div className="grid gap-3 md:grid-cols-4">
+      {[
+        { label: 'Live offers', value: pendingOffers.length, caption: 'Still waiting for your decision' },
+        { label: 'Best current price', value: lowestOffer ? formatPrice(lowestOffer) : formatPrice(task.reward), caption: lowestOffer && lowestOffer < task.reward ? `${formatPrice(task.reward - lowestOffer)} below budget` : 'At or above your budget' },
+        { label: 'Exact matches', value: exactMatches, caption: 'Runners accepting your amount' },
+        { label: 'Fresh offers', value: freshOffers, caption: 'Submitted in the live window' },
+      ].map((item) => (
+        <Card key={item.label} className="border-0 shadow-sm">
+          <CardContent className="p-4 space-y-1.5">
+            <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">{item.label}</p>
+            <p className="text-xl font-bold">{item.value}</p>
+            <p className="text-xs text-muted-foreground">{item.caption}</p>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
 function RequestCard({ task, onClick }: { task: Task; onClick: () => void }) {
   const urgencyClass = URGENCY_COLORS[task.urgency] || URGENCY_COLORS.medium;
   const budgetTone = getBudgetToneCopy(task.pricingGuide);
   const previewImage = parseTaskImages(task.images)[0] || null;
+  const isLiveRequest = isFreshTimestamp(task.createdAt);
 
   return (
     <motion.div whileHover={{ y: -2 }} whileTap={{ scale: 0.985 }} className="cursor-pointer" onClick={onClick}>
@@ -642,9 +760,16 @@ function RequestCard({ task, onClick }: { task: Task; onClick: () => void }) {
         <CardContent className="p-4">
           <div className="flex items-start justify-between gap-2 mb-2">
             <h3 className="font-semibold text-sm line-clamp-2 leading-tight flex-1">{task.title}</h3>
-            <Badge className={`text-[10px] px-1.5 py-0.5 flex-shrink-0 ${urgencyClass}`}>
-              {URGENCY_LABELS[task.urgency] || task.urgency}
-            </Badge>
+            <div className="flex flex-col items-end gap-1">
+              {isLiveRequest && (
+                <Badge className="text-[10px] px-1.5 py-0.5 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300">
+                  Live now
+                </Badge>
+              )}
+              <Badge className={`text-[10px] px-1.5 py-0.5 flex-shrink-0 ${urgencyClass}`}>
+                {URGENCY_LABELS[task.urgency] || task.urgency}
+              </Badge>
+            </div>
           </div>
 
           <p className="text-primary font-bold text-lg mb-2">{formatPrice(task.reward)}</p>
@@ -1079,25 +1204,65 @@ function TaskDetail({
   const [applyMsg, setApplyMsg] = useState('');
   const [proposedPrice, setProposedPrice] = useState('');
   const [applying, setApplying] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
+  const [offerDraftDirty, setOfferDraftDirty] = useState(false);
+  const previousOfferCountRef = useRef<number | null>(null);
 
-  const fetchTask = useCallback(async () => {
-    setLoading(true);
+  const fetchTask = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (!silent) {
+      setLoading(true);
+    }
+
     try {
-      setTask(await api.get(`/api/tasks/${taskId}`));
+      const nextTask = await api.get(`/api/tasks/${taskId}`);
+      setTask(nextTask);
+      setLastSyncedAt(new Date());
+
+      if (nextTask.creatorId === user.id) {
+        const pendingOfferCount = nextTask.applications?.filter((application: NonNullable<Task['applications']>[number]) => application.status === 'pending').length ?? 0;
+        if (previousOfferCountRef.current !== null && pendingOfferCount > previousOfferCountRef.current) {
+          const addedOffers = pendingOfferCount - previousOfferCountRef.current;
+          toast({
+            title: addedOffers > 1 ? `${addedOffers} new offers arrived` : 'A new offer just landed',
+            description: 'Runner is updating live. Compare the offers below.',
+          });
+        }
+        previousOfferCountRef.current = pendingOfferCount;
+      }
     } catch (error) {
       console.error(error);
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
-  }, [taskId]);
+  }, [taskId, toast, user.id]);
 
   useEffect(() => {
     fetchTask();
   }, [fetchTask]);
 
   useEffect(() => {
+    if (!task || !['open', 'assigned', 'in_progress'].includes(task.status)) return;
+
+    const timer = setInterval(() => {
+      fetchTask({ silent: true });
+    }, 8000);
+
+    return () => clearInterval(timer);
+  }, [fetchTask, task]);
+
+  useEffect(() => {
     api.patch('/api/notifications/read', { userId: user.id, taskId }).catch(console.error);
   }, [taskId, user.id]);
+
+  useEffect(() => {
+    const nextRunnerApplication = task?.applications?.find((application) => application.runnerId === user.id) || null;
+    if (!nextRunnerApplication || offerDraftDirty) return;
+
+    setApplyMsg(nextRunnerApplication.message || '');
+    setProposedPrice(nextRunnerApplication.proposedPrice ? String(nextRunnerApplication.proposedPrice) : '');
+  }, [offerDraftDirty, task, user.id]);
 
   const handleApply = async () => {
     setApplying(true);
@@ -1107,10 +1272,12 @@ function TaskDetail({
         message: applyMsg,
         proposedPrice: proposedPrice || null,
       });
-      toast({ title: 'Offer sent', description: 'The customer can now compare and choose your offer.' });
-      await fetchTask();
-      setApplyMsg('');
-      setProposedPrice('');
+      toast({
+        title: task?.applications?.some((application) => application.runnerId === user.id) ? 'Offer updated' : 'Offer sent',
+        description: 'The customer can compare your live offer immediately.',
+      });
+      setOfferDraftDirty(false);
+      await fetchTask({ silent: true });
     } catch (error) {
       toast({ title: 'Error', description: error instanceof Error ? error.message : 'Failed to apply', variant: 'destructive' });
     } finally {
@@ -1142,11 +1309,19 @@ function TaskDetail({
   if (!task) return <div className="p-8 text-center text-muted-foreground">Runner request not found</div>;
 
   const isCreator = task.creatorId === user.id;
-  const hasApplied = task.applications?.some((application) => application.runnerId === user.id);
+  const runnerApplication = task.applications?.find((application) => application.runnerId === user.id) || null;
+  const hasApplied = Boolean(runnerApplication);
   const isAssigned = task.assignedRunnerId === user.id;
   const previewImage = parseTaskImages(task.images)[0] || null;
   const budgetTone = getBudgetToneCopy(task.pricingGuide);
   const priceDifference = task.pricingGuide ? task.reward - task.pricingGuide.recommended : 0;
+  const canManageOffer = !isCreator && isApprovedRunner && task.status === 'open' && runnerApplication?.status !== 'accepted';
+  const sortedApplications = sortOfferApplications(task, task.applications || []);
+  const lowestPendingOffer = sortedApplications.reduce<number | null>((best, application) => {
+    if (application.status !== 'pending') return best;
+    const currentValue = application.proposedPrice || task.reward;
+    return best === null || currentValue < best ? currentValue : best;
+  }, null);
 
   return (
     <div className="safe-top p-4 max-w-3xl mx-auto space-y-4">
@@ -1154,6 +1329,16 @@ function TaskDetail({
         <button onClick={onBack} className="p-1.5 rounded-full hover:bg-muted"><ArrowLeft className="w-5 h-5" /></button>
         <h2 className="font-bold text-lg flex-1">Runner request</h2>
         <Badge className={URGENCY_COLORS[task.urgency]}>{URGENCY_LABELS[task.urgency]}</Badge>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <Badge variant="outline" className="gap-1.5 rounded-full px-3 py-1 border-primary/30 text-primary">
+          <Radio className="w-3 h-3" /> Live board
+        </Badge>
+        <Badge variant="secondary" className="rounded-full px-3 py-1">{formatLiveSyncLabel(lastSyncedAt)}</Badge>
+        {(task._count?.applications || 0) > 0 && (
+          <Badge variant="secondary" className="rounded-full px-3 py-1">{task._count?.applications} total offers</Badge>
+        )}
       </div>
 
       <Card className="border-0 shadow-sm overflow-hidden">
@@ -1220,12 +1405,29 @@ function TaskDetail({
         </CardContent>
       </Card>
 
-      {!isCreator && task.status === 'open' && !hasApplied && (
+      {!isCreator && task.status === 'open' && (
         isApprovedRunner ? (
+          canManageOffer ? (
           <Card className="border-0 shadow-sm">
             <CardContent className="p-4 space-y-3">
-              <h4 className="font-semibold text-sm">Send your runner offer</h4>
-              <p className="text-[11px] text-muted-foreground">Accept the posted amount or counter with your own number. The customer can compare every offer.</p>
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                  <h4 className="font-semibold text-sm">{hasApplied ? 'Your live runner offer' : 'Send your runner offer'}</h4>
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    {hasApplied
+                      ? 'Your offer is already visible in the live marketplace. Refresh the price or note any time before the customer chooses.'
+                      : 'Accept the posted amount or counter with your own number. The customer can compare every offer live.'}
+                  </p>
+                </div>
+                <Badge variant="secondary" className="rounded-full px-3 py-1">{formatLiveSyncLabel(lastSyncedAt)}</Badge>
+              </div>
+
+              {hasApplied && (
+                <div className="rounded-2xl border bg-primary/5 p-3 text-xs text-muted-foreground">
+                  Your current offer is live. Saving changes here immediately refreshes what the customer sees.
+                </div>
+              )}
+
               {task.pricingGuide && (
                 <div className={`rounded-2xl border p-3 text-xs ${budgetTone.cardClass}`}>
                   {task.pricingGuide.budgetPosition === 'low'
@@ -1239,16 +1441,37 @@ function TaskDetail({
                 <Label className="text-xs text-muted-foreground mb-1 block">Your price (leave blank to accept {formatPrice(task.reward)})</Label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium text-sm">₦</span>
-                  <Input type="number" placeholder={String(task.reward)} value={proposedPrice} onChange={(event) => setProposedPrice(event.target.value)} className="pl-8" min="0" />
+                  <Input type="number" placeholder={String(task.reward)} value={proposedPrice} onChange={(event) => { setProposedPrice(event.target.value); setOfferDraftDirty(true); }} className="pl-8" min="0" />
                 </div>
               </div>
-              <Textarea placeholder="Optional note: ETA, route confidence, care for package, etc." value={applyMsg} onChange={(event) => setApplyMsg(event.target.value)} rows={2} />
-              <Button onClick={handleApply} disabled={applying} className="w-full">
-                <Send className="w-4 h-4 mr-2" />
-                {applying ? 'Sending...' : proposedPrice ? `Offer ₦${parseInt(proposedPrice, 10).toLocaleString()}` : `Accept ${formatPrice(task.reward)}`}
-              </Button>
+              <Textarea placeholder="Optional note: ETA, route confidence, care for package, etc." value={applyMsg} onChange={(event) => { setApplyMsg(event.target.value); setOfferDraftDirty(true); }} rows={2} />
+              <div className="flex flex-col gap-2 sm:flex-row">
+                {hasApplied && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="sm:w-auto"
+                    onClick={() => {
+                      setApplyMsg(runnerApplication?.message || '');
+                      setProposedPrice(runnerApplication?.proposedPrice ? String(runnerApplication.proposedPrice) : '');
+                      setOfferDraftDirty(false);
+                    }}
+                  >
+                    Reset
+                  </Button>
+                )}
+                <Button onClick={handleApply} disabled={applying} className="w-full">
+                  <Send className="w-4 h-4 mr-2" />
+                  {applying
+                    ? hasApplied ? 'Updating...' : 'Sending...'
+                    : hasApplied
+                      ? proposedPrice ? `Update to ₦${parseInt(proposedPrice, 10).toLocaleString()}` : `Refresh at ${formatPrice(task.reward)}`
+                      : proposedPrice ? `Offer ₦${parseInt(proposedPrice, 10).toLocaleString()}` : `Accept ${formatPrice(task.reward)}`}
+                </Button>
+              </div>
             </CardContent>
           </Card>
+          ) : null
         ) : currentApplication ? (
           <RunnerStatusPanel application={currentApplication} onPrimaryAction={onOpenRunnerApplication} />
         ) : (
@@ -1264,11 +1487,19 @@ function TaskDetail({
         )
       )}
 
-      {hasApplied && !isAssigned && (
+      {hasApplied && !isAssigned && !canManageOffer && runnerApplication?.status !== 'rejected' && (
         <Card className="border-0 shadow-sm bg-primary/5">
           <CardContent className="p-4 flex items-center gap-2">
             <CheckCircle2 className="w-5 h-5 text-primary" />
             <p className="text-sm font-medium">Your offer is in. The customer can choose you at any time.</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {runnerApplication?.status === 'rejected' && !isAssigned && (
+        <Card className="border-0 shadow-sm border-l-4 border-l-amber-400">
+          <CardContent className="p-4 text-sm text-muted-foreground">
+            Your last offer was skipped. If the customer keeps the request open, you can still refresh it from the live offer form above.
           </CardContent>
         </Card>
       )}
@@ -1291,18 +1522,35 @@ function TaskDetail({
       )}
 
       {isCreator && task.applications && task.applications.length > 0 && (
-        <Card className="border-0 shadow-sm">
-          <CardContent className="p-4 space-y-3">
-            <h4 className="font-semibold text-sm">Runner offers ({task.applications.length})</h4>
-            {task.applications.map((application) => (
+        <>
+          <OfferComparisonSummary task={task} applications={task.applications} />
+
+          <Card className="border-0 shadow-sm">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <h4 className="font-semibold text-sm">Runner offers ({task.applications.length})</h4>
+                <p className="text-[11px] text-muted-foreground">{formatLiveSyncLabel(lastSyncedAt)}</p>
+              </div>
+              {sortedApplications.map((application) => {
+                const offerValue = application.proposedPrice || task.reward;
+                const isBestValue = application.status === 'pending' && lowestPendingOffer !== null && offerValue === lowestPendingOffer;
+                const isExactMatch = !application.proposedPrice || application.proposedPrice === task.reward;
+                const isFreshOffer = isFreshTimestamp(application.createdAt, LIVE_OFFER_WINDOW_MS);
+
+                return (
               <div key={application.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
                 <Avatar className="w-9 h-9">
                   <AvatarImage src={application.runner.avatar || undefined} />
                   <AvatarFallback>{getInitials(application.runner.username)}</AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">{application.runner.username}</p>
-                  <p className="text-[10px] text-muted-foreground">{application.runner.tasksCompleted} completed · ★ {application.runner.runnerRating.toFixed(1)}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-medium">{application.runner.username}</p>
+                    {isFreshOffer && <Badge className="bg-emerald-100 text-emerald-700 text-[10px]">Latest</Badge>}
+                    {isBestValue && <Badge className="bg-primary/10 text-primary text-[10px]">Best value</Badge>}
+                    {isExactMatch && application.status === 'pending' && <Badge className="bg-blue-100 text-blue-700 text-[10px]">Exact amount</Badge>}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">{application.runner.tasksCompleted} completed · ★ {application.runner.runnerRating.toFixed(1)} · sent {timeAgo(application.createdAt)}</p>
                   {application.proposedPrice && application.proposedPrice !== task.reward ? (
                     <p className="text-xs font-bold text-amber-600 mt-0.5">
                       Offers {formatPrice(application.proposedPrice)}
@@ -1323,9 +1571,11 @@ function TaskDetail({
                 {application.status === 'accepted' && <Badge className="bg-emerald-100 text-emerald-700 text-[10px]">Chosen</Badge>}
                 {application.status === 'rejected' && <Badge variant="secondary" className="text-[10px]">Skipped</Badge>}
               </div>
-            ))}
-          </CardContent>
-        </Card>
+                );
+              })}
+            </CardContent>
+          </Card>
+        </>
       )}
 
       {isCreator && task.status === 'open' && (
@@ -1344,36 +1594,92 @@ export default function TasksView({
   initialTaskId?: string | null;
   onInitialTaskOpened?: () => void;
 }) {
+  const { toast } = useToast();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [myRequests, setMyRequests] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [marketplaceSort, setMarketplaceSort] = useState<MarketplaceSortMode>('live');
   const [entryMode, setEntryMode] = useState<RunnerEntryMode>('intro');
   const [currentApplication, setCurrentApplication] = useState<RunnerApplication | null>(null);
   const [applicationLoading, setApplicationLoading] = useState(true);
   const [isAvailable, setIsAvailable] = useState(true);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
+  const [refreshingMarketplace, setRefreshingMarketplace] = useState(false);
+  const [liveActivityCount, setLiveActivityCount] = useState(0);
+  const previousMarketplaceIdsRef = useRef<Set<string> | null>(null);
+  const previousMyRequestOfferCountsRef = useRef<Map<string, number> | null>(null);
 
-  const fetchTasks = useCallback(async () => {
-    setLoading(true);
+  const fetchTasks = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (silent) {
+      setRefreshingMarketplace(true);
+    } else {
+      setLoading(true);
+    }
+
     try {
       const params = new URLSearchParams({ status: 'open', limit: '30' });
       if (categoryFilter) params.set('category', categoryFilter);
+      if (searchQuery.trim()) params.set('search', searchQuery.trim());
 
       const [marketplaceData, mineData] = await Promise.all([
         api.get(`/api/tasks?${params.toString()}`),
         api.get(`/api/tasks?creatorId=${user.id}&status=all&limit=12`),
       ]);
 
-      setTasks(marketplaceData.tasks || []);
-      setMyRequests((mineData.tasks || []).slice(0, 4));
+      const nextMarketplaceTasks = marketplaceData.tasks || [];
+      const nextMineTasks = (mineData.tasks || []).slice(0, 4);
+
+      if (silent) {
+        let detectedLiveActivity = 0;
+
+        const nextMarketplaceIds = new Set(nextMarketplaceTasks.map((task: Task) => task.id));
+        if (entryMode === 'runner' && previousMarketplaceIdsRef.current) {
+          detectedLiveActivity += nextMarketplaceTasks.filter((task: Task) => !previousMarketplaceIdsRef.current?.has(task.id)).length;
+        }
+
+        const nextMyRequestOfferCounts = new Map(nextMineTasks.map((task: Task) => [task.id, task._count?.applications || 0]));
+        if (entryMode === 'customer' && previousMyRequestOfferCountsRef.current) {
+          detectedLiveActivity += nextMineTasks.reduce((total: number, task: Task) => {
+            const previousCount = previousMyRequestOfferCountsRef.current?.get(task.id) || 0;
+            const currentCount = task._count?.applications || 0;
+            return currentCount > previousCount ? total + (currentCount - previousCount) : total;
+          }, 0);
+
+          if (detectedLiveActivity > 0) {
+            toast({
+              title: detectedLiveActivity > 1 ? `${detectedLiveActivity} live updates` : 'A live update just landed',
+              description: entryMode === 'customer' ? 'Your request activity changed. Open the request to compare offers.' : 'New runner-marketplace activity is available.',
+            });
+          }
+        }
+
+        setLiveActivityCount(detectedLiveActivity);
+        previousMarketplaceIdsRef.current = nextMarketplaceIds;
+        previousMyRequestOfferCountsRef.current = nextMyRequestOfferCounts;
+      } else {
+        previousMarketplaceIdsRef.current = new Set(nextMarketplaceTasks.map((task: Task) => task.id));
+        previousMyRequestOfferCountsRef.current = new Map(nextMineTasks.map((task: Task) => [task.id, task._count?.applications || 0]));
+        setLiveActivityCount(0);
+      }
+
+      setTasks(nextMarketplaceTasks);
+      setMyRequests(nextMineTasks);
+      setLastSyncedAt(new Date());
     } catch (error) {
       console.error('Failed to fetch tasks:', error);
     } finally {
-      setLoading(false);
+      if (silent) {
+        setRefreshingMarketplace(false);
+      } else {
+        setLoading(false);
+      }
     }
-  }, [categoryFilter, user.id]);
+  }, [categoryFilter, searchQuery, entryMode, toast, user.id]);
 
   const fetchApplicationState = useCallback(async () => {
     setApplicationLoading(true);
@@ -1389,8 +1695,26 @@ export default function TasksView({
   }, []);
 
   useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchQuery(searchInput.trim());
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => {
     fetchTasks();
   }, [fetchTasks]);
+
+  useEffect(() => {
+    if (showCreate || selectedTaskId || entryMode === 'intro' || entryMode === 'runner_apply') return;
+
+    const timer = setInterval(() => {
+      fetchTasks({ silent: true });
+    }, 12000);
+
+    return () => clearInterval(timer);
+  }, [entryMode, fetchTasks, selectedTaskId, showCreate]);
 
   useEffect(() => {
     fetchApplicationState();
@@ -1446,9 +1770,17 @@ export default function TasksView({
   };
 
   const marketplaceTasks = useMemo(
-    () => tasks.filter((task) => task.creatorId !== user.id),
-    [tasks, user.id],
+    () => sortMarketplaceTasks(tasks.filter((task) => task.creatorId !== user.id), marketplaceSort),
+    [marketplaceSort, tasks, user.id],
   );
+
+  const liveMarketplaceStats = useMemo(() => {
+    return {
+      freshRequests: marketplaceTasks.filter((task) => isFreshTimestamp(task.createdAt)).length,
+      urgentRequests: marketplaceTasks.filter((task) => task.urgency === 'urgent' || task.urgency === 'high').length,
+      inGuideRequests: marketplaceTasks.filter((task) => task.pricingGuide?.budgetPosition === 'fair').length,
+    };
+  }, [marketplaceTasks]);
 
   if (selectedTaskId) {
     return (
@@ -1516,8 +1848,8 @@ export default function TasksView({
                   <div className="space-y-3 text-sm">
                     {[
                       'Guided request builder with smart campus pricing',
+                      'Live runner marketplace with real-time offer refresh',
                       'Premium runner onboarding with documents',
-                      'Admin approval with push and in-app updates',
                     ].map((item) => (
                       <div key={item} className="flex items-center gap-2">
                         <CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0" />
@@ -1570,7 +1902,7 @@ export default function TasksView({
             {
               icon: Route,
               title: 'Built for delivery growth',
-              description: 'This foundation leads naturally into live bidding, real-time updates, and delivery tracking next.',
+              description: 'Runner now supports live request discovery and faster offer comparison without jumping into maps or delivery ops yet.',
             },
           ].map((item) => (
             <Card key={item.title} className="border-0 shadow-sm">
@@ -1610,6 +1942,17 @@ export default function TasksView({
                   ? 'Browse requests, manage your runner identity, and stay ready for campus delivery opportunities.'
                   : 'Post errands, monitor your requests, and upgrade into the verified Runner side whenever you are ready.'}
               </p>
+              <div className="flex flex-wrap gap-2 mt-3">
+                <Badge variant="outline" className="rounded-full px-3 py-1 gap-1.5 border-primary/30 text-primary">
+                  <Radio className="w-3 h-3" /> Live marketplace
+                </Badge>
+                <Badge variant="secondary" className="rounded-full px-3 py-1">{formatLiveSyncLabel(lastSyncedAt)}</Badge>
+                {liveActivityCount > 0 && (
+                  <Badge className="rounded-full px-3 py-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300">
+                    +{liveActivityCount} new {entryMode === 'runner' ? 'requests' : 'offer updates'}
+                  </Badge>
+                )}
+              </div>
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -1623,6 +1966,9 @@ export default function TasksView({
                   <Plus className="w-4 h-4" /> Post request
                 </Button>
               )}
+              <Button variant="outline" onClick={() => fetchTasks({ silent: true })} className="gap-2" disabled={refreshingMarketplace}>
+                <RefreshCcw className={`w-4 h-4 ${refreshingMarketplace ? 'animate-spin' : ''}`} /> Refresh
+              </Button>
               <Button variant="ghost" onClick={() => setEntryMode('intro')}>View intro</Button>
             </div>
           </div>
@@ -1637,7 +1983,7 @@ export default function TasksView({
                         <p className="text-[11px] uppercase tracking-[0.25em] text-muted-foreground mb-2">Customer lane</p>
                         <h2 className="text-2xl font-bold">Turn campus errands into clean, trackable requests.</h2>
                         <p className="text-sm text-muted-foreground mt-3 leading-7">
-                          Post the errand, get a cleaner route-aware budget guide, and keep every runner conversation in one place. Your request list below keeps you in control while Runner grows into a full delivery marketplace.
+                          Post the errand, get a cleaner route-aware budget guide, and keep every runner conversation in one place. The live board below now refreshes automatically so fresh offers are easier to catch.
                         </p>
                       </div>
                       <Button onClick={() => setShowCreate(true)} className="min-w-[180px] h-11">Create request</Button>
@@ -1674,7 +2020,7 @@ export default function TasksView({
                         <p className="text-[11px] uppercase tracking-[0.25em] text-muted-foreground mb-2">Approved Runner</p>
                         <h2 className="text-2xl font-bold">Your Runner identity is live.</h2>
                         <p className="text-sm text-muted-foreground mt-3 leading-7">
-                          Browse customer requests, send cleaner offers, and build trust with every completed errand. This dashboard keeps the runner side feeling focused and rewarding.
+                          Browse customer requests, send cleaner offers, and build trust with every completed errand. This dashboard now behaves more like a live marketplace so new requests surface faster.
                         </p>
                       </div>
                       <div className="rounded-3xl border bg-background/75 px-4 py-3 min-w-[240px]">
@@ -1715,6 +2061,49 @@ export default function TasksView({
             <RunnerStatusPanel application={currentApplication} onPrimaryAction={openRunnerApply} />
           )}
 
+          <div className="grid gap-3 lg:grid-cols-[1fr_220px]">
+            <div className="relative">
+              <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+              <Input
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                placeholder={entryMode === 'runner' ? 'Search by route, request title, or customer note' : 'Search the live request board'}
+                className="pl-9"
+              />
+            </div>
+
+            <Select value={marketplaceSort} onValueChange={(value) => setMarketplaceSort(value as MarketplaceSortMode)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Sort the live board" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="live">Newest first</SelectItem>
+                <SelectItem value="urgent">Urgent first</SelectItem>
+                <SelectItem value="best_budget">Best budget fit</SelectItem>
+                <SelectItem value="highest_budget">Highest budget</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[
+              { label: 'Live now', value: liveMarketplaceStats.freshRequests, caption: 'Fresh requests in the board', accent: 'bg-emerald-500/10 text-emerald-600' },
+              { label: 'Urgent now', value: liveMarketplaceStats.urgentRequests, caption: 'High-priority requests', accent: 'bg-amber-500/10 text-amber-600' },
+              { label: 'In guide', value: liveMarketplaceStats.inGuideRequests, caption: 'Budgets near the pricing guide', accent: 'bg-primary/10 text-primary' },
+            ].map((item) => (
+              <Card key={item.label} className="border-0 shadow-sm">
+                <CardContent className="p-4">
+                  <div className={`w-10 h-10 rounded-2xl flex items-center justify-center mb-3 ${item.accent}`}>
+                    <Radio className="w-4 h-4" />
+                  </div>
+                  <p className="text-2xl font-bold">{item.value}</p>
+                  <p className="text-xs font-medium mt-1">{item.label}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{item.caption}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
           <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
             <Badge variant={categoryFilter === '' ? 'default' : 'outline'} className="cursor-pointer flex-shrink-0" onClick={() => setCategoryFilter('')}>All requests</Badge>
             {TASK_CATEGORIES.map((category) => (
@@ -1748,8 +2137,8 @@ export default function TasksView({
               <h3 className="font-semibold text-base">{entryMode === 'runner' ? 'Open runner requests nearby' : 'Open requests from campus customers'}</h3>
               <p className="text-sm text-muted-foreground">
                 {entryMode === 'runner'
-                  ? 'Browse requests you can offer on right now.'
-                  : 'See how other customer requests are being structured inside Runner.'}
+                  ? 'Browse requests you can offer on right now. The board refreshes automatically in the background.'
+                  : 'See how other customer requests are being structured inside Runner and watch live offer activity build.'}
               </p>
             </div>
             {entryMode === 'customer' && (
