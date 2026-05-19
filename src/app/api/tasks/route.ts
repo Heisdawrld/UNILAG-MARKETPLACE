@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, isDatabaseAvailable } from '@/lib/db';
 import { auth } from '@clerk/nextjs/server';
+import { attachRunnerPricingGuide } from '@/lib/runner-pricing';
 
 // GET /api/tasks — list tasks with filters
 export async function GET(req: NextRequest) {
@@ -58,7 +59,7 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    return NextResponse.json({ tasks });
+    return NextResponse.json({ tasks: tasks.map((task: any) => attachRunnerPricingGuide(task)) });
   } catch (err) {
     console.error('[tasks GET]', err);
     return NextResponse.json({ error: 'Failed to fetch tasks' }, { status: 500 });
@@ -126,7 +127,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return NextResponse.json(task, { status: 201 });
+    return NextResponse.json(attachRunnerPricingGuide(task), { status: 201 });
   } catch (err) {
     console.error('[tasks POST]', err);
     return NextResponse.json({ error: 'Failed to create task' }, { status: 500 });

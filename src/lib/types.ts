@@ -1,5 +1,7 @@
 // TypeScript types for UNILAG Marketplace
 
+import type { RunnerPricingGuide } from './runner-pricing';
+
 export interface User {
   id: string;
   username: string;
@@ -102,6 +104,7 @@ export interface Task {
   } | null;
   applications?: TaskApplication[];
   _count?: { applications: number };
+  pricingGuide?: RunnerPricingGuide;
 }
 
 export interface TaskApplication {

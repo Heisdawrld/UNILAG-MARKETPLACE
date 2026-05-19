@@ -48,9 +48,11 @@ import {
   TASK_STATUS_LABELS,
 } from '@/lib/types';
 import { formatPrice, timeAgo, getInitials } from '@/lib/marketplace-utils';
+import { getRunnerPricingGuide, type RunnerPricingGuide } from '@/lib/runner-pricing';
 
 const RUNNER_STORAGE_KEY_PREFIX = 'unilag_runner_mode:';
 const APP_STEP_LABELS = ['About you', 'Runner profile', 'Verification'];
+const REQUEST_STEP_LABELS = ['What needs to move?', 'Route & timing', 'Budget & review'];
 const TRANSPORT_OPTIONS = [
   { value: 'bicycle', label: 'Bicycle', icon: Bike },
   { value: 'motorbike', label: 'Motorbike', icon: Route },
@@ -59,6 +61,8 @@ const TRANSPORT_OPTIONS = [
 ];
 
 type RunnerEntryMode = 'intro' | 'customer' | 'runner_apply' | 'runner';
+
+type RequestBudgetTone = 'low' | 'fair' | 'premium';
 
 function getRunnerStorageKey(userId: string) {
   return `${RUNNER_STORAGE_KEY_PREFIX}${userId}`;
@@ -96,6 +100,62 @@ async function compressImage(file: File) {
   canvas.height = height;
   canvas.getContext('2d')?.drawImage(image, 0, 0, width, height);
   return canvas.toDataURL('image/webp', 0.88);
+}
+
+function parseTaskImages(images: string | null | undefined) {
+  if (!images) return [] as string[];
+
+  try {
+    const parsed = JSON.parse(images);
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string' && item.length > 0) : [];
+  } catch {
+    return [];
+  }
+}
+
+function getRouteSummary(pickupLocation?: string | null, dropoffLocation?: string | null) {
+  if (pickupLocation && dropoffLocation) {
+    return `${pickupLocation} → ${dropoffLocation}`;
+  }
+
+  return pickupLocation || dropoffLocation || 'Route details coming soon';
+}
+
+function getBudgetTone(pricingGuide?: RunnerPricingGuide | null): RequestBudgetTone {
+  if (!pricingGuide?.budgetPosition || pricingGuide.budgetPosition === 'fair') {
+    return 'fair';
+  }
+
+  return pricingGuide.budgetPosition;
+}
+
+function getBudgetToneCopy(pricingGuide?: RunnerPricingGuide | null) {
+  const tone = getBudgetTone(pricingGuide);
+
+  if (tone === 'low') {
+    return {
+      label: 'Below guide',
+      cardClass: 'border-amber-300/40 bg-amber-50/80 dark:bg-amber-900/10',
+      badgeClass: 'bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300',
+      description: 'Expect more counter-offers unless a runner is already moving on the same route.',
+    };
+  }
+
+  if (tone === 'premium') {
+    return {
+      label: 'Premium budget',
+      cardClass: 'border-emerald-300/40 bg-emerald-50/80 dark:bg-emerald-900/10',
+      badgeClass: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300',
+      description: 'You are paying above the current guide, which can pull faster responses.',
+    };
+  }
+
+  return {
+    label: 'Fair budget',
+    cardClass: 'border-primary/20 bg-primary/5',
+    badgeClass: 'bg-primary/10 text-primary',
+    description: 'This sits in the current guide range and should feel balanced to most runners.',
+  };
 }
 
 function RunnerStatusPanel({
@@ -518,12 +578,67 @@ function RunnerApplicationFlow({
   );
 }
 
+function PricingGuidePanel({
+  pricingGuide,
+  reward,
+  compact = false,
+}: {
+  pricingGuide: RunnerPricingGuide;
+  reward?: number | null;
+  compact?: boolean;
+}) {
+  const tone = getBudgetToneCopy(pricingGuide);
+
+  return (
+    <div className={`rounded-3xl border ${tone.cardClass} ${compact ? 'p-3 space-y-2' : 'p-4 space-y-3'}`}>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Smart pricing guide</p>
+          <p className={`${compact ? 'text-sm' : 'text-base'} font-semibold`}>{formatPrice(pricingGuide.suggestedMin)} – {formatPrice(pricingGuide.suggestedMax)}</p>
+        </div>
+        <Badge className={tone.badgeClass}>{tone.label}</Badge>
+      </div>
+
+      <p className="text-xs text-muted-foreground leading-6">{tone.description}</p>
+
+      <div className={`grid gap-2 ${compact ? 'grid-cols-2' : 'sm:grid-cols-3'}`}>
+        <div className="rounded-2xl border bg-background/70 p-3">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Recommended</p>
+          <p className="font-semibold">{formatPrice(pricingGuide.recommended)}</p>
+        </div>
+        <div className="rounded-2xl border bg-background/70 p-3">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Route</p>
+          <p className="font-semibold text-sm">{pricingGuide.routeLabel}</p>
+        </div>
+        <div className="rounded-2xl border bg-background/70 p-3">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Confidence</p>
+          <p className="font-semibold text-sm">{pricingGuide.confidenceLabel}</p>
+        </div>
+      </div>
+
+      {!compact && typeof reward === 'number' && reward > 0 && (
+        <div className="text-xs text-muted-foreground">
+          Your current budget is <span className="font-semibold text-foreground">{formatPrice(reward)}</span>.
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RequestCard({ task, onClick }: { task: Task; onClick: () => void }) {
   const urgencyClass = URGENCY_COLORS[task.urgency] || URGENCY_COLORS.medium;
+  const budgetTone = getBudgetToneCopy(task.pricingGuide);
+  const previewImage = parseTaskImages(task.images)[0] || null;
 
   return (
     <motion.div whileHover={{ y: -2 }} whileTap={{ scale: 0.985 }} className="cursor-pointer" onClick={onClick}>
       <Card className="overflow-hidden border-0 shadow-sm hover:shadow-md transition-shadow">
+        {previewImage && (
+          <div className="px-4 pt-4">
+            <img src={previewImage} alt={task.title} className="w-full h-36 rounded-2xl object-cover border" />
+          </div>
+        )}
+
         <CardContent className="p-4">
           <div className="flex items-start justify-between gap-2 mb-2">
             <h3 className="font-semibold text-sm line-clamp-2 leading-tight flex-1">{task.title}</h3>
@@ -533,12 +648,26 @@ function RequestCard({ task, onClick }: { task: Task; onClick: () => void }) {
           </div>
 
           <p className="text-primary font-bold text-lg mb-2">{formatPrice(task.reward)}</p>
+          {task.pricingGuide && (
+            <div className={`rounded-2xl border ${budgetTone.cardClass} px-3 py-2 mb-3`}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Guide</span>
+                <Badge className={budgetTone.badgeClass}>{budgetTone.label}</Badge>
+              </div>
+              <p className="text-xs font-semibold mt-1">{formatPrice(task.pricingGuide.suggestedMin)} – {formatPrice(task.pricingGuide.suggestedMax)}</p>
+            </div>
+          )}
           <p className="text-xs text-muted-foreground line-clamp-2 mb-3">{task.description}</p>
+
+          <div className="rounded-2xl border bg-muted/20 px-3 py-2 mb-3 text-xs">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Route</p>
+            <p className="font-medium line-clamp-2">{getRouteSummary(task.pickupLocation, task.location)}</p>
+          </div>
 
           <div className="flex items-center gap-3 text-xs text-muted-foreground mb-2 flex-wrap">
             <Badge variant="outline" className="text-[10px]">{task.category}</Badge>
-            {task.location && (
-              <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3" />{task.location}</span>
+            {task.pickupLocation && (
+              <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3" />{task.pickupLocation}</span>
             )}
             {task.deadline && (
               <span className="flex items-center gap-0.5"><Clock className="w-3 h-3" />{timeAgo(task.deadline)}</span>
@@ -567,32 +696,83 @@ function RequestCard({ task, onClick }: { task: Task; onClick: () => void }) {
 
 function CreateTaskForm({ user, onCreated, onCancel }: { user: UserType; onCreated: () => void; onCancel: () => void }) {
   const { toast } = useToast();
+  const [step, setStep] = useState(0);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [reward, setReward] = useState('');
-  const [category, setCategory] = useState('');
-  const [location, setLocation] = useState('');
+  const [category, setCategory] = useState('Delivery');
+  const [pickupLocation, setPickupLocation] = useState('');
+  const [dropoffLocation, setDropoffLocation] = useState('');
   const [urgency, setUrgency] = useState('medium');
+  const [deadline, setDeadline] = useState('');
+  const [images, setImages] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = async () => {
-    if (!title || !description || !reward || !category) {
-      toast({ title: 'Missing fields', description: 'Fill in the request title, details, amount, and category.', variant: 'destructive' });
-      return;
+  const numericReward = reward ? parseFloat(reward) : NaN;
+  const parsedReward = Number.isFinite(numericReward) ? numericReward : null;
+  const progress = ((step + 1) / REQUEST_STEP_LABELS.length) * 100;
+
+  const pricingGuide = useMemo(() => getRunnerPricingGuide({
+    category,
+    urgency,
+    pickupLocation,
+    dropoffLocation,
+    deadline: deadline || null,
+    reward: parsedReward,
+  }), [category, urgency, pickupLocation, dropoffLocation, deadline, parsedReward]);
+
+  const budgetTone = getBudgetToneCopy(pricingGuide);
+  const supportImage = images[0] || null;
+
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const compressed = await compressImage(file);
+      setImages([compressed]);
+    } catch {
+      toast({ title: 'Upload failed', description: 'Please try a different image.', variant: 'destructive' });
     }
+  };
+
+  const validateStep = (currentStep = step) => {
+    if (currentStep === 0 && (!title.trim() || !description.trim() || !category)) {
+      toast({ title: 'Finish the request basics', description: 'Add a title, request type, and a clear description.', variant: 'destructive' });
+      return false;
+    }
+
+    if (currentStep === 1 && (!pickupLocation.trim() || !dropoffLocation.trim())) {
+      toast({ title: 'Add the full route', description: 'Pickup and drop-off points are required for smart pricing.', variant: 'destructive' });
+      return false;
+    }
+
+    if (currentStep === 2 && (!parsedReward || parsedReward <= 0)) {
+      toast({ title: 'Set your budget', description: 'Enter a valid amount before posting the runner request.', variant: 'destructive' });
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleSubmit = async () => {
+    if (!validateStep(2)) return;
 
     setSubmitting(true);
     try {
       await api.post('/api/tasks', {
         creatorId: user.id,
-        title,
-        description,
-        reward,
+        title: title.trim(),
+        description: description.trim(),
+        reward: parsedReward,
         category,
-        location,
+        location: dropoffLocation.trim(),
+        pickupLocation: pickupLocation.trim(),
         urgency,
+        deadline: deadline || null,
+        images,
       });
-      toast({ title: 'Runner request posted', description: 'Approved runners can now send offers.' });
+      toast({ title: 'Runner request posted', description: 'Your route and budget are now live for approved runners.' });
       onCreated();
     } catch (error) {
       toast({ title: 'Error', description: error instanceof Error ? error.message : 'Failed to create request', variant: 'destructive' });
@@ -602,71 +782,275 @@ function CreateTaskForm({ user, onCreated, onCancel }: { user: UserType; onCreat
   };
 
   return (
-    <div className="safe-top p-4 space-y-4 max-w-2xl mx-auto">
-      <div className="flex items-center gap-2 mb-2">
+    <div className="safe-top p-4 space-y-4 max-w-5xl mx-auto">
+      <div className="flex items-center gap-2 mb-1">
         <button onClick={onCancel} className="p-1.5 rounded-full hover:bg-muted"><ArrowLeft className="w-5 h-5" /></button>
         <div>
-          <h2 className="font-bold text-2xl">Post a Runner Request</h2>
-          <p className="text-sm text-muted-foreground">Describe what you need on campus and set the amount you are willing to pay.</p>
+          <h2 className="font-bold text-2xl">Build a Runner request</h2>
+          <p className="text-sm text-muted-foreground">Shape the route, set the timing, and land on a cleaner budget before you post.</p>
         </div>
       </div>
 
-      <Card className="border-0 shadow-sm overflow-hidden">
+      <Card className="border-0 shadow-xl overflow-hidden">
         <CardContent className="p-0">
-          <div className="bg-gradient-to-br from-primary/10 via-amber-500/10 to-background p-5 border-b">
-            <p className="text-[11px] uppercase tracking-[0.25em] text-muted-foreground mb-2">Customer request</p>
-            <h3 className="text-xl font-bold">Make it easy for runners to say yes</h3>
-            <p className="text-sm text-muted-foreground mt-2">A clear request, honest amount, and exact location will help you get better offers faster.</p>
+          <div className="bg-gradient-to-br from-primary/12 via-amber-500/10 to-background p-5 md:p-6 border-b space-y-5">
+            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+              <div className="max-w-2xl">
+                <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground mb-2">Runner request builder</p>
+                <h3 className="text-2xl md:text-3xl font-bold">Post smarter. Price clearer. Get better runner offers.</h3>
+                <p className="text-sm text-muted-foreground mt-3 leading-7">
+                  This phase upgrades Runner request posting with route-aware pricing guidance, cleaner timing signals, and a stronger first impression for approved runners.
+                </p>
+              </div>
+              <div className="rounded-3xl border bg-background/75 p-4 min-w-[260px] space-y-2">
+                <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Live request preview</p>
+                <p className="font-semibold line-clamp-2">{title.trim() || 'Your request title will appear here'}</p>
+                <p className="text-sm text-muted-foreground">{category || 'Pick a request type'} · {getRouteSummary(pickupLocation, dropoffLocation)}</p>
+                <p className="text-lg font-bold text-primary">{parsedReward ? formatPrice(parsedReward) : 'Set your budget'}</p>
+              </div>
+            </div>
+
+            <Progress value={progress} className="h-2" />
+            <div className="grid gap-3 md:grid-cols-3">
+              {REQUEST_STEP_LABELS.map((label, index) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => {
+                    if (index <= step) {
+                      setStep(index);
+                    }
+                  }}
+                  className={`rounded-full border px-4 py-3 text-sm transition-colors ${index === step ? 'border-primary bg-primary/8 text-foreground' : 'bg-background/70 text-muted-foreground hover:border-primary/30'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          <div className="p-5 space-y-4">
-            <div>
-              <Label className="text-sm font-medium mb-1.5 block">Request title *</Label>
-              <Input placeholder="Pick up food from Jaja and drop in Moremi" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={100} />
-            </div>
-            <div>
-              <Label className="text-sm font-medium mb-1.5 block">What exactly do you need? *</Label>
-              <Textarea placeholder="Describe the errand, item, pickup instructions, and any handoff detail the runner should know..." value={description} onChange={(event) => setDescription(event.target.value)} rows={4} maxLength={500} />
-            </div>
-            <div>
-              <Label className="text-sm font-medium mb-1.5 block">Offer amount (₦) *</Label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">₦</span>
-                <Input type="number" placeholder="2500" value={reward} onChange={(event) => setReward(event.target.value)} className="pl-8" min="0" />
+          <div className="p-5 md:p-6">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={step}
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -16 }}
+                transition={{ duration: 0.2 }}
+                className="space-y-5"
+              >
+                {step === 0 && (
+                  <>
+                    <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
+                      <div className="space-y-4">
+                        <div>
+                          <Label className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2 block">Request title *</Label>
+                          <Input placeholder="Pick up food from Jaja and drop in Moremi" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={100} />
+                        </div>
+                        <div>
+                          <Label className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2 block">Request type *</Label>
+                          <Select value={category} onValueChange={setCategory}>
+                            <SelectTrigger><SelectValue placeholder="Select request type" /></SelectTrigger>
+                            <SelectContent>
+                              {TASK_CATEGORIES.map((item) => (
+                                <SelectItem key={item} value={item}>{item}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2 block">What exactly needs to happen? *</Label>
+                          <Textarea
+                            placeholder="Describe the errand, item size, handoff instructions, payment expectations, and anything that would help a runner say yes faster..."
+                            value={description}
+                            onChange={(event) => setDescription(event.target.value)}
+                            rows={6}
+                            maxLength={500}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="rounded-3xl border p-4 bg-muted/20">
+                          <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground mb-2">What good requests include</p>
+                          <div className="space-y-2 text-sm text-muted-foreground">
+                            {[
+                              'Exact item or task details',
+                              'A realistic pickup and drop-off route',
+                              'A budget that feels fair for the urgency',
+                            ].map((item) => (
+                              <div key={item} className="flex items-center gap-2">
+                                <CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0" />
+                                <span>{item}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="rounded-3xl border p-4 space-y-3">
+                          <div className="flex items-center gap-2">
+                            <Camera className="w-4 h-4 text-primary" />
+                            <p className="font-semibold text-sm">Optional support photo</p>
+                          </div>
+                          <p className="text-xs text-muted-foreground">Show the package, print job, or item list if that will reduce back-and-forth.</p>
+                          {supportImage ? (
+                            <div className="space-y-3">
+                              <img src={supportImage} alt="Request support" className="w-full aspect-[4/3] rounded-2xl object-cover border" />
+                              <Button type="button" variant="outline" size="sm" onClick={() => setImages([])}>Remove image</Button>
+                            </div>
+                          ) : (
+                            <label className="block rounded-2xl border-2 border-dashed p-6 text-center cursor-pointer hover:border-primary/40 transition-colors">
+                              <Camera className="w-6 h-6 mx-auto mb-2 text-muted-foreground" />
+                              <p className="text-sm font-medium">Upload support photo</p>
+                              <p className="text-xs text-muted-foreground mt-1">Optional · keeps the request clearer</p>
+                              <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                            </label>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {step === 1 && (
+                  <div className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
+                    <div className="space-y-4">
+                      <div>
+                        <Label className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2 block">Pickup / start point *</Label>
+                        <Input placeholder="e.g. Jaja Hall front desk" value={pickupLocation} onChange={(event) => setPickupLocation(event.target.value)} />
+                      </div>
+                      <div>
+                        <Label className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2 block">Drop-off / end point *</Label>
+                        <Input placeholder="e.g. Moremi Hall reception" value={dropoffLocation} onChange={(event) => setDropoffLocation(event.target.value)} />
+                      </div>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <Label className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2 block">Urgency</Label>
+                          <Select value={urgency} onValueChange={setUrgency}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="low">Low</SelectItem>
+                              <SelectItem value="medium">Normal</SelectItem>
+                              <SelectItem value="high">High</SelectItem>
+                              <SelectItem value="urgent">Urgent</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2 block">Preferred deadline</Label>
+                          <Input type="datetime-local" value={deadline} onChange={(event) => setDeadline(event.target.value)} />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="rounded-3xl border p-4 bg-background/70">
+                        <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground mb-2">Route summary</p>
+                        <h4 className="font-semibold text-lg">{getRouteSummary(pickupLocation, dropoffLocation)}</h4>
+                        <div className="grid gap-3 sm:grid-cols-2 mt-4 text-sm">
+                          <div className="rounded-2xl border bg-muted/20 p-3">
+                            <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Urgency</p>
+                            <p className="font-semibold">{URGENCY_LABELS[urgency] || 'Normal'}</p>
+                          </div>
+                          <div className="rounded-2xl border bg-muted/20 p-3">
+                            <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Timing</p>
+                            <p className="font-semibold">{deadline ? new Date(deadline).toLocaleString() : 'Flexible timing'}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <PricingGuidePanel pricingGuide={pricingGuide} compact />
+                    </div>
+                  </div>
+                )}
+
+                {step === 2 && (
+                  <div className="grid gap-5 lg:grid-cols-[1.08fr_0.92fr]">
+                    <div className="space-y-4">
+                      <div>
+                        <Label className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2 block">What are you paying? *</Label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">₦</span>
+                          <Input type="number" placeholder={String(pricingGuide.recommended)} value={reward} onChange={(event) => setReward(event.target.value)} className="pl-8" min="0" />
+                        </div>
+                      </div>
+
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        {[
+                          { label: 'Lean', value: pricingGuide.suggestedMin },
+                          { label: 'Recommended', value: pricingGuide.recommended },
+                          { label: 'Priority', value: pricingGuide.suggestedMax },
+                        ].map((preset) => (
+                          <Button key={preset.label} type="button" variant="outline" className="justify-between" onClick={() => setReward(String(preset.value))}>
+                            <span>{preset.label}</span>
+                            <span>{formatPrice(preset.value)}</span>
+                          </Button>
+                        ))}
+                      </div>
+
+                      <PricingGuidePanel pricingGuide={pricingGuide} reward={parsedReward} />
+
+                      <div className={`rounded-3xl border p-4 ${budgetTone.cardClass}`}>
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                          <div>
+                            <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Final review</p>
+                            <h4 className="font-semibold text-lg">{title.trim() || 'Untitled request'}</h4>
+                          </div>
+                          <Badge className={budgetTone.badgeClass}>{budgetTone.label}</Badge>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-3 mt-4 text-sm">
+                          <div className="rounded-2xl border bg-background/70 p-3">
+                            <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Route</p>
+                            <p className="font-semibold leading-6">{getRouteSummary(pickupLocation, dropoffLocation)}</p>
+                          </div>
+                          <div className="rounded-2xl border bg-background/70 p-3">
+                            <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Timing</p>
+                            <p className="font-semibold">{deadline ? new Date(deadline).toLocaleString() : 'Flexible timing'}</p>
+                          </div>
+                          <div className="rounded-2xl border bg-background/70 p-3">
+                            <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Budget</p>
+                            <p className="font-semibold">{parsedReward ? formatPrice(parsedReward) : 'Set a budget'}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-3xl border bg-muted/20 p-5 space-y-4 h-fit">
+                      <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Why this helps</p>
+                      <div className="space-y-3 text-sm text-muted-foreground leading-6">
+                        <p>Runners can now judge the route faster because they see a cleaner pickup-to-drop-off story.</p>
+                        <p>The budget guide is not surge pricing. It is just a cleaner benchmark based on request type, urgency, and route signal.</p>
+                        <p>When your budget lands in range, you are more likely to get fast, cleaner offers instead of endless back-and-forth.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            </AnimatePresence>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-5">
+              <div className="text-xs text-muted-foreground">Step {step + 1} of {REQUEST_STEP_LABELS.length}</div>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={step === 0 ? onCancel : () => setStep((current) => current - 1)}>
+                  {step === 0 ? 'Cancel' : 'Back'}
+                </Button>
+                {step < REQUEST_STEP_LABELS.length - 1 ? (
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      if (!validateStep(step)) return;
+                      setStep((current) => current + 1);
+                    }}
+                  >
+                    Continue <ChevronRight className="w-4 h-4 ml-1" />
+                  </Button>
+                ) : (
+                  <Button onClick={handleSubmit} disabled={submitting} className="min-w-[190px]">
+                    {submitting ? 'Posting...' : 'Post runner request'}
+                  </Button>
+                )}
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <Label className="text-sm font-medium mb-1.5 block">Request type *</Label>
-                <Select value={category} onValueChange={setCategory}>
-                  <SelectTrigger><SelectValue placeholder="Select request type" /></SelectTrigger>
-                  <SelectContent>
-                    {TASK_CATEGORIES.map((cat) => (
-                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-sm font-medium mb-1.5 block">Urgency</Label>
-                <Select value={urgency} onValueChange={setUrgency}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="medium">Normal</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
-                    <SelectItem value="urgent">Urgent</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div>
-              <Label className="text-sm font-medium mb-1.5 block">Pickup / meeting point</Label>
-              <Input placeholder="e.g. Jaja Hall front desk" value={location} onChange={(event) => setLocation(event.target.value)} />
-            </div>
-            <Button onClick={handleSubmit} disabled={submitting} className="w-full h-11">
-              {submitting ? 'Posting...' : 'Post runner request'}
-            </Button>
           </div>
         </CardContent>
       </Card>
@@ -760,9 +1144,12 @@ function TaskDetail({
   const isCreator = task.creatorId === user.id;
   const hasApplied = task.applications?.some((application) => application.runnerId === user.id);
   const isAssigned = task.assignedRunnerId === user.id;
+  const previewImage = parseTaskImages(task.images)[0] || null;
+  const budgetTone = getBudgetToneCopy(task.pricingGuide);
+  const priceDifference = task.pricingGuide ? task.reward - task.pricingGuide.recommended : 0;
 
   return (
-    <div className="safe-top p-4 max-w-2xl mx-auto space-y-4">
+    <div className="safe-top p-4 max-w-3xl mx-auto space-y-4">
       <div className="flex items-center gap-2">
         <button onClick={onBack} className="p-1.5 rounded-full hover:bg-muted"><ArrowLeft className="w-5 h-5" /></button>
         <h2 className="font-bold text-lg flex-1">Runner request</h2>
@@ -774,15 +1161,50 @@ function TaskDetail({
           <div className="bg-gradient-to-br from-primary/10 via-amber-500/10 to-background p-5 border-b">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <Badge variant="outline">{task.category}</Badge>
-              <Badge variant={task.status === 'open' ? 'default' : 'secondary'}>{TASK_STATUS_LABELS[task.status]}</Badge>
+              <div className="flex items-center gap-2 flex-wrap">
+                {task.pricingGuide && <Badge className={budgetTone.badgeClass}>{budgetTone.label}</Badge>}
+                <Badge variant={task.status === 'open' ? 'default' : 'secondary'}>{TASK_STATUS_LABELS[task.status]}</Badge>
+              </div>
             </div>
             <h3 className="font-bold text-2xl mt-3">{task.title}</h3>
             <p className="text-3xl font-bold text-primary mt-3">{formatPrice(task.reward)}</p>
+            {task.pricingGuide && (
+              <p className="text-sm text-muted-foreground mt-2">
+                Smart guide: {formatPrice(task.pricingGuide.suggestedMin)} – {formatPrice(task.pricingGuide.suggestedMax)} · {task.pricingGuide.routeLabel}
+              </p>
+            )}
           </div>
 
           <div className="p-5 space-y-4">
+            {previewImage && <img src={previewImage} alt={task.title} className="w-full aspect-[16/9] rounded-3xl object-cover border" />}
             <p className="text-sm text-muted-foreground whitespace-pre-wrap">{task.description}</p>
-            {task.location && <p className="text-sm flex items-center gap-1"><MapPin className="w-4 h-4" />{task.location}</p>}
+            <div className="grid gap-3 md:grid-cols-3 text-sm">
+              <div className="rounded-2xl border bg-muted/20 p-3">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Pickup</p>
+                <p className="font-medium">{task.pickupLocation || 'Not set'}</p>
+              </div>
+              <div className="rounded-2xl border bg-muted/20 p-3">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Drop-off</p>
+                <p className="font-medium">{task.location || 'Not set'}</p>
+              </div>
+              <div className="rounded-2xl border bg-muted/20 p-3">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Deadline</p>
+                <p className="font-medium">{task.deadline ? new Date(task.deadline).toLocaleString() : 'Flexible timing'}</p>
+              </div>
+            </div>
+
+            {task.pricingGuide && <PricingGuidePanel pricingGuide={task.pricingGuide} reward={task.reward} />}
+
+            {task.pricingGuide && (
+              <div className={`rounded-2xl border p-3 text-sm ${budgetTone.cardClass}`}>
+                {task.pricingGuide.budgetPosition === 'low'
+                  ? `This request is ${formatPrice(Math.abs(priceDifference))} below the current recommendation. Counter-offers are more likely.`
+                  : task.pricingGuide.budgetPosition === 'premium'
+                    ? `This request is ${formatPrice(Math.abs(priceDifference))} above the current recommendation. Faster responses are more likely.`
+                    : 'This request sits in the current guide range and should feel balanced to runners.'}
+              </div>
+            )}
+
             <Separator />
             <div className="flex items-center gap-2">
               <Avatar className="w-9 h-9">
@@ -804,6 +1226,15 @@ function TaskDetail({
             <CardContent className="p-4 space-y-3">
               <h4 className="font-semibold text-sm">Send your runner offer</h4>
               <p className="text-[11px] text-muted-foreground">Accept the posted amount or counter with your own number. The customer can compare every offer.</p>
+              {task.pricingGuide && (
+                <div className={`rounded-2xl border p-3 text-xs ${budgetTone.cardClass}`}>
+                  {task.pricingGuide.budgetPosition === 'low'
+                    ? 'Budget is under the guide. A counter-offer may feel more realistic for this route.'
+                    : task.pricingGuide.budgetPosition === 'premium'
+                      ? 'Budget is above the guide. Matching the posted amount could help you win quickly.'
+                      : 'Budget is in range. You can accept the posted amount or adjust slightly based on your ETA.'}
+                </div>
+              )}
               <div>
                 <Label className="text-xs text-muted-foreground mb-1 block">Your price (leave blank to accept {formatPrice(task.reward)})</Label>
                 <div className="relative">
@@ -1084,7 +1515,7 @@ export default function TasksView({
                 <div className="rounded-[2rem] bg-background/80 border shadow-lg p-5 w-full max-w-sm">
                   <div className="space-y-3 text-sm">
                     {[
-                      'Customer flow for quick request posting',
+                      'Guided request builder with smart campus pricing',
                       'Premium runner onboarding with documents',
                       'Admin approval with push and in-app updates',
                     ].map((item) => (
@@ -1206,7 +1637,7 @@ export default function TasksView({
                         <p className="text-[11px] uppercase tracking-[0.25em] text-muted-foreground mb-2">Customer lane</p>
                         <h2 className="text-2xl font-bold">Turn campus errands into clean, trackable requests.</h2>
                         <p className="text-sm text-muted-foreground mt-3 leading-7">
-                          Post the errand, set your amount, and keep every runner conversation in one place. Your request list below keeps you in control while Runner grows into a full delivery marketplace.
+                          Post the errand, get a cleaner route-aware budget guide, and keep every runner conversation in one place. Your request list below keeps you in control while Runner grows into a full delivery marketplace.
                         </p>
                       </div>
                       <Button onClick={() => setShowCreate(true)} className="min-w-[180px] h-11">Create request</Button>

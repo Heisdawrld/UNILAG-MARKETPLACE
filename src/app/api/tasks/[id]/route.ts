@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { db, isDatabaseAvailable } from '@/lib/db';
+import { attachRunnerPricingGuide } from '@/lib/runner-pricing';
 
 async function getAuthUser() {
   const { userId: clerkId } = await auth();
@@ -65,7 +66,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       });
     }
 
-    return NextResponse.json({ ...task, applications });
+    return NextResponse.json({ ...attachRunnerPricingGuide(task), applications });
   } catch (err) {
     console.error('[tasks/:id GET]', err);
     return NextResponse.json({ error: 'Failed to fetch task' }, { status: 500 });
@@ -134,7 +135,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       });
     }
 
-    return NextResponse.json(updatedTask);
+    return NextResponse.json(attachRunnerPricingGuide(updatedTask));
   } catch (err) {
     console.error('[tasks/:id PATCH]', err);
     return NextResponse.json({ error: 'Failed to update task' }, { status: 500 });
