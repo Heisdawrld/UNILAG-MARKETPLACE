@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (authUser.role === 'banned') {
-      return NextResponse.json({ error: 'Banned users cannot post tasks' }, { status: 403 });
+      return NextResponse.json({ error: 'Banned users cannot post runner requests' }, { status: 403 });
     }
 
     const body = await req.json();

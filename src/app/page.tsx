@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useUser, SignInButton } from '@clerk/nextjs';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Home, Search, PlusCircle, Zap, MessageCircle, User, Bell } from 'lucide-react';
+import { Home, Search, PlusCircle, Route, MessageCircle, User, Bell } from 'lucide-react';
 import { api } from '@/lib/api';
 import { User as UserType, ViewTab, SavedListing } from '@/lib/types';
 import { usePushNotifications } from '@/hooks/use-push';
@@ -12,7 +12,7 @@ import { usePushNotifications } from '@/hooks/use-push';
 const HomeFeed = lazy(() => import('@/components/marketplace/HomeFeed'));
 const SearchView = lazy(() => import('@/components/marketplace/SearchView'));
 const SellView = lazy(() => import('@/components/marketplace/SellView'));
-const TasksView = lazy(() => import('@/components/tasks/TasksView'));
+const RunnerView = lazy(() => import('@/components/tasks/TasksView'));
 const MessagesView = lazy(() => import('@/components/marketplace/MessagesView'));
 const ProfileView = lazy(() => import('@/components/marketplace/ProfileView'));
 const ListingDetail = lazy(() => import('@/components/marketplace/ListingDetail'));
@@ -26,7 +26,7 @@ function BottomNav({ activeTab, onTabChange }: { activeTab: ViewTab; onTabChange
     { id: 'search', icon: Search, label: 'Explore' },
   ];
   const rightTabs: { id: ViewTab; icon: typeof Home; label: string }[] = [
-    { id: 'tasks', icon: Zap, label: 'Tasks' },
+    { id: 'tasks', icon: Route, label: 'Runner' },
     { id: 'messages', icon: MessageCircle, label: 'Chat' },
     { id: 'profile', icon: User, label: 'Me' },
   ];
@@ -316,7 +316,7 @@ export default function MarketplaceApp() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold">Enable Notifications 🔔</p>
-                <p className="text-[11px] opacity-80">Get alerts for messages, task updates & more</p>
+                <p className="text-[11px] opacity-80">Get alerts for messages, runner updates & more</p>
               </div>
               <button
                 onClick={async () => {
@@ -369,7 +369,7 @@ export default function MarketplaceApp() {
                 <SellView user={user} onListingCreated={() => setActiveTab('home')} />
               )}
               {activeTab === 'tasks' && (
-                <TasksView user={user} initialTaskId={selectedTaskId} onInitialTaskOpened={handleInitialTaskOpened} />
+                <RunnerView user={user} initialTaskId={selectedTaskId} onInitialTaskOpened={handleInitialTaskOpened} />
               )}
               {activeTab === 'messages' && (
                 <MessagesView user={user} initialChatId={selectedChatId} onInitialChatOpened={handleInitialChatOpened} />

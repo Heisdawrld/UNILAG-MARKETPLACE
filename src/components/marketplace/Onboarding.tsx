@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Home, Search, PlusCircle, Zap, MessageCircle, User, X, ChevronRight, ChevronLeft, Sparkles, Store } from 'lucide-react';
+import { Home, Search, PlusCircle, Route, MessageCircle, User, X, ChevronRight, ChevronLeft, Sparkles, Store } from 'lucide-react';
 
 const STEPS = [
   {
@@ -40,9 +40,9 @@ const STEPS = [
     iconColor: 'text-green-500',
   },
   {
-    icon: Zap,
-    title: 'Tasks & Runners ⚡',
-    description: 'Post errands and verified runners will bid on them — like InDrive! They propose their price, you pick the best offer. Become a runner to earn money too!',
+    icon: Route,
+    title: 'Runner 🚴',
+    description: 'Runner is the campus delivery world inside Marketplace. Post requests as a customer, or become a verified runner to earn from errands, pickups, and smart campus logistics.',
     color: 'from-amber-500/20 to-amber-500/5',
     iconColor: 'text-amber-500',
   },

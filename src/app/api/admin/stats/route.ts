@@ -2,6 +2,81 @@ import { db, isDatabaseAvailable } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { notifyUser } from '@/lib/push';
 import { requireAdminUser } from '@/lib/admin-auth';
+import {
+  RUNNER_APPLICATION_TYPE,
+  buildRunnerApplicationMessage,
+  buildRunnerApplicationTitle,
+  getLatestRunnerApplicationForApplicant,
+  groupRunnerApplications,
+  serializeRunnerApplication,
+} from '@/lib/runner-applications';
+import type { RunnerApplicationStatus } from '@/lib/types';
+
+async function updateRunnerApplicationReviewStatus({
+  applicantId,
+  applicationId,
+  status,
+  reviewedBy,
+  reviewedByName,
+  reviewNote,
+}: {
+  applicantId: string;
+  applicationId?: string;
+  status: RunnerApplicationStatus;
+  reviewedBy: string;
+  reviewedByName: string;
+  reviewNote?: string;
+}) {
+  const notifications = await db.notification.findMany({
+    where: {
+      type: RUNNER_APPLICATION_TYPE,
+      data: {
+        contains: applicationId
+          ? `"applicationId":"${applicationId}"`
+          : `"applicantId":"${applicantId}"`,
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const applications = groupRunnerApplications(notifications);
+  const application = applicationId
+    ? applications.find((item) => item.applicationId === applicationId)
+    : getLatestRunnerApplicationForApplicant(applications, applicantId);
+
+  if (!application) return null;
+
+  const reviewedApplication = {
+    ...application,
+    status,
+    reviewedAt: new Date().toISOString(),
+    reviewedBy,
+    reviewedByName,
+    reviewNote: reviewNote?.trim() || null,
+  };
+
+  const where = application.applicationId.startsWith('legacy_')
+    ? {
+        type: RUNNER_APPLICATION_TYPE,
+        data: { contains: `"applicantId":"${applicantId}"` },
+      }
+    : {
+        type: RUNNER_APPLICATION_TYPE,
+        data: { contains: `"applicationId":"${application.applicationId}"` },
+      };
+
+  await db.notification.updateMany({
+    where,
+    data: {
+      title: buildRunnerApplicationTitle(reviewedApplication),
+      message: buildRunnerApplicationMessage(reviewedApplication),
+      data: serializeRunnerApplication(reviewedApplication),
+      read: true,
+    },
+  });
+
+  return reviewedApplication;
+}
 
 // GET /api/admin/stats — dashboard overview
 export async function GET(req: NextRequest) {
@@ -73,6 +148,8 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: adminResult.error }, { status: adminResult.status });
     }
 
+    const adminUser = adminResult.user;
+
     const body = await req.json();
     const { action, targetId, data } = body;
 
@@ -98,18 +175,17 @@ export async function PATCH(req: NextRequest) {
           where: { id: targetId },
           data: { isRunner: true, trustScore: { increment: 10 } },
         });
-        await db.notification.deleteMany({
-          where: {
-            type: 'runner_application',
-            OR: [
-              { data: { contains: `"applicantId":"${targetId}"` } },
-              { message: { contains: `"applicantId":"${targetId}"` } },
-            ],
-          },
+        await updateRunnerApplicationReviewStatus({
+          applicantId: targetId,
+          applicationId: data?.applicationId,
+          status: 'approved',
+          reviewedBy: adminUser.id,
+          reviewedByName: adminUser.username,
+          reviewNote: data?.reviewNote,
         });
         await notifyUser(targetId, {
           title: 'Runner Application Approved ✅',
-          body: 'You are now an approved runner. You can start bidding on campus tasks.',
+          body: 'You are now an approved runner. Open Runner to start taking campus requests.',
           type: 'system',
           data: { url: '/?tab=tasks' },
         });
@@ -117,18 +193,17 @@ export async function PATCH(req: NextRequest) {
 
       case 'reject_runner':
         await db.user.update({ where: { id: targetId }, data: { isRunner: false } });
-        await db.notification.deleteMany({
-          where: {
-            type: 'runner_application',
-            OR: [
-              { data: { contains: `"applicantId":"${targetId}"` } },
-              { message: { contains: `"applicantId":"${targetId}"` } },
-            ],
-          },
+        await updateRunnerApplicationReviewStatus({
+          applicantId: targetId,
+          applicationId: data?.applicationId,
+          status: 'rejected',
+          reviewedBy: adminUser.id,
+          reviewedByName: adminUser.username,
+          reviewNote: data?.reviewNote,
         });
         await notifyUser(targetId, {
-          title: 'Runner Application Declined',
-          body: 'Your runner application was not approved yet. Update your details and apply again.',
+          title: 'Runner Application Update',
+          body: 'Your runner application needs another review before approval. Update your details and apply again.',
           type: 'system',
           data: { url: '/?tab=tasks' },
         });

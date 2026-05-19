@@ -123,6 +123,36 @@ export interface TaskApplication {
   };
 }
 
+export type RunnerApplicationStatus = 'pending' | 'approved' | 'rejected';
+
+export interface RunnerApplication {
+  applicationId: string;
+  applicantId: string;
+  username: string;
+  email: string;
+  phone: string;
+  whatsapp: string;
+  faculty: string;
+  hostel: string;
+  studentId: string;
+  transportMode: string;
+  availability: string;
+  preferredZone: string;
+  deliveryExperience: string;
+  motivation: string;
+  emergencyContactName: string;
+  emergencyContactPhone: string;
+  emergencyContactRelationship: string;
+  profilePhoto: string;
+  studentIdImage: string;
+  status: RunnerApplicationStatus;
+  submittedAt: string;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  reviewedByName: string | null;
+  reviewNote: string | null;
+}
+
 export interface Store {
   id: string;
   ownerId: string;

@@ -13,7 +13,7 @@ async function getAuthUser() {
   });
 }
 
-// POST /api/tasks/:id/apply — approved runner applies for a task
+// POST /api/tasks/:id/apply — approved runner sends an offer on a runner request
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!isDatabaseAvailable()) {
     return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     if (authUser.role === 'banned') {
-      return NextResponse.json({ error: 'Banned users cannot apply for tasks' }, { status: 403 });
+      return NextResponse.json({ error: 'Banned users cannot send offers on runner requests' }, { status: 403 });
     }
 
     const body = await req.json();
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     if (!authUser.isRunner) {
-      return NextResponse.json({ error: 'Only approved runners can apply for tasks' }, { status: 403 });
+      return NextResponse.json({ error: 'Only approved runners can send offers on runner requests' }, { status: 403 });
     }
 
     const parsedPrice = proposedPrice ? parseFloat(proposedPrice) : null;
@@ -53,8 +53,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const task = await (db as any).task.findUnique({ where: { id: taskId } });
     if (!task) return NextResponse.json({ error: 'Task not found' }, { status: 404 });
-    if (task.status !== 'open') return NextResponse.json({ error: 'Task is no longer accepting applications' }, { status: 400 });
-    if (task.creatorId === runnerId) return NextResponse.json({ error: 'You cannot apply to your own task' }, { status: 400 });
+    if (task.status !== 'open') return NextResponse.json({ error: 'This runner request is no longer accepting offers' }, { status: 400 });
+    if (task.creatorId === runnerId) return NextResponse.json({ error: 'You cannot offer on your own runner request' }, { status: 400 });
 
     const application = await (db as any).taskApplication.upsert({
       where: { taskId_runnerId: { taskId, runnerId } },
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     await notifyUser(task.creatorId, {
       title: '🏃 New Runner Offer!',
-      body: `${authUser.username} wants to do your task${parsedPrice ? ` for ₦${parsedPrice.toLocaleString()}` : ''}`,
+      body: `${authUser.username} wants to handle your request${parsedPrice ? ` for ₦${parsedPrice.toLocaleString()}` : ''}`,
       type: 'task_application',
       data: { taskId },
     });
@@ -86,11 +86,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json(application, { status: 201 });
   } catch (err) {
     console.error('[tasks/:id/apply POST]', err);
-    return NextResponse.json({ error: 'Failed to apply for task' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to send runner offer' }, { status: 500 });
   }
 }
 
-// PATCH /api/tasks/:id/apply — task creator accepts or rejects an application
+// PATCH /api/tasks/:id/apply — request creator accepts or rejects an offer
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!isDatabaseAvailable()) {
     return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });
@@ -143,7 +143,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     if (action === 'accept') {
       if (task.status !== 'open') {
-        return NextResponse.json({ error: 'Task is no longer open for acceptance' }, { status: 400 });
+        return NextResponse.json({ error: 'This runner request is no longer open for selection' }, { status: 400 });
       }
 
       if (!application.runner?.isRunner || application.runner.role === 'banned') {
@@ -172,8 +172,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ]);
 
       await notifyUser(application.runnerId, {
-        title: '🎉 Task Accepted!',
-        body: 'Your runner offer was accepted. Open tasks to continue.',
+        title: '🎉 Runner Offer Accepted!',
+        body: 'Your runner offer was accepted. Open Runner to continue.',
         type: 'task_accepted',
         data: { taskId },
         requireInteraction: true,
@@ -186,7 +186,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
       await notifyUser(application.runnerId, {
         title: 'Runner Offer Declined',
-        body: 'Your offer was not accepted for this task.',
+        body: 'Your offer was not accepted for this runner request.',
         type: 'system',
         data: { taskId },
       });
