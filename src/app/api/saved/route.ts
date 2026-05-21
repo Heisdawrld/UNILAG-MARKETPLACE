@@ -2,9 +2,25 @@ import { auth } from '@clerk/nextjs/server';
 import { db, isDatabaseAvailable } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 
+const clerkPubKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || '';
+const clerkSecKey = process.env.CLERK_SECRET_KEY || '';
+const isClerkConfigured = !!(
+  clerkPubKey &&
+  clerkSecKey &&
+  clerkPubKey !== 'undefined' &&
+  clerkSecKey !== 'undefined' &&
+  clerkPubKey.startsWith('pk_')
+);
+
 async function getAuthUser() {
+  if (!isClerkConfigured) {
+    return null;
+  }
+
   const { userId: clerkId } = await auth();
-  if (!clerkId) return null;
+  if (!clerkId) {
+    return null;
+  }
 
   return db.user.findUnique({ where: { clerkId }, select: { id: true, role: true } });
 }
@@ -16,12 +32,8 @@ export async function GET(request: NextRequest) {
       { status: 503 }
     );
   }
-  try {
-    const authUser = await getAuthUser();
-    if (!authUser) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
 
+  try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
 
@@ -29,7 +41,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'userId query parameter is required' }, { status: 400 });
     }
 
-    if (userId !== authUser.id) {
+    const authUser = await getAuthUser();
+    if (isClerkConfigured && !authUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (authUser && userId !== authUser.id) {
       return NextResponse.json({ error: 'Forbidden — cannot read another user\'s saved listings' }, { status: 403 });
     }
 
@@ -78,16 +95,8 @@ export async function POST(request: NextRequest) {
       { status: 503 }
     );
   }
+
   try {
-    const authUser = await getAuthUser();
-    if (!authUser) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    if (authUser.role === 'banned') {
-      return NextResponse.json({ error: 'Banned users cannot save listings' }, { status: 403 });
-    }
-
     const body = await request.json();
     const { userId, listingId } = body;
 
@@ -95,7 +104,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'userId and listingId are required' }, { status: 400 });
     }
 
-    if (userId !== authUser.id) {
+    const authUser = await getAuthUser();
+    if (isClerkConfigured && !authUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (authUser?.role === 'banned') {
+      return NextResponse.json({ error: 'Banned users cannot save listings' }, { status: 403 });
+    }
+
+    if (authUser && userId !== authUser.id) {
       return NextResponse.json({ error: 'Forbidden — cannot save listings for another user' }, { status: 403 });
     }
 
@@ -156,12 +174,8 @@ export async function DELETE(request: NextRequest) {
       { status: 503 }
     );
   }
-  try {
-    const authUser = await getAuthUser();
-    if (!authUser) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
 
+  try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
     const listingId = searchParams.get('listingId');
@@ -170,7 +184,12 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'userId and listingId query parameters are required' }, { status: 400 });
     }
 
-    if (userId !== authUser.id) {
+    const authUser = await getAuthUser();
+    if (isClerkConfigured && !authUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (authUser && userId !== authUser.id) {
       return NextResponse.json({ error: 'Forbidden — cannot unsave listings for another user' }, { status: 403 });
     }
 

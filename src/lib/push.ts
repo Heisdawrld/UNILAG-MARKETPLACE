@@ -95,3 +95,25 @@ export async function notifyUser(userId: string, payload: PushPayload & { messag
 
   await sendPushToUser(userId, payload);
 }
+
+export async function notifyUsers(userIds: string[], payload: PushPayload & { message?: string }): Promise<void> {
+  if (!isDatabaseAvailable() || userIds.length === 0) return;
+
+  const uniqueUserIds = [...new Set(userIds)];
+
+  await Promise.all(uniqueUserIds.map(async (userId) => {
+    try {
+      await db.notification.create({
+        data: {
+          userId,
+          type: payload.type || 'system',
+          title: payload.title,
+          message: payload.body || payload.message || '',
+          data: payload.data ? JSON.stringify(payload.data) : null,
+        },
+      });
+    } catch {}
+  }));
+
+  await sendPushToUsers(uniqueUserIds, payload);
+}

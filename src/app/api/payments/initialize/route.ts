@@ -6,20 +6,16 @@ import {
   BOOST_PRICING,
   VENDOR_SUBSCRIPTION_PRICING,
   type PaymentType,
-  type BoostDuration,
-  type VendorSubscriptionPlan,
 } from '@/lib/flutterwave';
 import { NextRequest, NextResponse } from 'next/server';
 
 // Validate the requested amount against known pricing
 function validateAmount(type: PaymentType, amount: number): boolean {
   if (type === 'boost') {
-    return Object.values(BOOST_PRICING).includes(amount as (typeof BOOST_PRICING)[BoostDuration]);
+    return Object.values(BOOST_PRICING).some((plan) => plan.price === amount);
   }
   if (type === 'vendor_subscription') {
-    return Object.values(VENDOR_SUBSCRIPTION_PRICING).includes(
-      amount as (typeof VENDOR_SUBSCRIPTION_PRICING)[VendorSubscriptionPlan]
-    );
+    return Object.values(VENDOR_SUBSCRIPTION_PRICING).some((price) => price === amount);
   }
   // sponsored_ad — allow any positive amount
   return amount > 0;

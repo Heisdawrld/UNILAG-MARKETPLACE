@@ -41,7 +41,7 @@ export function usePushNotifications(userId: string | null) {
           await fetch('/api/push/subscribe', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId, subscription: sub.toJSON() }),
+            body: JSON.stringify({ subscription: sub.toJSON() }),
           });
         } catch {}
       }
@@ -60,14 +60,14 @@ export function usePushNotifications(userId: string | null) {
       const registration = await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) as unknown as BufferSource,
       });
 
       // Send subscription to server
       await fetch('/api/push/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, subscription: subscription.toJSON() }),
+        body: JSON.stringify({ subscription: subscription.toJSON() }),
       });
 
       setIsSubscribed(true);

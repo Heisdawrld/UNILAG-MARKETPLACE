@@ -23,6 +23,8 @@ export async function GET(request: NextRequest) {
         verificationStatus: true, trustScore: true,
         ratingAverage: true, totalReviews: true, role: true,
         isRunner: true, runnerRating: true, tasksCompleted: true,
+        runnerAvailabilityStatus: true, runnerLastActiveAt: true,
+        runnerCurrentLat: true, runnerCurrentLng: true, runnerLocationUpdatedAt: true,
         createdAt: true, updatedAt: true,
       },
     });

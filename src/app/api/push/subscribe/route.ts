@@ -1,5 +1,18 @@
 import { db, isDatabaseAvailable } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
+
+async function getAuthenticatedUserId() {
+  const { userId: clerkId } = await auth();
+  if (!clerkId) return null;
+
+  const authUser = await db.user.findUnique({
+    where: { clerkId },
+    select: { id: true },
+  });
+
+  return authUser?.id || null;
+}
 
 // POST /api/push/subscribe - Save push subscription
 export async function POST(request: NextRequest) {
@@ -7,10 +20,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
   }
   try {
-    const { userId, subscription } = await request.json();
+    const userId = await getAuthenticatedUserId();
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-    if (!userId || !subscription?.endpoint || !subscription?.keys) {
-      return NextResponse.json({ error: 'userId and subscription required' }, { status: 400 });
+    const { subscription } = await request.json();
+
+    if (!subscription?.endpoint || !subscription?.keys) {
+      return NextResponse.json({ error: 'subscription required' }, { status: 400 });
     }
 
     // Upsert subscription (update if endpoint exists, create if not)
@@ -40,12 +58,17 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
   }
   try {
+    const userId = await getAuthenticatedUserId();
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { endpoint } = await request.json();
     if (!endpoint) {
       return NextResponse.json({ error: 'endpoint required' }, { status: 400 });
     }
 
-    await db.pushSubscription.deleteMany({ where: { endpoint } });
+    await db.pushSubscription.deleteMany({ where: { endpoint, userId } });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error removing push subscription:', error);

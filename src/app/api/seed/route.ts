@@ -32,7 +32,8 @@ export async function POST(request: NextRequest) {
 
     // Clear existing data (in case of partial state)
     await db.boost.deleteMany().catch(() => {});
-    await db.vendor.deleteMany().catch(() => {});
+    await db.storeFollow.deleteMany().catch(() => {});
+    await db.store.deleteMany().catch(() => {});
     await db.notification.deleteMany().catch(() => {});
     await db.report.deleteMany().catch(() => {});
     await db.review.deleteMany().catch(() => {});
@@ -536,14 +537,19 @@ export async function POST(request: NextRequest) {
       ],
     });
 
-    // Create Vendor
-    await db.vendor.create({
+    // Create Store
+    await db.store.create({
       data: {
         ownerId: seun.id,
-        businessName: 'Seun\'s Creative Corner',
-        businessLogo: 'https://api.dicebear.com/7.x/shapes/svg?seed=creative',
+        name: 'Seun\'s Creative Corner',
+        slug: 'seuns-creative-corner',
+        category: 'Fashion & Thrift',
         description: 'Your one-stop shop for custom Ankara fashion, trendy accessories, and creative designs on UNILAG campus!',
-        verified: true,
+        logo: 'https://api.dicebear.com/7.x/shapes/svg?seed=creative',
+        address: 'Eni Njoku Hall, UNILAG',
+        phone: seun.phone,
+        whatsapp: seun.whatsapp,
+        isVerified: true,
       },
     });
 
@@ -570,7 +576,7 @@ export async function POST(request: NextRequest) {
         savedListings: 6,
         reports: 2,
         notifications: 6,
-        vendors: 1,
+        stores: 1,
         boosts: 5,
       },
     });

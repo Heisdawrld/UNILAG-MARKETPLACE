@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
+  allowedDevOrigins: ['127.0.0.1', 'localhost'],
   // CRITICAL: @libsql/client uses native Node.js addons that must be
   // externalized in the standalone server bundle. Without this, the
   // Turso database connection will crash on Render/production.

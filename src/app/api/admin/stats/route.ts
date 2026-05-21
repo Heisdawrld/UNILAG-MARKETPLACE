@@ -173,7 +173,20 @@ export async function PATCH(req: NextRequest) {
       case 'approve_runner':
         await db.user.update({
           where: { id: targetId },
-          data: { isRunner: true, trustScore: { increment: 10 } },
+          data: {
+            isRunner: true,
+            trustScore: { increment: 10 },
+            runnerAvailabilityStatus: 'offline',
+          },
+        });
+        await db.runnerProfile.updateMany({
+          where: { userId: targetId },
+          data: {
+            status: 'approved',
+            reviewedAt: new Date(),
+            reviewedBy: adminUser.id,
+            reviewNote: data?.reviewNote?.trim() || null,
+          },
         });
         await updateRunnerApplicationReviewStatus({
           applicantId: targetId,
@@ -192,7 +205,19 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ success: true, message: 'Runner approved' });
 
       case 'reject_runner':
-        await db.user.update({ where: { id: targetId }, data: { isRunner: false } });
+        await db.user.update({
+          where: { id: targetId },
+          data: { isRunner: false, runnerAvailabilityStatus: 'offline' },
+        });
+        await db.runnerProfile.updateMany({
+          where: { userId: targetId },
+          data: {
+            status: 'rejected',
+            reviewedAt: new Date(),
+            reviewedBy: adminUser.id,
+            reviewNote: data?.reviewNote?.trim() || null,
+          },
+        });
         await updateRunnerApplicationReviewStatus({
           applicantId: targetId,
           applicationId: data?.applicationId,

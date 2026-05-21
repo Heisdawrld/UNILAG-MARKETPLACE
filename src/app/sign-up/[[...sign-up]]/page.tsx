@@ -7,7 +7,7 @@ export default function SignUpPage() {
       <img src="/logo.png" alt="UNILAG" style={{ width: 56, height: 56, borderRadius: 16, marginBottom: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
       <h1 style={{ fontWeight: 800, fontSize: 22, marginBottom: 4 }}>Join UNILAG Marketplace</h1>
       <p style={{ fontSize: 13, color: '#666', marginBottom: 20 }}>Create your account to start trading on campus</p>
-      <SignUp afterSignUpUrl="/" signInUrl="/sign-in" />
+      <SignUp fallbackRedirectUrl="/" signInUrl="/sign-in" />
       <p style={{ fontSize: 11, color: '#999', marginTop: 16 }}>By signing up, you agree to the UNILAG Marketplace Terms of Service</p>
     </div>
   );

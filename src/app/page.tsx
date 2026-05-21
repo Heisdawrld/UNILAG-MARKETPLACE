@@ -19,6 +19,8 @@ const ListingDetail = lazy(() => import('@/components/marketplace/ListingDetail'
 import Onboarding from '@/components/marketplace/Onboarding';
 import PWAInstallPrompt from '@/components/PWAInstallPrompt';
 
+const isClerkConfigured = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+
 // ── Bottom Navigation ──
 function BottomNav({ activeTab, onTabChange }: { activeTab: ViewTab; onTabChange: (tab: ViewTab) => void }) {
   const leftTabs: { id: ViewTab; icon: typeof Home; label: string }[] = [
@@ -109,6 +111,25 @@ export default function MarketplaceApp() {
   // Sync Clerk user → DB user
   useEffect(() => {
     if (!clerkLoaded) return;
+
+    if (!isClerkConfigured) {
+      const loadDemoUser = async () => {
+        try {
+          const data = await api.get('/api/auth/demo-user');
+          if (data?.id) {
+            setUser(data);
+          }
+        } catch (error) {
+          console.error('Failed to load demo user:', error);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      loadDemoUser();
+      return;
+    }
+
     if (!isSignedIn || !clerkUser) { setLoading(false); return; }
 
     const syncUser = async () => {

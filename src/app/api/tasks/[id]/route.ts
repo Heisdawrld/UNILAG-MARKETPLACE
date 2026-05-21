@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { db, isDatabaseAvailable } from '@/lib/db';
 import { attachRunnerPricingGuide } from '@/lib/runner-pricing';
+import { getTaskLifecycleTimestamps } from '@/lib/runner-dispatch';
+import { notifyUser } from '@/lib/push';
 
 async function getAuthUser() {
   const { userId: clerkId } = await auth();
@@ -34,7 +36,27 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
           select: { id: true, username: true, avatar: true, verificationStatus: true, trustScore: true, hostel: true },
         },
         assignedRunner: {
-          select: { id: true, username: true, avatar: true, runnerRating: true, tasksCompleted: true },
+          select: {
+            id: true,
+            username: true,
+            avatar: true,
+            runnerRating: true,
+            tasksCompleted: true,
+            runnerCurrentLat: true,
+            runnerCurrentLng: true,
+            runnerLocationUpdatedAt: true,
+          },
+        },
+        offers: {
+          orderBy: { createdAt: 'desc' },
+          include: {
+            runner: {
+              select: { id: true, username: true, avatar: true, runnerRating: true, tasksCompleted: true, trustScore: true, verificationStatus: true },
+            },
+            customer: {
+              select: { id: true, username: true, avatar: true },
+            },
+          },
         },
         _count: { select: { applications: true } },
       },
@@ -115,7 +137,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (!isAdmin && !isCreator) {
         return NextResponse.json({ error: 'Only the task creator can cancel this task' }, { status: 403 });
       }
-    } else if (status === 'in_progress' || status === 'completed') {
+    } else if (['in_progress', 'matched', 'runner_heading_to_pickup', 'picked_up', 'delivering', 'arrived', 'completed'].includes(status)) {
       if (!isAdmin && !isAssignedRunner) {
         return NextResponse.json({ error: 'Only the assigned runner can update this task status' }, { status: 403 });
       }
@@ -123,15 +145,29 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       return NextResponse.json({ error: 'Unsupported task status update' }, { status: 400 });
     }
 
+    const lifecycleTimestamps = getTaskLifecycleTimestamps(status as any);
+
     const updatedTask = await (db as any).task.update({
       where: { id },
-      data: { status },
+      data: {
+        status,
+        ...lifecycleTimestamps,
+      },
     });
 
     if (status === 'completed' && task.assignedRunnerId && task.status !== 'completed') {
       await (db as any).user.update({
         where: { id: task.assignedRunnerId },
         data: { tasksCompleted: { increment: 1 } },
+      });
+    }
+
+    if (status === 'cancelled' && task.assignedRunnerId) {
+      await notifyUser(task.assignedRunnerId, {
+        title: 'Runner Request Cancelled',
+        body: 'The customer cancelled this runner request.',
+        type: 'system',
+        data: { taskId: id, tab: 'tasks' },
       });
     }
 

@@ -117,7 +117,7 @@ export const db = new Proxy({} as PrismaClient, {
         )
       }
     }
-    const value = (client as Record<string | symbol, unknown>)[prop]
+    const value = (client as unknown as Record<string | symbol, unknown>)[prop]
     if (typeof value === 'function') {
       return value.bind(client)
     }

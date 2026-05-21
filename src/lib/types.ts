@@ -22,6 +22,11 @@ export interface User {
   isRunner: boolean;
   runnerRating: number;
   tasksCompleted: number;
+  runnerAvailabilityStatus?: string;
+  runnerLastActiveAt?: string | null;
+  runnerCurrentLat?: number | null;
+  runnerCurrentLng?: number | null;
+  runnerLocationUpdatedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -81,10 +86,26 @@ export interface Task {
   category: string;
   location: string | null;
   pickupLocation: string | null;
+  pickupLabel?: string | null;
+  dropoffLabel?: string | null;
+  pickupLat?: number | null;
+  pickupLng?: number | null;
+  dropoffLat?: number | null;
+  dropoffLng?: number | null;
+  serviceArea?: string | null;
+  negotiationStatus?: string;
   urgency: string;
   status: string;
   deadline: string | null;
   images: string;
+  estimatedDistanceMeters?: number | null;
+  estimatedDurationMinutes?: number | null;
+  matchedAt?: string | null;
+  pickedUpAt?: string | null;
+  deliveringAt?: string | null;
+  arrivedAt?: string | null;
+  completedAt?: string | null;
+  cancelledAt?: string | null;
   createdAt: string;
   updatedAt: string;
   creator: {
@@ -101,8 +122,12 @@ export interface Task {
     avatar: string | null;
     runnerRating: number;
     tasksCompleted: number;
+    runnerCurrentLat?: number | null;
+    runnerCurrentLng?: number | null;
+    runnerLocationUpdatedAt?: string | null;
   } | null;
   applications?: TaskApplication[];
+  offers?: TaskOffer[];
   _count?: { applications: number };
   pricingGuide?: RunnerPricingGuide;
 }
@@ -123,6 +148,32 @@ export interface TaskApplication {
     tasksCompleted: number;
     trustScore: number;
     verificationStatus: string;
+  };
+}
+
+export interface TaskOffer {
+  id: string;
+  taskId: string;
+  runnerId: string;
+  customerId: string;
+  amount: number;
+  message: string | null;
+  createdByRole: string;
+  status: string;
+  createdAt: string;
+  runner?: {
+    id: string;
+    username: string;
+    avatar: string | null;
+    runnerRating: number;
+    tasksCompleted: number;
+    trustScore?: number;
+    verificationStatus?: string;
+  };
+  customer?: {
+    id: string;
+    username: string;
+    avatar: string | null;
   };
 }
 
@@ -154,6 +205,28 @@ export interface RunnerApplication {
   reviewedBy: string | null;
   reviewedByName: string | null;
   reviewNote: string | null;
+}
+
+export interface RunnerProfile {
+  id: string;
+  userId: string;
+  status: RunnerApplicationStatus;
+  transportMode: string;
+  availabilityText: string;
+  preferredZone: string | null;
+  deliveryExperience: string | null;
+  motivation: string | null;
+  studentId: string;
+  profilePhoto: string;
+  studentIdImage: string;
+  emergencyContactName: string;
+  emergencyContactPhone: string;
+  emergencyContactRelationship: string | null;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  reviewNote: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Store {
@@ -345,7 +418,12 @@ export const URGENCY_COLORS: Record<string, string> = {
 export const TASK_STATUS_LABELS: Record<string, string> = {
   open: 'Open',
   assigned: 'Assigned',
+  matched: 'Matched',
   in_progress: 'In Progress',
+  runner_heading_to_pickup: 'Heading To Pickup',
+  picked_up: 'Picked Up',
+  delivering: 'Delivering',
+  arrived: 'Arrived',
   completed: 'Completed',
   cancelled: 'Cancelled',
 };

@@ -28,6 +28,11 @@ model User {
   isRunner           Boolean  @default(false)
   runnerRating       Float    @default(0)
   tasksCompleted     Int      @default(0)
+  runnerAvailabilityStatus String @default("offline") // offline, available, busy
+  runnerLastActiveAt DateTime?
+  runnerCurrentLat   Float?
+  runnerCurrentLng   Float?
+  runnerLocationUpdatedAt DateTime?
   clerkId            String?  @unique
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -46,7 +51,10 @@ model User {
   pushSubscriptions   PushSubscription[]
   tasksCreated        Task[]            @relation("TaskCreator")
   taskApplications    TaskApplication[] @relation("RunnerApplications")
+  runnerOffers        TaskOffer[]       @relation("RunnerOffers")
+  customerOffers      TaskOffer[]       @relation("CustomerOffers")
   assignedTasks       Task[]            @relation("AssignedRunner")
+  runnerProfile       RunnerProfile?
 }
 
 model Listing {
@@ -262,16 +270,33 @@ model Task {
   category         String
   location         String?
   pickupLocation   String?
+  pickupLabel      String?
+  dropoffLabel     String?
+  pickupLat        Float?
+  pickupLng        Float?
+  dropoffLat       Float?
+  dropoffLng       Float?
+  serviceArea      String?  @default("unilag")
+  negotiationStatus String @default("open") // open, negotiating, matched, closed
   urgency          String   @default("medium") // low, medium, high, urgent
   status           String   @default("open") // open, assigned, in_progress, completed, cancelled
   deadline         DateTime?
   images           String   @default("[]")
+  estimatedDistanceMeters Int?
+  estimatedDurationMinutes Int?
+  matchedAt        DateTime?
+  pickedUpAt       DateTime?
+  deliveringAt     DateTime?
+  arrivedAt        DateTime?
+  completedAt      DateTime?
+  cancelledAt      DateTime?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
   creator          User              @relation("TaskCreator", fields: [creatorId], references: [id])
   assignedRunner   User?             @relation("AssignedRunner", fields: [assignedRunnerId], references: [id])
   applications     TaskApplication[]
+  offers           TaskOffer[]
 
   @@index([status])
   @@index([creatorId])
@@ -293,4 +318,50 @@ model TaskApplication {
   @@unique([taskId, runnerId])
   @@index([taskId])
   @@index([runnerId])
+}
+
+model TaskOffer {
+  id            String   @id @default(cuid())
+  taskId        String
+  runnerId      String
+  customerId    String
+  amount        Float
+  message       String?
+  createdByRole String   // runner, customer
+  status        String   @default("open") // open, accepted, rejected, expired, superseded
+  createdAt     DateTime @default(now())
+
+  task          Task     @relation(fields: [taskId], references: [id])
+  runner        User     @relation("RunnerOffers", fields: [runnerId], references: [id])
+  customer      User     @relation("CustomerOffers", fields: [customerId], references: [id])
+
+  @@index([taskId, runnerId, createdAt])
+  @@index([customerId])
+  @@index([status])
+}
+
+model RunnerProfile {
+  id                           String   @id @default(cuid())
+  userId                       String   @unique
+  status                       String   @default("pending") // pending, approved, rejected
+  transportMode                String
+  availabilityText             String
+  preferredZone                String?
+  deliveryExperience           String?
+  motivation                   String?
+  studentId                    String
+  profilePhoto                 String
+  studentIdImage               String
+  emergencyContactName         String
+  emergencyContactPhone        String
+  emergencyContactRelationship String?
+  reviewedAt                   DateTime?
+  reviewedBy                   String?
+  reviewNote                   String?
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+
+  user                         User     @relation(fields: [userId], references: [id])
+
+  @@index([status])
 }

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db, isDatabaseAvailable } from '@/lib/db';
 import { auth } from '@clerk/nextjs/server';
 import { attachRunnerPricingGuide } from '@/lib/runner-pricing';
+import { estimateCampusTrip, normalizeCoordinate, validateCampusRoute } from '@/lib/runner-dispatch';
+import { notifyUsers } from '@/lib/push';
 
 // GET /api/tasks — list tasks with filters
 export async function GET(req: NextRequest) {
@@ -53,6 +55,26 @@ export async function GET(req: NextRequest) {
             avatar: true,
             runnerRating: true,
             tasksCompleted: true,
+            runnerCurrentLat: true,
+            runnerCurrentLng: true,
+            runnerLocationUpdatedAt: true,
+          },
+        },
+        offers: {
+          orderBy: { createdAt: 'desc' },
+          take: 8,
+          include: {
+            runner: {
+              select: {
+                id: true,
+                username: true,
+                avatar: true,
+                runnerRating: true,
+                tasksCompleted: true,
+                trustScore: true,
+                verificationStatus: true,
+              },
+            },
           },
         },
         _count: { select: { applications: true } },
@@ -92,7 +114,24 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { creatorId, title, description, reward, category, location, pickupLocation, urgency, deadline, images } = body;
+    const {
+      creatorId,
+      title,
+      description,
+      reward,
+      category,
+      location,
+      pickupLocation,
+      pickupLabel,
+      dropoffLabel,
+      pickupLat,
+      pickupLng,
+      dropoffLat,
+      dropoffLng,
+      urgency,
+      deadline,
+      images,
+    } = body;
 
     if (!creatorId || !title || !description || !reward || !category) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -107,6 +146,36 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Reward must be a valid amount greater than zero' }, { status: 400 });
     }
 
+    const pickup = {
+      lat: normalizeCoordinate(pickupLat),
+      lng: normalizeCoordinate(pickupLng),
+    };
+    const dropoff = {
+      lat: normalizeCoordinate(dropoffLat),
+      lng: normalizeCoordinate(dropoffLng),
+    };
+
+    const hasPickupCoords = pickup.lat !== null && pickup.lng !== null;
+    const hasDropoffCoords = dropoff.lat !== null && dropoff.lng !== null;
+    const hasAnyCoords = hasPickupCoords || hasDropoffCoords;
+
+    if (hasAnyCoords) {
+      const routeValidation = validateCampusRoute(
+        hasPickupCoords ? { lat: pickup.lat!, lng: pickup.lng! } : null,
+        hasDropoffCoords ? { lat: dropoff.lat!, lng: dropoff.lng! } : null,
+      );
+      if (!routeValidation.ok) {
+        return NextResponse.json({ error: routeValidation.error }, { status: 400 });
+      }
+    }
+
+    const tripEstimate = hasPickupCoords && hasDropoffCoords
+      ? estimateCampusTrip(
+          { lat: pickup.lat!, lng: pickup.lng! },
+          { lat: dropoff.lat!, lng: dropoff.lng! },
+        )
+      : null;
+
     const task = await (db as any).task.create({
       data: {
         creatorId,
@@ -116,9 +185,19 @@ export async function POST(req: NextRequest) {
         category,
         location: location?.trim() || null,
         pickupLocation: pickupLocation?.trim() || null,
+        pickupLabel: pickupLabel?.trim() || pickupLocation?.trim() || null,
+        dropoffLabel: dropoffLabel?.trim() || location?.trim() || null,
+        pickupLat: hasPickupCoords ? pickup.lat! : null,
+        pickupLng: hasPickupCoords ? pickup.lng! : null,
+        dropoffLat: hasDropoffCoords ? dropoff.lat! : null,
+        dropoffLng: hasDropoffCoords ? dropoff.lng! : null,
+        serviceArea: 'unilag',
+        negotiationStatus: 'open',
         urgency: urgency || 'medium',
         deadline: deadline ? new Date(deadline) : null,
         images: JSON.stringify(images || []),
+        estimatedDistanceMeters: tripEstimate?.estimatedDistanceMeters || null,
+        estimatedDurationMinutes: tripEstimate?.estimatedDurationMinutes || null,
       },
       include: {
         creator: {
@@ -126,6 +205,27 @@ export async function POST(req: NextRequest) {
         },
       },
     });
+
+    const availableRunners = await db.user.findMany({
+      where: {
+        isRunner: true,
+        role: { not: 'banned' },
+        runnerAvailabilityStatus: 'available',
+      },
+      select: { id: true },
+    });
+
+    await notifyUsers(
+      availableRunners.map((runner) => runner.id),
+      {
+        title: 'New Runner Request',
+        body: `${title.trim()} • ₦${parsedReward.toLocaleString()} • ${pickupLabel?.trim() || pickupLocation?.trim() || 'Pickup'} to ${dropoffLabel?.trim() || location?.trim() || 'Dropoff'}`,
+        type: 'runner_request_broadcast',
+        tag: `runner-request-${task.id}`,
+        data: { taskId: task.id, tab: 'tasks' },
+        requireInteraction: true,
+      },
+    );
 
     return NextResponse.json(attachRunnerPricingGuide(task), { status: 201 });
   } catch (err) {

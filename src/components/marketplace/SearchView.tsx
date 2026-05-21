@@ -88,7 +88,7 @@ export default function SearchView({
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 600000]);
   const [selectedStore, setSelectedStore] = useState<Store | null>(null);
   const [followLoading, setFollowLoading] = useState(false);
-  const debounceRef = useRef<NodeJS.Timeout>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const updateStoreFollowState = useCallback((storeId: string, isFollowing: boolean) => {
     const applyUpdate = (store: Store) => {

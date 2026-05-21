@@ -76,6 +76,32 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       },
     });
 
+    await db.taskOffer.updateMany({
+      where: {
+        taskId,
+        runnerId,
+        status: 'open',
+      },
+      data: { status: 'superseded' },
+    }).catch(() => null);
+
+    await db.taskOffer.create({
+      data: {
+        taskId,
+        runnerId,
+        customerId: task.creatorId,
+        amount: parsedPrice || task.reward,
+        message: message?.trim() || null,
+        createdByRole: 'runner',
+        status: 'open',
+      },
+    }).catch(() => null);
+
+    await db.task.update({
+      where: { id: taskId },
+      data: { negotiationStatus: 'negotiating' },
+    }).catch(() => null);
+
     await notifyUser(task.creatorId, {
       title: '🏃 New Runner Offer!',
       body: `${authUser.username} wants to handle your request${parsedPrice ? ` for ₦${parsedPrice.toLocaleString()}` : ''}`,
@@ -164,11 +190,25 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         (db as any).task.update({
           where: { id: taskId },
           data: {
-            status: 'assigned',
+            status: 'matched',
+            negotiationStatus: 'matched',
             assignedRunnerId: application.runnerId,
             ...(finalReward ? { reward: finalReward } : {}),
+            matchedAt: new Date(),
           },
         }),
+        db.taskOffer.updateMany({
+          where: { taskId, runnerId: application.runnerId, status: 'open' },
+          data: { status: 'accepted' },
+        }).catch(() => ({ count: 0 })),
+        db.taskOffer.updateMany({
+          where: { taskId, runnerId: { not: application.runnerId }, status: 'open' },
+          data: { status: 'expired' },
+        }).catch(() => ({ count: 0 })),
+        db.user.update({
+          where: { id: application.runnerId },
+          data: { runnerAvailabilityStatus: 'busy' },
+        }).catch(() => null),
       ]);
 
       await notifyUser(application.runnerId, {

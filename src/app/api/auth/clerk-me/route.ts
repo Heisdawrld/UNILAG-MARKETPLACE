@@ -17,6 +17,8 @@ const USER_SELECT = {
   verificationStatus: true, trustScore: true,
   ratingAverage: true, totalReviews: true, role: true,
   isRunner: true, runnerRating: true, tasksCompleted: true,
+  runnerAvailabilityStatus: true, runnerLastActiveAt: true,
+  runnerCurrentLat: true, runnerCurrentLng: true, runnerLocationUpdatedAt: true,
   clerkId: true, createdAt: true, updatedAt: true,
 } as const;
 

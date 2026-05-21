@@ -45,6 +45,7 @@ import {
   User as UserType,
   Task,
   RunnerApplication,
+  TaskOffer,
   TASK_CATEGORIES,
   URGENCY_LABELS,
   URGENCY_COLORS,
@@ -67,9 +68,45 @@ type RunnerEntryMode = 'intro' | 'customer' | 'runner_apply' | 'runner';
 
 type RequestBudgetTone = 'low' | 'fair' | 'premium';
 type MarketplaceSortMode = 'live' | 'urgent' | 'best_budget' | 'highest_budget';
+type CampusPoint = {
+  id: string;
+  label: string;
+  lat: number;
+  lng: number;
+  x: string;
+  y: string;
+};
+type DisplayOffer = {
+  id: string;
+  runnerId: string;
+  amount: number;
+  message: string | null;
+  status: string;
+  createdAt: string;
+  createdByRole?: string;
+  runner: {
+    id: string;
+    username: string;
+    avatar: string | null;
+    runnerRating: number;
+    tasksCompleted: number;
+    trustScore?: number;
+    verificationStatus?: string;
+  };
+};
 
 const LIVE_REQUEST_WINDOW_MS = 1000 * 60 * 45;
 const LIVE_OFFER_WINDOW_MS = 1000 * 60 * 12;
+const CAMPUS_POINTS: CampusPoint[] = [
+  { id: 'main-gate', label: 'Main Gate', lat: 6.5153, lng: 3.3901, x: '18%', y: '70%' },
+  { id: 'jaja', label: 'Jaja Hall', lat: 6.5168, lng: 3.3965, x: '42%', y: '62%' },
+  { id: 'moremi', label: 'Moremi Hall', lat: 6.521, lng: 3.3909, x: '58%', y: '48%' },
+  { id: 'new-hall', label: 'New Hall', lat: 6.5202, lng: 3.3978, x: '69%', y: '44%' },
+  { id: 'unilag-medical', label: 'Medical Centre', lat: 6.5185, lng: 3.3862, x: '34%', y: '56%' },
+  { id: 'faculty-science', label: 'Faculty of Science', lat: 6.5137, lng: 3.3942, x: '49%', y: '72%' },
+  { id: 'lagoon-front', label: 'Lagoon Front', lat: 6.5243, lng: 3.3837, x: '23%', y: '28%' },
+  { id: 'library', label: 'University Library', lat: 6.5148, lng: 3.3885, x: '31%', y: '65%' },
+];
 
 function isFreshTimestamp(value?: string | null, freshnessWindowMs = LIVE_REQUEST_WINDOW_MS) {
   if (!value) return false;
@@ -181,6 +218,64 @@ function getRouteSummary(pickupLocation?: string | null, dropoffLocation?: strin
   }
 
   return pickupLocation || dropoffLocation || 'Route details coming soon';
+}
+
+function getTaskPickupLabel(task: Task) {
+  return task.pickupLabel || task.pickupLocation || 'Pickup not pinned yet';
+}
+
+function getTaskDropoffLabel(task: Task) {
+  return task.dropoffLabel || task.location || 'Drop-off not pinned yet';
+}
+
+function getTaskOfferCount(task: Task) {
+  if (Array.isArray(task.offers) && task.offers.length > 0) {
+    return task.offers.filter((offer) => offer.status === 'open' || offer.status === 'accepted').length;
+  }
+  return task._count?.applications || task.applications?.length || 0;
+}
+
+function getCampusPoint(pointId: string | null) {
+  return CAMPUS_POINTS.find((point) => point.id === pointId) || null;
+}
+
+function getDisplayOffers(task: Task): DisplayOffer[] {
+  if (task.offers && task.offers.length > 0) {
+    const latestByRunner = new Map<string, DisplayOffer>();
+    for (const offer of [...task.offers].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())) {
+      if (!offer.runner || latestByRunner.has(offer.runnerId)) continue;
+      latestByRunner.set(offer.runnerId, {
+        id: offer.id,
+        runnerId: offer.runnerId,
+        amount: offer.amount,
+        message: offer.message,
+        status: offer.status,
+        createdAt: offer.createdAt,
+        createdByRole: offer.createdByRole,
+        runner: {
+          id: offer.runner.id,
+          username: offer.runner.username,
+          avatar: offer.runner.avatar,
+          runnerRating: offer.runner.runnerRating,
+          tasksCompleted: offer.runner.tasksCompleted,
+          trustScore: offer.runner.trustScore,
+          verificationStatus: offer.runner.verificationStatus,
+        },
+      });
+    }
+    return [...latestByRunner.values()].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
+  }
+
+  return (task.applications || []).map((application) => ({
+    id: application.id,
+    runnerId: application.runnerId,
+    amount: application.proposedPrice || task.reward,
+    message: application.message,
+    status: application.status,
+    createdAt: application.createdAt,
+    createdByRole: 'runner',
+    runner: application.runner,
+  }));
 }
 
 function getBudgetTone(pricingGuide?: RunnerPricingGuide | null): RequestBudgetTone {
@@ -709,18 +804,18 @@ function PricingGuidePanel({
 
 function OfferComparisonSummary({
   task,
-  applications,
+  offers,
 }: {
   task: Task;
-  applications: NonNullable<Task['applications']>;
+  offers: DisplayOffer[];
 }) {
-  const pendingOffers = applications.filter((application) => application.status === 'pending');
-  const lowestOffer = pendingOffers.reduce<number | null>((best, application) => {
-    const currentValue = application.proposedPrice || task.reward;
+  const pendingOffers = offers.filter((offer) => offer.status === 'open' || offer.status === 'pending');
+  const lowestOffer = pendingOffers.reduce<number | null>((best, offer) => {
+    const currentValue = offer.amount || task.reward;
     return best === null || currentValue < best ? currentValue : best;
   }, null);
-  const exactMatches = pendingOffers.filter((application) => !application.proposedPrice || application.proposedPrice === task.reward).length;
-  const freshOffers = pendingOffers.filter((application) => isFreshTimestamp(application.createdAt, LIVE_OFFER_WINDOW_MS)).length;
+  const exactMatches = pendingOffers.filter((offer) => offer.amount === task.reward).length;
+  const freshOffers = pendingOffers.filter((offer) => isFreshTimestamp(offer.createdAt, LIVE_OFFER_WINDOW_MS)).length;
 
   return (
     <div className="grid gap-3 md:grid-cols-4">
@@ -738,6 +833,62 @@ function OfferComparisonSummary({
           </CardContent>
         </Card>
       ))}
+    </div>
+  );
+}
+
+function CampusMapPreview({
+  pickupLabel,
+  dropoffLabel,
+}: {
+  pickupLabel: string;
+  dropoffLabel: string;
+}) {
+  const pickupPoint = CAMPUS_POINTS.find((point) => point.label === pickupLabel) || null;
+  const dropoffPoint = CAMPUS_POINTS.find((point) => point.label === dropoffLabel) || null;
+
+  return (
+    <div className="rounded-[2rem] border bg-gradient-to-br from-slate-100 via-white to-emerald-50 p-4">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Campus route</p>
+          <p className="text-sm font-semibold">UNILAG service area</p>
+        </div>
+        <Badge variant="outline" className="rounded-full">Map preview</Badge>
+      </div>
+
+      <div className="relative h-52 rounded-[1.5rem] overflow-hidden border bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.16),_transparent_38%),linear-gradient(135deg,_rgba(255,255,255,0.95),_rgba(226,232,240,0.95))]">
+        <div className="absolute inset-0 opacity-60">
+          <div className="absolute left-[12%] top-[16%] h-px w-[70%] bg-emerald-200 rotate-[18deg]" />
+          <div className="absolute left-[8%] top-[58%] h-px w-[76%] bg-slate-300 rotate-[-10deg]" />
+          <div className="absolute left-[34%] top-[10%] h-[76%] w-px bg-slate-200" />
+          <div className="absolute left-[58%] top-[18%] h-[68%] w-px bg-slate-200" />
+        </div>
+
+        {CAMPUS_POINTS.map((point) => {
+          const isPickup = pickupPoint?.id === point.id;
+          const isDropoff = dropoffPoint?.id === point.id;
+          return (
+            <div
+              key={point.id}
+              className="absolute -translate-x-1/2 -translate-y-1/2"
+              style={{ left: point.x, top: point.y }}
+            >
+              <div className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${isPickup ? 'border-emerald-600 bg-emerald-500' : isDropoff ? 'border-primary bg-primary' : 'border-slate-300 bg-white'}`} />
+              {(isPickup || isDropoff) && (
+                <div className="mt-1 whitespace-nowrap rounded-full bg-background/90 px-2 py-1 text-[10px] font-medium shadow-sm">
+                  {isPickup ? 'Pickup' : 'Drop-off'}: {point.label}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        <div className="absolute left-4 bottom-4 rounded-2xl bg-background/85 px-3 py-2 shadow-sm">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Route summary</p>
+          <p className="text-xs font-medium">{getRouteSummary(pickupLabel, dropoffLabel)}</p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -786,13 +937,13 @@ function RequestCard({ task, onClick }: { task: Task; onClick: () => void }) {
 
           <div className="rounded-2xl border bg-muted/20 px-3 py-2 mb-3 text-xs">
             <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Route</p>
-            <p className="font-medium line-clamp-2">{getRouteSummary(task.pickupLocation, task.location)}</p>
+            <p className="font-medium line-clamp-2">{getRouteSummary(getTaskPickupLabel(task), getTaskDropoffLabel(task))}</p>
           </div>
 
           <div className="flex items-center gap-3 text-xs text-muted-foreground mb-2 flex-wrap">
             <Badge variant="outline" className="text-[10px]">{task.category}</Badge>
-            {task.pickupLocation && (
-              <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3" />{task.pickupLocation}</span>
+            {getTaskPickupLabel(task) && (
+              <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3" />{getTaskPickupLabel(task)}</span>
             )}
             {task.deadline && (
               <span className="flex items-center gap-0.5"><Clock className="w-3 h-3" />{timeAgo(task.deadline)}</span>
@@ -810,7 +961,7 @@ function RequestCard({ task, onClick }: { task: Task; onClick: () => void }) {
             </div>
             <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
               <Users className="w-3 h-3" />
-              {task._count?.applications || 0} offers
+              {getTaskOfferCount(task)} offers
             </span>
           </div>
         </CardContent>
@@ -828,6 +979,10 @@ function CreateTaskForm({ user, onCreated, onCancel }: { user: UserType; onCreat
   const [category, setCategory] = useState('Delivery');
   const [pickupLocation, setPickupLocation] = useState('');
   const [dropoffLocation, setDropoffLocation] = useState('');
+  const [pickupPointId, setPickupPointId] = useState<string>('');
+  const [dropoffPointId, setDropoffPointId] = useState<string>('');
+  const [pickupDetail, setPickupDetail] = useState('');
+  const [dropoffDetail, setDropoffDetail] = useState('');
   const [urgency, setUrgency] = useState('medium');
   const [deadline, setDeadline] = useState('');
   const [images, setImages] = useState<string[]>([]);
@@ -836,15 +991,19 @@ function CreateTaskForm({ user, onCreated, onCancel }: { user: UserType; onCreat
   const numericReward = reward ? parseFloat(reward) : NaN;
   const parsedReward = Number.isFinite(numericReward) ? numericReward : null;
   const progress = ((step + 1) / REQUEST_STEP_LABELS.length) * 100;
+  const pickupPoint = getCampusPoint(pickupPointId);
+  const dropoffPoint = getCampusPoint(dropoffPointId);
+  const pickupSummary = pickupDetail.trim() ? `${pickupLocation} • ${pickupDetail.trim()}` : pickupLocation;
+  const dropoffSummary = dropoffDetail.trim() ? `${dropoffLocation} • ${dropoffDetail.trim()}` : dropoffLocation;
 
   const pricingGuide = useMemo(() => getRunnerPricingGuide({
     category,
     urgency,
-    pickupLocation,
-    dropoffLocation,
+    pickupLocation: pickupSummary,
+    dropoffLocation: dropoffSummary,
     deadline: deadline || null,
     reward: parsedReward,
-  }), [category, urgency, pickupLocation, dropoffLocation, deadline, parsedReward]);
+  }), [category, urgency, pickupSummary, dropoffSummary, deadline, parsedReward]);
 
   const budgetTone = getBudgetToneCopy(pricingGuide);
   const supportImage = images[0] || null;
@@ -891,8 +1050,14 @@ function CreateTaskForm({ user, onCreated, onCancel }: { user: UserType; onCreat
         description: description.trim(),
         reward: parsedReward,
         category,
-        location: dropoffLocation.trim(),
-        pickupLocation: pickupLocation.trim(),
+        location: dropoffSummary.trim(),
+        pickupLocation: pickupSummary.trim(),
+        pickupLabel: pickupLocation.trim(),
+        dropoffLabel: dropoffLocation.trim(),
+        pickupLat: pickupPoint?.lat ?? null,
+        pickupLng: pickupPoint?.lng ?? null,
+        dropoffLat: dropoffPoint?.lat ?? null,
+        dropoffLng: dropoffPoint?.lng ?? null,
         urgency,
         deadline: deadline || null,
         images,
@@ -930,7 +1095,7 @@ function CreateTaskForm({ user, onCreated, onCancel }: { user: UserType; onCreat
               <div className="rounded-3xl border bg-background/75 p-4 min-w-[260px] space-y-2">
                 <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Live request preview</p>
                 <p className="font-semibold line-clamp-2">{title.trim() || 'Your request title will appear here'}</p>
-                <p className="text-sm text-muted-foreground">{category || 'Pick a request type'} · {getRouteSummary(pickupLocation, dropoffLocation)}</p>
+                <p className="text-sm text-muted-foreground">{category || 'Pick a request type'} · {getRouteSummary(pickupSummary, dropoffSummary)}</p>
                 <p className="text-lg font-bold text-primary">{parsedReward ? formatPrice(parsedReward) : 'Set your budget'}</p>
               </div>
             </div>
@@ -1041,12 +1206,48 @@ function CreateTaskForm({ user, onCreated, onCancel }: { user: UserType; onCreat
                   <div className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
                     <div className="space-y-4">
                       <div>
-                        <Label className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2 block">Pickup / start point *</Label>
-                        <Input placeholder="e.g. Jaja Hall front desk" value={pickupLocation} onChange={(event) => setPickupLocation(event.target.value)} />
+                        <Label className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2 block">Pickup campus point *</Label>
+                        <Select
+                          value={pickupPointId}
+                          onValueChange={(value) => {
+                            setPickupPointId(value);
+                            const nextPoint = getCampusPoint(value);
+                            if (nextPoint) setPickupLocation(nextPoint.label);
+                          }}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Select a pickup point inside UNILAG" /></SelectTrigger>
+                          <SelectContent>
+                            {CAMPUS_POINTS.map((point) => (
+                              <SelectItem key={point.id} value={point.id}>{point.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div>
-                        <Label className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2 block">Drop-off / end point *</Label>
-                        <Input placeholder="e.g. Moremi Hall reception" value={dropoffLocation} onChange={(event) => setDropoffLocation(event.target.value)} />
+                        <Label className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2 block">Pickup detail</Label>
+                        <Input placeholder="e.g. Front desk, cafeteria gate, room side entrance" value={pickupDetail} onChange={(event) => setPickupDetail(event.target.value)} />
+                      </div>
+                      <div>
+                        <Label className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2 block">Drop-off campus point *</Label>
+                        <Select
+                          value={dropoffPointId}
+                          onValueChange={(value) => {
+                            setDropoffPointId(value);
+                            const nextPoint = getCampusPoint(value);
+                            if (nextPoint) setDropoffLocation(nextPoint.label);
+                          }}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Select a drop-off point inside UNILAG" /></SelectTrigger>
+                          <SelectContent>
+                            {CAMPUS_POINTS.map((point) => (
+                              <SelectItem key={point.id} value={point.id}>{point.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2 block">Drop-off detail</Label>
+                        <Input placeholder="e.g. Room 12 staircase, reception, gate beside car park" value={dropoffDetail} onChange={(event) => setDropoffDetail(event.target.value)} />
                       </div>
                       <div className="grid gap-4 md:grid-cols-2">
                         <div>
@@ -1071,7 +1272,7 @@ function CreateTaskForm({ user, onCreated, onCancel }: { user: UserType; onCreat
                     <div className="space-y-4">
                       <div className="rounded-3xl border p-4 bg-background/70">
                         <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground mb-2">Route summary</p>
-                        <h4 className="font-semibold text-lg">{getRouteSummary(pickupLocation, dropoffLocation)}</h4>
+                        <h4 className="font-semibold text-lg">{getRouteSummary(pickupSummary, dropoffSummary)}</h4>
                         <div className="grid gap-3 sm:grid-cols-2 mt-4 text-sm">
                           <div className="rounded-2xl border bg-muted/20 p-3">
                             <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Urgency</p>
@@ -1083,6 +1284,10 @@ function CreateTaskForm({ user, onCreated, onCancel }: { user: UserType; onCreat
                           </div>
                         </div>
                       </div>
+
+                      {pickupLocation && dropoffLocation && (
+                        <CampusMapPreview pickupLabel={pickupLocation} dropoffLabel={dropoffLocation} />
+                      )}
 
                       <PricingGuidePanel pricingGuide={pricingGuide} compact />
                     </div>
@@ -1126,7 +1331,7 @@ function CreateTaskForm({ user, onCreated, onCancel }: { user: UserType; onCreat
                         <div className="grid gap-3 sm:grid-cols-3 mt-4 text-sm">
                           <div className="rounded-2xl border bg-background/70 p-3">
                             <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Route</p>
-                            <p className="font-semibold leading-6">{getRouteSummary(pickupLocation, dropoffLocation)}</p>
+                            <p className="font-semibold leading-6">{getRouteSummary(pickupSummary, dropoffSummary)}</p>
                           </div>
                           <div className="rounded-2xl border bg-background/70 p-3">
                             <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Timing</p>
@@ -1206,6 +1411,9 @@ function TaskDetail({
   const [applying, setApplying] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [offerDraftDirty, setOfferDraftDirty] = useState(false);
+  const [counterOfferId, setCounterOfferId] = useState<string | null>(null);
+  const [counterPrice, setCounterPrice] = useState('');
+  const [counterMessage, setCounterMessage] = useState('');
   const previousOfferCountRef = useRef<number | null>(null);
 
   const fetchTask = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
@@ -1219,7 +1427,7 @@ function TaskDetail({
       setLastSyncedAt(new Date());
 
       if (nextTask.creatorId === user.id) {
-        const pendingOfferCount = nextTask.applications?.filter((application: NonNullable<Task['applications']>[number]) => application.status === 'pending').length ?? 0;
+        const pendingOfferCount = getDisplayOffers(nextTask).filter((offer) => offer.status === 'open' || offer.status === 'pending').length;
         if (previousOfferCountRef.current !== null && pendingOfferCount > previousOfferCountRef.current) {
           const addedOffers = pendingOfferCount - previousOfferCountRef.current;
           toast({
@@ -1243,7 +1451,7 @@ function TaskDetail({
   }, [fetchTask]);
 
   useEffect(() => {
-    if (!task || !['open', 'assigned', 'in_progress'].includes(task.status)) return;
+    if (!task || !['open', 'assigned', 'matched', 'runner_heading_to_pickup', 'picked_up', 'delivering', 'arrived', 'in_progress'].includes(task.status)) return;
 
     const timer = setInterval(() => {
       fetchTask({ silent: true });
@@ -1257,23 +1465,23 @@ function TaskDetail({
   }, [taskId, user.id]);
 
   useEffect(() => {
-    const nextRunnerApplication = task?.applications?.find((application) => application.runnerId === user.id) || null;
-    if (!nextRunnerApplication || offerDraftDirty) return;
+    const nextRunnerOffer = task ? getDisplayOffers(task).find((offer) => offer.runnerId === user.id) || null : null;
+    if (!nextRunnerOffer || offerDraftDirty) return;
 
-    setApplyMsg(nextRunnerApplication.message || '');
-    setProposedPrice(nextRunnerApplication.proposedPrice ? String(nextRunnerApplication.proposedPrice) : '');
+    setApplyMsg(nextRunnerOffer.message || '');
+    setProposedPrice(nextRunnerOffer.amount !== (task?.reward ?? 0) ? String(nextRunnerOffer.amount) : '');
   }, [offerDraftDirty, task, user.id]);
 
   const handleApply = async () => {
     setApplying(true);
     try {
-      await api.post(`/api/tasks/${taskId}/apply`, {
-        runnerId: user.id,
+      const alreadyOffered = task ? getDisplayOffers(task).some((offer) => offer.runnerId === user.id) : false;
+      await api.post(`/api/tasks/${taskId}/offers`, {
+        amount: proposedPrice || task?.reward || null,
         message: applyMsg,
-        proposedPrice: proposedPrice || null,
       });
       toast({
-        title: task?.applications?.some((application) => application.runnerId === user.id) ? 'Offer updated' : 'Offer sent',
+        title: alreadyOffered ? 'Offer updated' : 'Offer sent',
         description: 'The customer can compare your live offer immediately.',
       });
       setOfferDraftDirty(false);
@@ -1295,6 +1503,35 @@ function TaskDetail({
     }
   };
 
+  const handleReject = async (applicationId: string) => {
+    try {
+      await api.patch(`/api/tasks/${taskId}/apply`, { applicationId, action: 'reject' });
+      toast({ title: 'Offer skipped' });
+      await fetchTask({ silent: true });
+    } catch {
+      toast({ title: 'Error', variant: 'destructive' });
+    }
+  };
+
+  const handleCounter = async () => {
+    if (!counterOfferId || !counterPrice) return;
+
+    try {
+      await api.patch(`/api/tasks/${taskId}/offers/${counterOfferId}`, {
+        action: 'counter',
+        amount: counterPrice,
+        message: counterMessage,
+      });
+      toast({ title: 'Counter offer sent', description: 'The runner can now review your updated price.' });
+      setCounterOfferId(null);
+      setCounterPrice('');
+      setCounterMessage('');
+      await fetchTask();
+    } catch (error) {
+      toast({ title: 'Error', description: error instanceof Error ? error.message : 'Failed to counter offer', variant: 'destructive' });
+    }
+  };
+
   const handleUpdateStatus = async (status: string) => {
     try {
       await api.patch(`/api/tasks/${taskId}`, { status });
@@ -1309,17 +1546,18 @@ function TaskDetail({
   if (!task) return <div className="p-8 text-center text-muted-foreground">Runner request not found</div>;
 
   const isCreator = task.creatorId === user.id;
-  const runnerApplication = task.applications?.find((application) => application.runnerId === user.id) || null;
-  const hasApplied = Boolean(runnerApplication);
+  const displayOffers = getDisplayOffers(task);
+  const runnerOffer = displayOffers.find((offer) => offer.runnerId === user.id) || null;
+  const hasApplied = Boolean(runnerOffer);
   const isAssigned = task.assignedRunnerId === user.id;
   const previewImage = parseTaskImages(task.images)[0] || null;
   const budgetTone = getBudgetToneCopy(task.pricingGuide);
   const priceDifference = task.pricingGuide ? task.reward - task.pricingGuide.recommended : 0;
-  const canManageOffer = !isCreator && isApprovedRunner && task.status === 'open' && runnerApplication?.status !== 'accepted';
+  const canManageOffer = !isCreator && isApprovedRunner && task.status === 'open' && runnerOffer?.status !== 'accepted';
   const sortedApplications = sortOfferApplications(task, task.applications || []);
-  const lowestPendingOffer = sortedApplications.reduce<number | null>((best, application) => {
-    if (application.status !== 'pending') return best;
-    const currentValue = application.proposedPrice || task.reward;
+  const lowestPendingOffer = displayOffers.reduce<number | null>((best, offer) => {
+    if (!['open', 'pending'].includes(offer.status)) return best;
+    const currentValue = offer.amount || task.reward;
     return best === null || currentValue < best ? currentValue : best;
   }, null);
 
@@ -1336,8 +1574,8 @@ function TaskDetail({
           <Radio className="w-3 h-3" /> Live board
         </Badge>
         <Badge variant="secondary" className="rounded-full px-3 py-1">{formatLiveSyncLabel(lastSyncedAt)}</Badge>
-        {(task._count?.applications || 0) > 0 && (
-          <Badge variant="secondary" className="rounded-full px-3 py-1">{task._count?.applications} total offers</Badge>
+        {getTaskOfferCount(task) > 0 && (
+          <Badge variant="secondary" className="rounded-full px-3 py-1">{getTaskOfferCount(task)} total offers</Badge>
         )}
       </div>
 
@@ -1366,17 +1604,19 @@ function TaskDetail({
             <div className="grid gap-3 md:grid-cols-3 text-sm">
               <div className="rounded-2xl border bg-muted/20 p-3">
                 <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Pickup</p>
-                <p className="font-medium">{task.pickupLocation || 'Not set'}</p>
+                <p className="font-medium">{getTaskPickupLabel(task)}</p>
               </div>
               <div className="rounded-2xl border bg-muted/20 p-3">
                 <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Drop-off</p>
-                <p className="font-medium">{task.location || 'Not set'}</p>
+                <p className="font-medium">{getTaskDropoffLabel(task)}</p>
               </div>
               <div className="rounded-2xl border bg-muted/20 p-3">
                 <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Deadline</p>
                 <p className="font-medium">{task.deadline ? new Date(task.deadline).toLocaleString() : 'Flexible timing'}</p>
               </div>
             </div>
+
+            <CampusMapPreview pickupLabel={getTaskPickupLabel(task)} dropoffLabel={getTaskDropoffLabel(task)} />
 
             {task.pricingGuide && <PricingGuidePanel pricingGuide={task.pricingGuide} reward={task.reward} />}
 
@@ -1452,8 +1692,8 @@ function TaskDetail({
                     variant="outline"
                     className="sm:w-auto"
                     onClick={() => {
-                      setApplyMsg(runnerApplication?.message || '');
-                      setProposedPrice(runnerApplication?.proposedPrice ? String(runnerApplication.proposedPrice) : '');
+                      setApplyMsg(runnerOffer?.message || '');
+                      setProposedPrice(runnerOffer && runnerOffer.amount !== task.reward ? String(runnerOffer.amount) : '');
                       setOfferDraftDirty(false);
                     }}
                   >
@@ -1487,7 +1727,7 @@ function TaskDetail({
         )
       )}
 
-      {hasApplied && !isAssigned && !canManageOffer && runnerApplication?.status !== 'rejected' && (
+      {hasApplied && !isAssigned && !canManageOffer && runnerOffer?.status !== 'rejected' && (
         <Card className="border-0 shadow-sm bg-primary/5">
           <CardContent className="p-4 flex items-center gap-2">
             <CheckCircle2 className="w-5 h-5 text-primary" />
@@ -1496,7 +1736,7 @@ function TaskDetail({
         </Card>
       )}
 
-      {runnerApplication?.status === 'rejected' && !isAssigned && (
+      {runnerOffer?.status === 'rejected' && !isAssigned && (
         <Card className="border-0 shadow-sm border-l-4 border-l-amber-400">
           <CardContent className="p-4 text-sm text-muted-foreground">
             Your last offer was skipped. If the customer keeps the request open, you can still refresh it from the live offer form above.
@@ -1511,24 +1751,65 @@ function TaskDetail({
               <Award className="w-5 h-5 text-emerald-600" />
               <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">You are the selected runner for this request.</p>
             </div>
-            {task.status === 'assigned' && (
-              <Button size="sm" onClick={() => handleUpdateStatus('in_progress')}>Start request</Button>
-            )}
-            {task.status === 'in_progress' && (
-              <Button size="sm" onClick={() => handleUpdateStatus('completed')}>Mark delivered</Button>
-            )}
+            <div className="flex flex-wrap gap-2">
+              {(task.status === 'matched' || task.status === 'assigned') && (
+                <Button size="sm" onClick={() => handleUpdateStatus('runner_heading_to_pickup')}>Head to pickup</Button>
+              )}
+              {task.status === 'runner_heading_to_pickup' && (
+                <Button size="sm" onClick={() => handleUpdateStatus('picked_up')}>Mark picked up</Button>
+              )}
+              {task.status === 'picked_up' && (
+                <Button size="sm" onClick={() => handleUpdateStatus('delivering')}>Start delivery</Button>
+              )}
+              {task.status === 'delivering' && (
+                <Button size="sm" onClick={() => handleUpdateStatus('arrived')}>Arrived</Button>
+              )}
+              {task.status === 'arrived' && (
+                <Button size="sm" onClick={() => handleUpdateStatus('completed')}>Complete order</Button>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}
 
-      {isCreator && task.applications && task.applications.length > 0 && (
+      {(isCreator || isAssigned) && task.assignedRunner && ['matched', 'assigned', 'runner_heading_to_pickup', 'picked_up', 'delivering', 'arrived'].includes(task.status) && (
+        <Card className="border-0 shadow-sm">
+          <CardContent className="p-4 space-y-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Active order</p>
+                <h4 className="text-lg font-semibold">{TASK_STATUS_LABELS[task.status] || task.status}</h4>
+              </div>
+              <Badge className="rounded-full bg-primary/10 text-primary">{formatPrice(task.reward)}</Badge>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2 text-sm">
+              <div className="rounded-2xl border bg-muted/20 p-3">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Assigned runner</p>
+                <p className="font-semibold">{task.assignedRunner.username}</p>
+                <p className="text-xs text-muted-foreground mt-1">★ {task.assignedRunner.runnerRating.toFixed(1)} · {task.assignedRunner.tasksCompleted} completed</p>
+              </div>
+              <div className="rounded-2xl border bg-muted/20 p-3">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Live location</p>
+                {task.assignedRunner.runnerCurrentLat && task.assignedRunner.runnerCurrentLng ? (
+                  <p className="font-semibold">{task.assignedRunner.runnerCurrentLat.toFixed(4)}, {task.assignedRunner.runnerCurrentLng.toFixed(4)}</p>
+                ) : (
+                  <p className="font-semibold">Waiting for runner update</p>
+                )}
+                <p className="text-xs text-muted-foreground mt-1">{task.assignedRunner.runnerLocationUpdatedAt ? `Updated ${timeAgo(task.assignedRunner.runnerLocationUpdatedAt)}` : 'No live location yet'}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {isCreator && displayOffers.length > 0 && (
         <>
-          <OfferComparisonSummary task={task} applications={task.applications} />
+          <OfferComparisonSummary task={task} offers={displayOffers} />
 
           <Card className="border-0 shadow-sm">
             <CardContent className="p-4 space-y-3">
               <div className="flex items-center justify-between gap-3 flex-wrap">
-                <h4 className="font-semibold text-sm">Runner offers ({task.applications.length})</h4>
+                <h4 className="font-semibold text-sm">Runner offers ({displayOffers.length})</h4>
                 <p className="text-[11px] text-muted-foreground">{formatLiveSyncLabel(lastSyncedAt)}</p>
               </div>
               {sortedApplications.map((application) => {
@@ -1581,6 +1862,50 @@ function TaskDetail({
       {isCreator && task.status === 'open' && (
         <Button variant="destructive" size="sm" onClick={() => handleUpdateStatus('cancelled')} className="w-full">Cancel request</Button>
       )}
+
+      {isCreator && task.status === 'open' && displayOffers.some((offer) => ['open', 'pending'].includes(offer.status)) && (
+        <Card className="border-0 shadow-sm">
+          <CardContent className="p-4 space-y-3">
+            <div>
+              <h4 className="text-sm font-semibold">Counter a runner</h4>
+              <p className="mt-1 text-xs text-muted-foreground">Use the negotiation flow when you want to pull a runner closer to your budget without accepting immediately.</p>
+            </div>
+            <Select
+              value={counterOfferId || ''}
+              onValueChange={(value) => {
+                const selectedOffer = displayOffers.find((offer) => offer.id === value);
+                setCounterOfferId(value);
+                setCounterPrice(selectedOffer ? String(selectedOffer.amount) : '');
+                setCounterMessage(selectedOffer?.message || '');
+              }}
+            >
+              <SelectTrigger><SelectValue placeholder="Choose an open runner offer" /></SelectTrigger>
+              <SelectContent>
+                {displayOffers.filter((offer) => ['open', 'pending'].includes(offer.status)).map((offer) => (
+                  <SelectItem key={offer.id} value={offer.id}>{offer.runner.username} · {formatPrice(offer.amount)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {counterOfferId && (
+              <>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">₦</span>
+                  <Input type="number" value={counterPrice} onChange={(event) => setCounterPrice(event.target.value)} className="pl-8" min="0" />
+                </div>
+                <Textarea value={counterMessage} onChange={(event) => setCounterMessage(event.target.value)} rows={2} placeholder="Optional note for your counter-offer" />
+                <div className="flex gap-2">
+                  <Button onClick={handleCounter}>Send counter</Button>
+                  <Button variant="outline" onClick={() => {
+                    setCounterOfferId(null);
+                    setCounterPrice('');
+                    setCounterMessage('');
+                  }}>Clear</Button>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
@@ -1607,7 +1932,7 @@ export default function TasksView({
   const [entryMode, setEntryMode] = useState<RunnerEntryMode>('intro');
   const [currentApplication, setCurrentApplication] = useState<RunnerApplication | null>(null);
   const [applicationLoading, setApplicationLoading] = useState(true);
-  const [isAvailable, setIsAvailable] = useState(true);
+  const [isAvailable, setIsAvailable] = useState(user.runnerAvailabilityStatus === 'available');
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [refreshingMarketplace, setRefreshingMarketplace] = useState(false);
   const [liveActivityCount, setLiveActivityCount] = useState(0);
@@ -1637,16 +1962,16 @@ export default function TasksView({
       if (silent) {
         let detectedLiveActivity = 0;
 
-        const nextMarketplaceIds = new Set(nextMarketplaceTasks.map((task: Task) => task.id));
+        const nextMarketplaceIds = new Set<string>(nextMarketplaceTasks.map((task: Task) => task.id));
         if (entryMode === 'runner' && previousMarketplaceIdsRef.current) {
           detectedLiveActivity += nextMarketplaceTasks.filter((task: Task) => !previousMarketplaceIdsRef.current?.has(task.id)).length;
         }
 
-        const nextMyRequestOfferCounts = new Map(nextMineTasks.map((task: Task) => [task.id, task._count?.applications || 0]));
+        const nextMyRequestOfferCounts = new Map<string, number>(nextMineTasks.map((task: Task) => [task.id, getTaskOfferCount(task)]));
         if (entryMode === 'customer' && previousMyRequestOfferCountsRef.current) {
           detectedLiveActivity += nextMineTasks.reduce((total: number, task: Task) => {
             const previousCount = previousMyRequestOfferCountsRef.current?.get(task.id) || 0;
-            const currentCount = task._count?.applications || 0;
+            const currentCount = getTaskOfferCount(task);
             return currentCount > previousCount ? total + (currentCount - previousCount) : total;
           }, 0);
 
@@ -1662,8 +1987,8 @@ export default function TasksView({
         previousMarketplaceIdsRef.current = nextMarketplaceIds;
         previousMyRequestOfferCountsRef.current = nextMyRequestOfferCounts;
       } else {
-        previousMarketplaceIdsRef.current = new Set(nextMarketplaceTasks.map((task: Task) => task.id));
-        previousMyRequestOfferCountsRef.current = new Map(nextMineTasks.map((task: Task) => [task.id, task._count?.applications || 0]));
+        previousMarketplaceIdsRef.current = new Set<string>(nextMarketplaceTasks.map((task: Task) => task.id));
+        previousMyRequestOfferCountsRef.current = new Map<string, number>(nextMineTasks.map((task: Task) => [task.id, getTaskOfferCount(task)]));
         setLiveActivityCount(0);
       }
 
@@ -1733,6 +2058,16 @@ export default function TasksView({
   }, [initialTaskId, onInitialTaskOpened]);
 
   const isApprovedRunner = user.isRunner || currentApplication?.status === 'approved';
+
+  useEffect(() => {
+    if (!isApprovedRunner) return;
+
+    api.patch('/api/runner-presence', {
+      status: isAvailable ? 'available' : 'offline',
+    }).catch((error) => {
+      console.error('Failed to update runner presence:', error);
+    });
+  }, [isApprovedRunner, isAvailable]);
 
   useEffect(() => {
     const savedMode = localStorage.getItem(getRunnerStorageKey(user.id));
