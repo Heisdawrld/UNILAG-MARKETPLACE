@@ -26,6 +26,7 @@ import {
   X,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
 
 type AdminTab = 'overview' | 'users' | 'listings' | 'reports' | 'runner_ops';
 type RunnerReviewFilter = 'pending' | 'approved' | 'rejected';
@@ -38,6 +39,7 @@ const runnerStatusStyles: Record<RunnerReviewFilter, string> = {
 
 export default function AdminPage() {
   const { user: clerkUser, isLoaded } = useUser();
+  const { toast } = useToast();
   const [dbUser, setDbUser] = useState<any>(null);
   const [data, setData] = useState<any>(null);
   const [runnerApps, setRunnerApps] = useState<any[]>([]);
@@ -83,13 +85,64 @@ export default function AdminPage() {
     fetchData();
   }, [fetchData]);
 
+  const syncRunnerApplicationState = useCallback((applicantId: string, status: RunnerReviewFilter, note?: string) => {
+    const reviewedAt = new Date().toISOString();
+
+    setRunnerApps((current) => current.map((application) => (
+      application.applicantId === applicantId
+        ? {
+            ...application,
+            status,
+            reviewedAt,
+            reviewedBy: dbUser?.id || application.reviewedBy,
+            reviewedByName: dbUser?.username || application.reviewedByName || 'Admin',
+            reviewNote: note?.trim() || application.reviewNote || null,
+          }
+        : application
+    )));
+
+    setSelectedRunnerApp((current: any) => (
+      current?.applicantId === applicantId
+        ? {
+            ...current,
+            status,
+            reviewedAt,
+            reviewedBy: dbUser?.id || current.reviewedBy,
+            reviewedByName: dbUser?.username || current.reviewedByName || 'Admin',
+            reviewNote: note?.trim() || current.reviewNote || null,
+          }
+        : current
+    ));
+  }, [dbUser?.id, dbUser?.username]);
+
   const doAction = async (action: string, targetId: string, extra?: any) => {
     setActionLoading(extra?.applicationId || targetId);
     try {
       await api.patch('/api/admin/stats', { action, targetId, data: extra });
+      if (action === 'approve_runner') {
+        syncRunnerApplicationState(targetId, 'approved', extra?.reviewNote);
+      }
+      if (action === 'reject_runner') {
+        syncRunnerApplicationState(targetId, 'rejected', extra?.reviewNote);
+      }
       await fetchData();
+      toast({
+        title: 'Admin action completed',
+        description:
+          action === 'approve_runner'
+            ? 'Runner application approved successfully.'
+            : action === 'reject_runner'
+              ? 'Runner application rejected successfully.'
+              : 'The admin action was saved.',
+      });
+      return true;
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Action failed');
+      toast({
+        title: 'Admin action failed',
+        description: err instanceof Error ? err.message : 'Action failed',
+        variant: 'destructive',
+      });
+      return false;
     } finally {
       setActionLoading('');
     }
@@ -118,11 +171,13 @@ export default function AdminPage() {
 
   const handleRunnerReview = async (status: RunnerReviewFilter, application: any) => {
     const action = status === 'approved' ? 'approve_runner' : 'reject_runner';
-    await doAction(action, application.applicantId, {
+    const didSucceed = await doAction(action, application.applicantId, {
       applicationId: application.applicationId,
       reviewNote,
     });
-    closeRunnerReview();
+    if (didSucceed) {
+      closeRunnerReview();
+    }
   };
 
   if (!isLoaded || !dbUser) {
@@ -189,7 +244,22 @@ export default function AdminPage() {
       </header>
 
       <div className="max-w-6xl mx-auto px-6 py-6">
-        <div className="flex gap-1 mb-6 bg-white/5 rounded-xl p-1 w-fit overflow-x-auto hide-scrollbar">
+        <div className="mb-4 md:hidden">
+          <label className="block text-[11px] uppercase tracking-[0.2em] text-white/40 mb-2">Admin section</label>
+          <select
+            value={tab}
+            onChange={(event) => setTab(event.target.value as AdminTab)}
+            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none"
+          >
+            <option value="overview">Overview</option>
+            <option value="users">Users</option>
+            <option value="listings">Listings</option>
+            <option value="reports">Reports</option>
+            <option value="runner_ops">Runner Ops</option>
+          </select>
+        </div>
+
+        <div className="hidden md:flex gap-1 mb-6 bg-white/5 rounded-xl p-1 w-fit overflow-x-auto hide-scrollbar">
           {([
             ['overview', 'Overview'],
             ['users', 'Users'],
@@ -473,22 +543,22 @@ export default function AdminPage() {
                             </button>
                             {application.status === 'pending' && (
                               <>
-                                <button
-                                  onClick={() => doAction('approve_runner', application.applicantId, { applicationId: application.applicationId })}
-                                  disabled={actionLoading === reviewActionId}
-                                  className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-xs font-semibold transition-colors disabled:opacity-50"
-                                >
-                                  Approve
-                                </button>
-                                <button
-                                  onClick={() => doAction('reject_runner', application.applicantId, { applicationId: application.applicationId })}
-                                  disabled={actionLoading === reviewActionId}
-                                  className="px-3.5 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 text-xs font-semibold transition-colors disabled:opacity-50"
-                                >
-                                  Reject
-                                </button>
-                              </>
-                            )}
+                              <button
+                                onClick={() => doAction('approve_runner', application.applicantId, { applicationId: application.applicationId })}
+                                disabled={actionLoading === reviewActionId}
+                                className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-xs font-semibold transition-colors disabled:opacity-50"
+                              >
+                                {actionLoading === reviewActionId ? 'Approving...' : 'Approve'}
+                              </button>
+                              <button
+                                onClick={() => doAction('reject_runner', application.applicantId, { applicationId: application.applicationId })}
+                                disabled={actionLoading === reviewActionId}
+                                className="px-3.5 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 text-xs font-semibold transition-colors disabled:opacity-50"
+                              >
+                                {actionLoading === reviewActionId ? 'Saving...' : 'Reject'}
+                              </button>
+                            </>
+                          )}
                           </div>
                         </div>
                       </div>
@@ -620,14 +690,14 @@ export default function AdminPage() {
                         disabled={actionLoading === (selectedRunnerApp.applicationId || selectedRunnerApp.applicantId)}
                         className="rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3.5 transition-colors disabled:opacity-50"
                       >
-                        Approve runner
+                        {actionLoading === (selectedRunnerApp.applicationId || selectedRunnerApp.applicantId) ? 'Approving runner...' : 'Approve runner'}
                       </button>
                       <button
                         onClick={() => handleRunnerReview('rejected', selectedRunnerApp)}
                         disabled={actionLoading === (selectedRunnerApp.applicationId || selectedRunnerApp.applicantId)}
                         className="rounded-2xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 font-semibold py-3.5 transition-colors disabled:opacity-50"
                       >
-                        Reject application
+                        {actionLoading === (selectedRunnerApp.applicationId || selectedRunnerApp.applicantId) ? 'Saving decision...' : 'Reject application'}
                       </button>
                     </div>
                   ) : (
