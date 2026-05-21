@@ -82,6 +82,7 @@ export default function MarketplaceApp() {
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [bootstrapTimedOut, setBootstrapTimedOut] = useState(false);
   const [onboarded, setOnboarded] = useState(false);
   const [showPushPrompt, setShowPushPrompt] = useState(false);
   const { permission, isSubscribed, isSupported, subscribe } = usePushNotifications(user?.id || null);
@@ -106,6 +107,16 @@ export default function MarketplaceApp() {
     if (params.has('tab') || params.has('chatId') || params.has('taskId')) {
       window.history.replaceState(null, '', window.location.pathname + window.location.hash);
     }
+  }, []);
+
+  useEffect(() => {
+    setBootstrapTimedOut(false);
+    const timer = window.setTimeout(() => {
+      setBootstrapTimedOut(true);
+      setLoading(false);
+    }, 12000);
+
+    return () => window.clearTimeout(timer);
   }, []);
 
   // Sync Clerk user → DB user
@@ -258,7 +269,7 @@ export default function MarketplaceApp() {
   }, []);
 
   // Loading screen
-  if (!clerkLoaded || loading) {
+  if ((!clerkLoaded || loading) && !bootstrapTimedOut) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
@@ -266,6 +277,37 @@ export default function MarketplaceApp() {
           <h1 className="font-bold text-xl mb-1">UNILAG Marketplace</h1>
           <p className="text-sm text-muted-foreground">Loading campus marketplace...</p>
           <div className="mt-4 w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+        </div>
+      </div>
+    );
+  }
+
+  if (bootstrapTimedOut && !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <div className="text-center max-w-sm">
+          <img src="/logo.png" alt="UNILAG" className="w-16 h-16 rounded-2xl mx-auto mb-4 shadow-lg" />
+          <h1 className="font-bold text-2xl mb-2">UNILAG Marketplace</h1>
+          <p className="text-sm text-muted-foreground mb-6">
+            The app took too long to finish loading. This is usually a stale session or mobile browser cache issue.
+          </p>
+          <div className="space-y-3">
+            <button
+              onClick={() => window.location.reload()}
+              className="w-full py-3 bg-primary text-primary-foreground rounded-xl text-base font-bold shadow-md hover:bg-primary/90 transition-colors"
+            >
+              Retry Loading
+            </button>
+            <a
+              href="/sign-in"
+              className="block w-full py-3 border border-border rounded-xl text-base font-medium hover:bg-muted transition-colors"
+            >
+              Open Sign In
+            </a>
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-4">
+            If this keeps happening on phone, clear the site data for this domain and reopen it.
+          </p>
         </div>
       </div>
     );

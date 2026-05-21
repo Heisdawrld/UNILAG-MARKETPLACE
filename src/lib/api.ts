@@ -3,7 +3,10 @@ const BASE = '';
 
 export const api = {
   get: async (url: string) => {
-    const res = await fetch(BASE + url);
+    const res = await fetch(BASE + url, {
+      cache: 'no-store',
+      credentials: 'same-origin',
+    });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: `API Error: ${res.status}` }));
       throw new Error(err.error || `API Error: ${res.status}`);
@@ -14,6 +17,8 @@ export const api = {
     const res = await fetch(BASE + url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
+      credentials: 'same-origin',
       body: JSON.stringify(body || {}),
     });
     if (!res.ok) {
@@ -26,6 +31,8 @@ export const api = {
     const res = await fetch(BASE + url, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
+      credentials: 'same-origin',
       body: JSON.stringify(body),
     });
     if (!res.ok) {
@@ -35,7 +42,11 @@ export const api = {
     return res.json();
   },
   del: async (url: string) => {
-    const res = await fetch(url, { method: 'DELETE' });
+    const res = await fetch(url, {
+      method: 'DELETE',
+      cache: 'no-store',
+      credentials: 'same-origin',
+    });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Delete failed' }));
       throw new Error(err.error || 'Delete failed');
