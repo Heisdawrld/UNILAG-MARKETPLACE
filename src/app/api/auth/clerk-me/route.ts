@@ -1,5 +1,6 @@
 import { db, isDatabaseAvailable } from '@/lib/db';
 import { NextResponse } from 'next/server';
+import { findUserProfileByClerkId, findUserProfileByEmail, findUserProfileById } from '@/lib/user-profile';
 
 const clerkPubKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || '';
 const clerkSecKey = process.env.CLERK_SECRET_KEY || '';
@@ -9,18 +10,6 @@ const isClerkConfigured = !!(
   !clerkPubKey.includes('your_key') && !clerkSecKey.includes('your_key') &&
   clerkPubKey.startsWith('pk_')
 );
-
-const USER_SELECT = {
-  id: true, username: true, email: true, avatar: true,
-  faculty: true, department: true, level: true, bio: true,
-  phone: true, whatsapp: true, hostel: true,
-  verificationStatus: true, trustScore: true,
-  ratingAverage: true, totalReviews: true, role: true,
-  isRunner: true, runnerRating: true, tasksCompleted: true,
-  runnerAvailabilityStatus: true, runnerLastActiveAt: true,
-  runnerCurrentLat: true, runnerCurrentLng: true, runnerLocationUpdatedAt: true,
-  clerkId: true, createdAt: true, updatedAt: true,
-} as const;
 
 export async function GET() {
   if (!isDatabaseAvailable()) {
@@ -39,10 +28,7 @@ export async function GET() {
     }
 
     // Find user by clerkId
-    let user = await db.user.findUnique({
-      where: { clerkId: userId },
-      select: USER_SELECT,
-    });
+    let user = await findUserProfileByClerkId(userId);
 
     if (user) return NextResponse.json(user);
 
@@ -60,11 +46,11 @@ export async function GET() {
     // Check if email already exists (link existing user)
     const existingByEmail = email ? await db.user.findUnique({ where: { email } }) : null;
     if (existingByEmail) {
-      user = await db.user.update({
+      await db.user.update({
         where: { email },
         data: { clerkId: userId, avatar: clerkUser.imageUrl || existingByEmail.avatar },
-        select: USER_SELECT,
       });
+      user = await findUserProfileByEmail(email);
       return NextResponse.json(user);
     }
 
@@ -77,7 +63,7 @@ export async function GET() {
     }
 
     // Create new user
-    user = await db.user.create({
+    const createdUser = await db.user.create({
       data: {
         clerkId: userId,
         username: uniqueUsername,
@@ -86,8 +72,8 @@ export async function GET() {
         verificationStatus: 'email_verified',
         trustScore: 0, ratingAverage: 0, totalReviews: 0, role: 'user',
       },
-      select: USER_SELECT,
     });
+    user = await findUserProfileById(createdUser.id);
 
     return NextResponse.json(user);
   } catch (error) {

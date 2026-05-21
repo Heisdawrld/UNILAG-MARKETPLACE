@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/api';
 import { User as UserType, Listing, Notification as AppNotification } from '@/lib/types';
-import { getInitials } from '@/lib/marketplace-utils';
+import { getInitials, getListingDisplayAvatar, getListingDisplayName, isListingDisplayVerified } from '@/lib/marketplace-utils';
 import { ListingCard, ListingCardSkeleton } from './ListingCard';
 
 const CATEGORY_ICONS: Record<string, typeof Smartphone> = {
@@ -297,22 +297,33 @@ export default function HomeFeed({
             <h2 className="font-bold text-lg">Top Sellers</h2>
           </div>
           <div className="flex gap-3 overflow-x-auto hide-scrollbar pb-2">
-            {Array.from(new Map(listings.map(l => [l.seller.id, l.seller])).values())
-              .filter(s => s.verificationStatus === 'unilag_verified')
+            {Array.from(
+              new Map(
+                listings
+                  .filter((listing) => listing.store || listing.seller.verificationStatus === 'unilag_verified')
+                  .map((listing) => [listing.store?.id || listing.seller.id, listing])
+              ).values()
+            )
               .slice(0, 5)
-              .map(seller => (
-                <div key={seller.id} className="flex-shrink-0 flex flex-col items-center gap-1.5 p-3 rounded-xl bg-card border shadow-sm w-20">
+              .map((listing) => {
+                const displayName = getListingDisplayName(listing);
+                const displayAvatar = getListingDisplayAvatar(listing);
+                const isVerified = isListingDisplayVerified(listing);
+
+                return (
+                <div key={listing.store?.id || listing.seller.id} className="flex-shrink-0 flex flex-col items-center gap-1.5 p-3 rounded-xl bg-card border shadow-sm w-20">
                   <Avatar className="w-12 h-12">
-                    <AvatarImage src={seller.avatar || undefined} />
-                    <AvatarFallback>{getInitials(seller.username)}</AvatarFallback>
+                    <AvatarImage src={displayAvatar || undefined} />
+                    <AvatarFallback>{getInitials(displayName)}</AvatarFallback>
                   </Avatar>
-                  <span className="text-[11px] font-medium text-center truncate w-full">{seller.username.replace('_', ' ')}</span>
+                  <span className="text-[11px] font-medium text-center truncate w-full">{displayName.replace('_', ' ')}</span>
                   <div className="flex items-center gap-0.5">
                     <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                    <span className="text-[10px]">{seller.ratingAverage.toFixed(1)}</span>
+                    <span className="text-[10px]">{listing.seller.ratingAverage.toFixed(1)}</span>
                   </div>
+                  {isVerified && <Badge variant="secondary" className="px-1.5 py-0 text-[8px] leading-4">Verified</Badge>}
                 </div>
-              ))}
+              )})}
           </div>
         </section>
       </div>

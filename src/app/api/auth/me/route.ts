@@ -1,6 +1,7 @@
 import { db, isDatabaseAvailable } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
+import { findUserProfileByEmail, findUserProfileById } from '@/lib/user-profile';
 
 export async function GET(request: NextRequest) {
   if (!isDatabaseAvailable()) {
@@ -14,20 +15,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Email query parameter is required' }, { status: 400 });
     }
 
-    const user = await db.user.findUnique({
-      where: { email },
-      select: {
-        id: true, username: true, email: true, avatar: true,
-        faculty: true, department: true, level: true, bio: true,
-        phone: true, whatsapp: true, hostel: true,
-        verificationStatus: true, trustScore: true,
-        ratingAverage: true, totalReviews: true, role: true,
-        isRunner: true, runnerRating: true, tasksCompleted: true,
-        runnerAvailabilityStatus: true, runnerLastActiveAt: true,
-        runnerCurrentLat: true, runnerCurrentLng: true, runnerLocationUpdatedAt: true,
-        createdAt: true, updatedAt: true,
-      },
-    });
+    const user = await findUserProfileByEmail(email);
 
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
@@ -81,7 +69,8 @@ export async function PATCH(request: NextRequest) {
       data: updateData,
     });
 
-    return NextResponse.json(user);
+    const profile = await findUserProfileById(user.id);
+    return NextResponse.json(profile ?? user);
   } catch (error) {
     console.error('Error updating profile:', error);
     return NextResponse.json({ error: 'Failed to update profile' }, { status: 500 });
