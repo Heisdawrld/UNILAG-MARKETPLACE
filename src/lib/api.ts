@@ -42,7 +42,7 @@ export const api = {
     return res.json();
   },
   del: async (url: string) => {
-    const res = await fetch(url, {
+    const res = await fetch(BASE + url, {
       method: 'DELETE',
       cache: 'no-store',
       credentials: 'same-origin',

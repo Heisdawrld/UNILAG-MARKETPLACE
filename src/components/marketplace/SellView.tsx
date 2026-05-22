@@ -366,7 +366,7 @@ export default function SellView({ user, onListingCreated }: { user: UserType; o
         <Label className="text-sm font-medium mb-1.5 block">Price (₦) *</Label>
         <div className="relative">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">₦</span>
-          <Input type="number" placeholder="0" value={price} onChange={e => setPrice(e.target.value)} className="pl-8" min="0" />
+          <Input type="number" placeholder="0" value={price} onChange={e => setPrice(e.target.value)} className="pl-8" min="1" />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3">

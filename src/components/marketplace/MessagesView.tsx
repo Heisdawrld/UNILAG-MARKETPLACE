@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Send, ArrowLeft, CheckCircle, Star, Package } from 'lucide-react';
+import { Send, ArrowLeft, CheckCircle, Star, Package, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
+import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
 import { User as UserType, Chat, Message } from '@/lib/types';
 import { timeAgo, getInitials, getListingFirstImage } from '@/lib/marketplace-utils';
@@ -48,7 +49,7 @@ function ReviewModal({ seller, onSubmit, onClose }: { seller: any; onSubmit: (ra
         {/* Star rating */}
         <div className="flex justify-center gap-1 mb-4">
           {[1, 2, 3, 4, 5].map(s => (
-            <button key={s} onClick={() => setRating(s)} className="p-1 transition-transform hover:scale-110">
+            <button key={s} onClick={() => setRating(s)} aria-label={`Rate ${s} out of 5 stars`} aria-pressed={s === rating} className="p-1 transition-transform hover:scale-110">
               <Star className={`w-8 h-8 ${s <= rating ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground/30'}`} />
             </button>
           ))}
@@ -81,6 +82,7 @@ function ReviewModal({ seller, onSubmit, onClose }: { seller: any; onSubmit: (ra
 }
 
 function ChatDetail({ chat, user, onBack }: { chat: Chat; user: UserType; onBack: () => void }) {
+  const { toast } = useToast();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMsg, setNewMsg] = useState('');
   const [sending, setSending] = useState(false);
@@ -117,7 +119,10 @@ function ChatDetail({ chat, user, onBack }: { chat: Chat; user: UserType; onBack
       await api.post('/api/messages', { chatId: chat.id, senderId: user.id, message: newMsg.trim() });
       setNewMsg('');
       fetchMessages();
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      toast({ title: 'Failed to send message', description: 'Please try again.', variant: 'destructive' });
+    }
     finally { setSending(false); }
   };
 
@@ -284,7 +289,10 @@ export default function MessagesView({
         <h1 className="font-bold text-lg">Messages</h1>
       </div>
       {loading ? (
-        <div className="p-8 text-center text-muted-foreground">Loading chats...</div>
+        <div className="p-8 flex flex-col items-center justify-center gap-3 text-muted-foreground">
+          <Loader2 className="w-6 h-6 animate-spin" />
+          <p className="text-sm">Loading chats...</p>
+        </div>
       ) : chats.length === 0 ? (
         <div className="p-8 text-center text-muted-foreground">
           <p className="font-medium">No messages yet</p>

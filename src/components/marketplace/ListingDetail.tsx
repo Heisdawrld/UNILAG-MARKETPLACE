@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Heart, Share2, MapPin, Clock, Eye, Shield, Star, MessageCircle, Phone, ChevronLeft, ChevronRight, CreditCard, Banknote, Lock, AlertTriangle, Flag, MessageSquare, Zap } from 'lucide-react';
+import { ArrowLeft, Heart, Share2, MapPin, Clock, Eye, Shield, Star, MessageCircle, Phone, ChevronLeft, ChevronRight, CreditCard, Banknote, Lock, AlertTriangle, Flag, MessageSquare, Zap, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,6 +13,54 @@ import { api } from '@/lib/api';
 import { User as UserType, Listing, Review, CONDITION_LABELS, CONDITION_COLORS } from '@/lib/types';
 import { formatPrice, timeAgo, getListingImages, getInitials, getListingDisplayAvatar, getListingDisplayName, isListingDisplayVerified } from '@/lib/marketplace-utils';
 import { motion, AnimatePresence } from 'framer-motion';
+
+const REPORT_REASONS = [
+  { value: 'fake_listing', label: 'Fake or misleading listing' },
+  { value: 'scam', label: 'Scam or fraud' },
+  { value: 'illegal_item', label: 'Illegal item' },
+  { value: 'spam', label: 'Spam' },
+  { value: 'harassment', label: 'Harassment' },
+];
+
+function ReportForm({ listingId, onClose, toast }: { listingId: string; onClose: () => void; toast: ReturnType<typeof useToast>['toast'] }) {
+  const [reason, setReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!reason) return;
+    setSubmitting(true);
+    try {
+      await api.post('/api/reports', { listingId, reason });
+      toast({ title: 'Report submitted', description: 'Our team will review this listing.' });
+      onClose();
+    } catch {
+      toast({ title: 'Failed to submit report', variant: 'destructive' });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3 pt-1">
+      {REPORT_REASONS.map(r => (
+        <button
+          key={r.value}
+          onClick={() => setReason(r.value)}
+          className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition-colors ${reason === r.value ? 'border-destructive bg-destructive/5 text-destructive font-medium' : 'border-border hover:border-muted-foreground/40'}`}
+        >
+          {r.label}
+        </button>
+      ))}
+      <div className="flex gap-2 pt-1">
+        <Button variant="outline" className="flex-1" onClick={onClose}>Cancel</Button>
+        <Button variant="destructive" className="flex-1" disabled={!reason || submitting} onClick={handleSubmit}>
+          {submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+          {submitting ? 'Submitting...' : 'Submit Report'}
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export default function ListingDetail({
   listingId, user, onBack, onStartChat, isSaved, onToggleSave,
@@ -166,7 +214,7 @@ export default function ListingDetail({
               </Avatar>
               <div className="flex-1">
                 <div className="flex items-center gap-1.5">
-                  <span className="font-semibold text-sm">{displayName}</span>
+                  <span className="font-semibold text-sm truncate max-w-[160px]">{displayName}</span>
                   {isVerifiedDisplay && (
                     <Shield className="w-4 h-4 text-emerald-500" />
                   )}
@@ -223,9 +271,11 @@ export default function ListingDetail({
         </Card>
 
         {/* Report */}
-        <button onClick={() => toast({ title: 'Report submitted', description: 'Our team will review this listing' })} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-destructive transition-colors">
-          <Flag className="w-3.5 h-3.5" /> Report this listing
-        </button>
+        {!isOwner && (
+          <button onClick={() => setShowReport(true)} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-destructive transition-colors">
+            <Flag className="w-3.5 h-3.5" /> Report this listing
+          </button>
+        )}
 
         {/* Spacer for bottom bar */}
         <div className="h-20" />
@@ -343,6 +393,19 @@ export default function ListingDetail({
               <MessageCircle className="w-4 h-4 mr-2" /> Message Store Instead
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Report Modal */}
+      <Dialog open={showReport} onOpenChange={setShowReport}>
+        <DialogContent className="max-w-sm mx-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Flag className="w-5 h-5 text-destructive" /> Report Listing
+            </DialogTitle>
+            <DialogDescription>Select a reason and we'll review this listing promptly.</DialogDescription>
+          </DialogHeader>
+          <ReportForm listingId={listing.id} onClose={() => setShowReport(false)} toast={toast} />
         </DialogContent>
       </Dialog>
 

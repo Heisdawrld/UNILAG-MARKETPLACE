@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Search, SlidersHorizontal, Store as StoreIcon, ShoppingBag, Star, Users, MapPin, Shield, ExternalLink } from 'lucide-react';
+import { Search, SlidersHorizontal, Store as StoreIcon, ShoppingBag, Star, Users, MapPin, Shield, ExternalLink, ArrowLeft } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -152,8 +152,8 @@ export default function SearchView({
           {selectedStore.banner && (
             <img src={selectedStore.banner} alt="" className="w-full h-full object-cover" />
           )}
-          <button onClick={() => setSelectedStore(null)} style={{ top: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }} className="absolute left-3 p-2 rounded-full bg-background/80 backdrop-blur-sm">
-            <Search className="w-4 h-4" />
+          <button onClick={() => setSelectedStore(null)} aria-label="Back to search" style={{ top: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }} className="absolute left-3 p-2 rounded-full bg-background/80 backdrop-blur-sm">
+            <ArrowLeft className="w-4 h-4" />
           </button>
         </div>
 

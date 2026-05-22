@@ -41,10 +41,16 @@ export function ListingCard({
           )}
           <button
             onClick={(e) => { e.stopPropagation(); onToggleSave(); }}
+            aria-label={isSaved ? 'Remove from saved' : 'Save listing'}
             className="absolute bottom-2 right-2 p-1.5 rounded-full bg-white/90 dark:bg-black/70 hover:bg-white transition-colors"
           >
             <Heart className={`w-4 h-4 ${isSaved ? 'fill-red-500 text-red-500' : 'text-gray-600'}`} />
           </button>
+          {listing.status === 'sold' && (
+            <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+              <span className="bg-black/80 text-white text-xs font-bold px-3 py-1 rounded-full tracking-wide">SOLD</span>
+            </div>
+          )}
         </div>
         <CardContent className="p-3">
           <h3 className="font-semibold text-sm line-clamp-2 leading-tight mb-1">{listing.title}</h3>

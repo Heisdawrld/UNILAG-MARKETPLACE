@@ -7,6 +7,7 @@ import { Home, Search, PlusCircle, Route, MessageCircle, User, Bell } from 'luci
 import { api } from '@/lib/api';
 import { User as UserType, ViewTab, SavedListing } from '@/lib/types';
 import { usePushNotifications } from '@/hooks/use-push';
+import { useToast } from '@/hooks/use-toast';
 
 // Lazy load tab components
 const HomeFeed = lazy(() => import('@/components/marketplace/HomeFeed'));
@@ -36,7 +37,7 @@ function BottomNav({ activeTab, onTabChange }: { activeTab: ViewTab; onTabChange
   const renderTab = (id: ViewTab, Icon: typeof Home, label: string) => {
     const isActive = activeTab === id;
     return (
-      <button key={id} onClick={() => onTabChange(id)} className={`relative flex flex-col items-center justify-center py-2.5 px-2 transition-all ${isActive ? 'text-primary' : 'text-muted-foreground'}`}>
+      <button key={id} onClick={() => onTabChange(id)} aria-current={isActive ? 'page' : undefined} aria-label={label} className={`relative flex flex-col items-center justify-center py-2.5 px-2 transition-all ${isActive ? 'text-primary' : 'text-muted-foreground'}`}>
         <Icon className={`w-5 h-5 ${isActive ? 'scale-110' : ''} transition-transform`} />
         <span className="text-[9px] mt-0.5 font-medium">{label}</span>
         {isActive && <div className="absolute top-0 left-1/4 right-1/4 h-0.5 bg-primary rounded-full" />}
@@ -74,6 +75,7 @@ function TabLoading() {
 // ── Main App ──
 export default function MarketplaceApp() {
   const { user: clerkUser, isLoaded: clerkLoaded, isSignedIn } = useUser();
+  const { toast } = useToast();
   const [user, setUser] = useState<UserType | null>(null);
   const [activeTab, setActiveTab] = useState<ViewTab>('home');
   const [selectedListingId, setSelectedListingId] = useState<string | null>(null);
@@ -152,7 +154,7 @@ export default function MarketplaceApp() {
       const email = clerkUser.primaryEmailAddress?.emailAddress;
       if (email) {
         try {
-          const data = await api.get(`/api/auth/me?email=${encodeURIComponent(email)}`);
+          const data = await api.get('/api/auth/me');
           if (data?.id) { setUser(data); setLoading(false); return; }
         } catch { }
 
@@ -207,8 +209,17 @@ export default function MarketplaceApp() {
         await api.post('/api/saved', { userId: user.id, listingId });
         setSavedIds(prev => new Set(prev).add(listingId));
       }
-    } catch (e) { console.error(e); }
-  }, [user, savedIds]);
+    } catch (e) {
+      console.error(e);
+      toast({ title: 'Could not update saved listings', variant: 'destructive' });
+      // Revert optimistic update
+      setSavedIds(prev => {
+        const n = new Set(prev);
+        if (savedIds.has(listingId)) n.add(listingId); else n.delete(listingId);
+        return n;
+      });
+    }
+  }, [user, savedIds, toast]);
 
   const handleTabChange = useCallback((tab: ViewTab) => {
     setActiveTab(tab);
