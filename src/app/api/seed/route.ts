@@ -8,12 +8,11 @@ export async function POST(request: NextRequest) {
       { status: 503 }
     );
   }
-  // Allow seeding with a secret key in production, or freely in development
+  // Always require a seed key — set SEED_SECRET_KEY in .env.local for development
   const seedKey = request.headers.get('x-seed-key');
-  if (process.env.NODE_ENV === 'production') {
-    if (!seedKey || seedKey !== process.env.SEED_SECRET_KEY) {
-      return NextResponse.json({ error: 'Seeding requires a valid seed key in production' }, { status: 403 });
-    }
+  const requiredKey = process.env.SEED_SECRET_KEY;
+  if (!requiredKey || !seedKey || seedKey !== requiredKey) {
+    return NextResponse.json({ error: 'Seeding requires a valid x-seed-key header matching SEED_SECRET_KEY' }, { status: 403 });
   }
 
   try {

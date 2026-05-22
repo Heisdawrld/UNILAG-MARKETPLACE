@@ -55,9 +55,7 @@ export async function GET(req: NextRequest) {
             avatar: true,
             runnerRating: true,
             tasksCompleted: true,
-            runnerCurrentLat: true,
-            runnerCurrentLng: true,
-            runnerLocationUpdatedAt: true,
+            // GPS coordinates omitted from public listing — sensitive runner location data
           },
         },
         offers: {
@@ -141,9 +139,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden — you can only create tasks as yourself' }, { status: 403 });
     }
 
+    if (typeof title === 'string' && title.length > 200) {
+      return NextResponse.json({ error: 'Title must be 200 characters or fewer' }, { status: 400 });
+    }
+    if (typeof description === 'string' && description.length > 5000) {
+      return NextResponse.json({ error: 'Description must be 5000 characters or fewer' }, { status: 400 });
+    }
+
     const parsedReward = parseFloat(reward);
     if (!Number.isFinite(parsedReward) || parsedReward <= 0) {
       return NextResponse.json({ error: 'Reward must be a valid amount greater than zero' }, { status: 400 });
+    }
+    if (parsedReward > 1_000_000) {
+      return NextResponse.json({ error: 'Reward cannot exceed ₦1,000,000' }, { status: 400 });
     }
 
     const pickup = {

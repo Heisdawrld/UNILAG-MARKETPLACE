@@ -1,3 +1,4 @@
+import { auth } from '@clerk/nextjs/server';
 import { db, isDatabaseAvailable } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -8,11 +9,21 @@ export async function POST(request: NextRequest) {
       { status: 503 }
     );
   }
+
   try {
+    const { userId: clerkId } = await auth();
+    if (!clerkId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const authUser = await db.user.findUnique({ where: { clerkId }, select: { id: true } });
+    if (!authUser) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
     const body = await request.json();
     const { listingId, paymentReference, flutterwaveTxRef, amount, durationDays = 7 } = body;
 
-    // ── Validate required fields ──
     if (!listingId || !amount) {
       return NextResponse.json(
         { error: 'Missing required fields: listingId, amount' },
@@ -20,29 +31,40 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── Verify listing exists ──
     const listing = await db.listing.findUnique({
       where: { id: listingId },
-      select: {
-        id: true,
-        sellerId: true,
-        title: true,
-        boosted: true,
-      },
+      select: { id: true, sellerId: true, title: true, boosted: true },
     });
 
     if (!listing) {
-      return NextResponse.json(
-        { error: 'Listing not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Listing not found' }, { status: 404 });
     }
 
-    // ── Calculate expiry date ──
+    if (listing.sellerId !== authUser.id) {
+      return NextResponse.json({ error: 'Forbidden — you can only boost your own listings' }, { status: 403 });
+    }
+
+    // Verify a successful payment exists for this boost
+    if (paymentReference) {
+      const payment = await db.payment.findUnique({ where: { id: paymentReference } });
+      if (!payment || payment.status !== 'successful' || payment.userId !== authUser.id) {
+        return NextResponse.json({ error: 'Valid completed payment not found for this boost' }, { status: 400 });
+      }
+    } else if (!flutterwaveTxRef) {
+      return NextResponse.json({ error: 'paymentReference or flutterwaveTxRef is required' }, { status: 400 });
+    }
+
+    // Idempotency: prevent duplicate boosts for the same payment
+    if (flutterwaveTxRef) {
+      const existingBoost = await db.boost.findFirst({ where: { flutterwaveTxRef } });
+      if (existingBoost) {
+        return NextResponse.json(existingBoost);
+      }
+    }
+
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + durationDays);
 
-    // ── Create Boost record ──
     const boost = await db.boost.create({
       data: {
         listingId,
@@ -53,16 +75,11 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // ── Update Listing ──
     await db.listing.update({
       where: { id: listingId },
-      data: {
-        boosted: true,
-        boostedUntil: expiresAt,
-      },
+      data: { boosted: true, boostedUntil: expiresAt },
     });
 
-    // ── Create notification for the seller ──
     await db.notification.create({
       data: {
         userId: listing.sellerId,

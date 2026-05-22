@@ -1,3 +1,4 @@
+import { auth } from '@clerk/nextjs/server';
 import { db, isDatabaseAvailable } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -7,19 +8,40 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json();
-    const { reviewerId, sellerId, rating, comment } = body;
-
-    if (!reviewerId || !sellerId || !rating) {
-      return NextResponse.json({ error: 'reviewerId, sellerId, and rating are required' }, { status: 400 });
+    const { userId: clerkId } = await auth();
+    if (!clerkId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Create the review
+    const authUser = await db.user.findUnique({ where: { clerkId }, select: { id: true } });
+    if (!authUser) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    const body = await request.json();
+    const { sellerId, rating, comment } = body;
+
+    if (!sellerId || !rating) {
+      return NextResponse.json({ error: 'sellerId and rating are required' }, { status: 400 });
+    }
+
+    if (sellerId === authUser.id) {
+      return NextResponse.json({ error: 'Cannot review yourself' }, { status: 400 });
+    }
+
+    if (typeof comment === 'string' && comment.length > 1000) {
+      return NextResponse.json({ error: 'Comment must be 1000 characters or fewer' }, { status: 400 });
+    }
+
     const review = await db.review.create({
-      data: { reviewerId, sellerId, rating: Math.min(5, Math.max(1, rating)), comment: comment || '' },
+      data: {
+        reviewerId: authUser.id,
+        sellerId,
+        rating: Math.min(5, Math.max(1, rating)),
+        comment: typeof comment === 'string' ? comment.trim() : '',
+      },
     });
 
-    // Update seller's rating stats
     const allReviews = await db.review.findMany({ where: { sellerId } });
     const avgRating = allReviews.reduce((sum, r) => sum + r.rating, 0) / allReviews.length;
     const newTrust = Math.min(100, Math.round(50 + avgRating * 10));

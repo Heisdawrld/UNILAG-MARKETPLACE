@@ -1,3 +1,4 @@
+import { auth } from '@clerk/nextjs/server';
 import { db, isDatabaseAvailable } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -8,40 +9,29 @@ export async function GET(request: NextRequest) {
       { status: 503 }
     );
   }
+
   try {
+    const { userId: clerkId } = await auth();
+    if (!clerkId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const authUser = await db.user.findUnique({ where: { clerkId }, select: { id: true } });
+    if (!authUser) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
     const type = searchParams.get('type');
     const status = searchParams.get('status');
     const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
+    const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100);
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'userId query parameter is required' },
-        { status: 400 }
-      );
-    }
+    // Always scope to the authenticated user — ignore any userId query param
+    const where: Record<string, unknown> = { userId: authUser.id };
 
-    // Verify user exists
-    const user = await db.user.findUnique({ where: { id: userId } });
-    if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
-    }
-
-    // Build where clause
-    const where: Record<string, unknown> = { userId };
-
-    if (type) {
-      where.type = type;
-    }
-
-    if (status) {
-      where.status = status;
-    }
+    if (type) where.type = type;
+    if (status) where.status = status;
 
     const skip = (page - 1) * limit;
 

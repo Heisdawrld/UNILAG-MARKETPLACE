@@ -33,8 +33,8 @@ export function getListingImages(images: string, category: string): string[] {
     if (Array.isArray(parsed) && parsed.length > 0) {
       return parsed;
     }
-  } catch {
-    // fallback to placeholder
+  } catch (err) {
+    console.error('[marketplace-utils] Failed to parse listing images JSON:', err);
   }
   return [CATEGORY_PLACEHOLDER_IMAGES[category] || CATEGORY_PLACEHOLDER_IMAGES['Others']];
 }

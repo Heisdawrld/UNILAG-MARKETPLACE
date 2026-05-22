@@ -84,6 +84,15 @@ export async function POST(request: NextRequest) {
     switch (event) {
       case 'charge.completed': {
         if (data.status === 'successful' && data.chargecode === '00' && payment.status === 'pending') {
+          // Verify the amount matches — reject underpayments
+          if (typeof data.amount === 'number' && data.amount < payment.amount) {
+            await db.payment.update({
+              where: { id: payment.id },
+              data: { status: 'failed', flutterwaveId: data.id?.toString() || null },
+            });
+            break;
+          }
+
           await db.payment.update({
             where: { id: payment.id },
             data: {
@@ -104,43 +113,44 @@ export async function POST(request: NextRequest) {
           const userId = metadata.userId || payment.userId;
 
           if (paymentType === 'boost' && listingId) {
-            const plan = getBoostPlan(payment.amount);
-            const expiresAt = new Date();
-            expiresAt.setHours(expiresAt.getHours() + plan.durationHours);
+            // Idempotency: skip if a boost already exists for this transaction
+            const existingBoost = await db.boost.findFirst({ where: { flutterwaveTxRef: data.tx_ref } });
+            if (!existingBoost) {
+              const plan = getBoostPlan(payment.amount);
+              const expiresAt = new Date();
+              expiresAt.setHours(expiresAt.getHours() + plan.durationHours);
 
-            await db.boost.create({
-              data: {
-                listingId,
-                paymentReference: payment.id,
-                flutterwaveTxRef: data.tx_ref,
-                amount: payment.amount,
-                planId: plan.planId,
-                expiresAt,
-              },
-            });
-
-            await db.listing.update({
-              where: { id: listingId },
-              data: {
-                boosted: true,
-                boostedUntil: expiresAt,
-              },
-            });
-
-            const listing = await db.listing.findUnique({
-              where: { id: listingId },
-              select: { sellerId: true, title: true },
-            });
-
-            if (listing) {
-              await db.notification.create({
+              await db.boost.create({
                 data: {
-                  userId: listing.sellerId,
-                  type: 'boost_expiry',
-                  title: 'Listing Boosted!',
-                  message: `Your listing "${listing.title}" has been boosted for ${plan.durationHours} hours.`,
+                  listingId,
+                  paymentReference: payment.id,
+                  flutterwaveTxRef: data.tx_ref,
+                  amount: payment.amount,
+                  planId: plan.planId,
+                  expiresAt,
                 },
               });
+
+              await db.listing.update({
+                where: { id: listingId },
+                data: { boosted: true, boostedUntil: expiresAt },
+              });
+
+              const listing = await db.listing.findUnique({
+                where: { id: listingId },
+                select: { sellerId: true, title: true },
+              });
+
+              if (listing) {
+                await db.notification.create({
+                  data: {
+                    userId: listing.sellerId,
+                    type: 'boost_expiry',
+                    title: 'Listing Boosted!',
+                    message: `Your listing "${listing.title}" has been boosted for ${plan.durationHours} hours.`,
+                  },
+                });
+              }
             }
           }
 

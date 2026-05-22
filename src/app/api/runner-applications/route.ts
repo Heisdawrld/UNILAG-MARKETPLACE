@@ -14,34 +14,8 @@ import {
 import type { RunnerApplication } from '@/lib/types';
 
 const MAX_IMAGE_LENGTH = 2_500_000;
-const clerkPubKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || '';
-const clerkSecKey = process.env.CLERK_SECRET_KEY || '';
-const isClerkConfigured = !!(
-  clerkPubKey &&
-  clerkSecKey &&
-  clerkPubKey !== 'undefined' &&
-  clerkSecKey !== 'undefined' &&
-  clerkPubKey.startsWith('pk_')
-);
 
 async function getAuthenticatedUser() {
-  if (!isClerkConfigured) {
-    return db.user.findFirst({
-      orderBy: { createdAt: 'asc' },
-      select: {
-        id: true,
-        username: true,
-        email: true,
-        phone: true,
-        whatsapp: true,
-        faculty: true,
-        hostel: true,
-        role: true,
-        isRunner: true,
-      },
-    });
-  }
-
   const { userId: clerkId } = await auth();
   if (!clerkId) return null;
 

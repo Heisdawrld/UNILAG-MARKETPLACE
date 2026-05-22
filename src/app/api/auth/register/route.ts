@@ -1,3 +1,4 @@
+import { auth } from '@clerk/nextjs/server';
 import { db, isDatabaseAvailable } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { findUserProfileByEmail, findUserProfileById } from '@/lib/user-profile';
@@ -8,18 +9,28 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    // Require a valid Clerk session — clerkId comes from the session, not the request body
+    const { userId: clerkId } = await auth();
+    if (!clerkId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
-    const { clerkId, username, email, avatar } = body;
+    const { username, email, avatar } = body;
 
     if (!email) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 });
     }
 
+    if (typeof email === 'string' && email.length > 254) {
+      return NextResponse.json({ error: 'Invalid email' }, { status: 400 });
+    }
+
     // Check if user already exists by email
     const existing = await db.user.findUnique({ where: { email } });
     if (existing) {
-      // Link Clerk ID if not already linked
-      if (clerkId && !existing.clerkId) {
+      // Link session Clerk ID if not already linked
+      if (!existing.clerkId) {
         const updated = await db.user.update({
           where: { email },
           data: { clerkId },
@@ -39,10 +50,10 @@ export async function POST(request: NextRequest) {
       counter++;
     }
 
-    // Create new user
+    // Create new user using the validated session clerkId
     const user = await db.user.create({
       data: {
-        clerkId: clerkId || null,
+        clerkId,
         username: uniqueUsername,
         email,
         avatar: avatar || null,

@@ -1,8 +1,8 @@
 import { auth } from '@clerk/nextjs/server';
 import { db } from '@/lib/db';
 
-const DEFAULT_BOOTSTRAP_ADMIN_EMAILS = ['davidchuks229@gmail.com'];
-const DEFAULT_BOOTSTRAP_ADMIN_USERNAMES = ['dawrld'];
+const DEFAULT_BOOTSTRAP_ADMIN_EMAILS: string[] = [];
+const DEFAULT_BOOTSTRAP_ADMIN_USERNAMES: string[] = [];
 
 function parseCsv(value: string | undefined) {
   return new Set(
@@ -65,6 +65,7 @@ export async function requireAdminUser() {
   }
 
   if (canBootstrapAdmin(user)) {
+    console.warn(`[admin-auth] Bootstrap promoting user ${user.id} (${user.email}) to admin role`);
     const upgradedUser = await db.user.update({
       where: { id: user.id },
       data: { role: 'admin' },

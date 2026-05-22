@@ -207,5 +207,12 @@ export function verifyWebhookSignature(
     .update(payload)
     .digest('hex');
 
-  return expectedSignature === signature;
+  // Constant-time comparison prevents timing attacks
+  try {
+    const expectedBuf = Buffer.from(expectedSignature, 'hex');
+    const sigBuf = Buffer.from(signature, 'hex');
+    return expectedBuf.length === sigBuf.length && crypto.timingSafeEqual(expectedBuf, sigBuf);
+  } catch {
+    return false;
+  }
 }

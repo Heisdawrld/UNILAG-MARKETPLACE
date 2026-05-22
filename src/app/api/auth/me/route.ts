@@ -1,21 +1,25 @@
+import { auth } from '@clerk/nextjs/server';
 import { db, isDatabaseAvailable } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { findUserProfileByEmail, findUserProfileById } from '@/lib/user-profile';
+import { findUserProfileById } from '@/lib/user-profile';
 
 export async function GET(request: NextRequest) {
   if (!isDatabaseAvailable()) {
     return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
   }
-  try {
-    const { searchParams } = new URL(request.url);
-    const email = searchParams.get('email');
 
-    if (!email) {
-      return NextResponse.json({ error: 'Email query parameter is required' }, { status: 400 });
+  try {
+    const { userId: clerkId } = await auth();
+    if (!clerkId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const user = await findUserProfileByEmail(email);
+    const authUser = await db.user.findUnique({ where: { clerkId }, select: { id: true } });
+    if (!authUser) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    const user = await findUserProfileById(authUser.id);
 
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
@@ -33,13 +37,11 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
   }
   try {
-    // ── SECURITY: verify Clerk session server-side ──
     const { userId: clerkId } = await auth();
     if (!clerkId) {
       return NextResponse.json({ error: 'Unauthorized — please sign in' }, { status: 401 });
     }
 
-    // Look up our DB user by their Clerk ID
     const authUser = await db.user.findUnique({ where: { clerkId } });
     if (!authUser) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
@@ -48,9 +50,12 @@ export async function PATCH(request: NextRequest) {
     const body = await request.json();
     const { userId, username, avatar, bio, phone, whatsapp, faculty, department, level, hostel } = body;
 
-    // ── SECURITY: ensure the user can only edit THEIR OWN profile ──
     if (userId && userId !== authUser.id) {
       return NextResponse.json({ error: 'Forbidden — cannot edit another user\'s profile' }, { status: 403 });
+    }
+
+    if (typeof bio === 'string' && bio.length > 500) {
+      return NextResponse.json({ error: 'Bio must be 500 characters or fewer' }, { status: 400 });
     }
 
     const updateData: Record<string, unknown> = {};
@@ -76,4 +81,3 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to update profile' }, { status: 500 });
   }
 }
-

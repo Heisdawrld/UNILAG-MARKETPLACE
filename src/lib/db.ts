@@ -44,19 +44,10 @@ function createPrismaClient(): PrismaClient | null {
   // ── Try Turso first (works in both production and development) ──
   if (isValidTursoConfig()) {
     try {
-      // IMPORTANT: Pass config object to PrismaLibSQL, NOT a createClient() instance.
-      // The adapter creates its own libsql client internally.
-      // Also set DATABASE_URL to the Turso URL for Prisma's internal validation.
-      const originalDbUrl = process.env.DATABASE_URL
-      process.env.DATABASE_URL = process.env.TURSO_DATABASE_URL
-
       const adapter = new PrismaLibSQL({
         url: process.env.TURSO_DATABASE_URL!,
         authToken: process.env.TURSO_AUTH_TOKEN!,
       })
-
-      // Restore original DATABASE_URL after adapter creation
-      if (originalDbUrl) process.env.DATABASE_URL = originalDbUrl
 
       console.log('[db] Connected to Turso database')
       return new PrismaClient({ adapter })

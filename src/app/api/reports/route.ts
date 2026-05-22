@@ -1,3 +1,4 @@
+import { auth } from '@clerk/nextjs/server';
 import { db, isDatabaseAvailable } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -8,18 +9,28 @@ export async function POST(request: NextRequest) {
       { status: 503 }
     );
   }
-  try {
-    const body = await request.json();
-    const { reporterId, listingId, reason } = body;
 
-    if (!reporterId || !reason) {
+  try {
+    const { userId: clerkId } = await auth();
+    if (!clerkId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const authUser = await db.user.findUnique({ where: { clerkId }, select: { id: true } });
+    if (!authUser) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    const body = await request.json();
+    const { listingId, reason } = body;
+
+    if (!reason) {
       return NextResponse.json(
-        { error: 'reporterId and reason are required' },
+        { error: 'reason is required' },
         { status: 400 }
       );
     }
 
-    // Validate reason
     const validReasons = ['scam', 'fake_listing', 'harassment', 'spam', 'illegal_item'];
     if (!validReasons.includes(reason)) {
       return NextResponse.json(
@@ -28,16 +39,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if reporter exists
-    const reporter = await db.user.findUnique({ where: { id: reporterId } });
-    if (!reporter) {
-      return NextResponse.json(
-        { error: 'Reporter not found' },
-        { status: 404 }
-      );
-    }
-
-    // If listingId is provided, verify the listing exists
     if (listingId) {
       const listing = await db.listing.findUnique({ where: { id: listingId } });
       if (!listing) {
@@ -50,32 +51,22 @@ export async function POST(request: NextRequest) {
 
     const report = await db.report.create({
       data: {
-        reporterId,
+        reporterId: authUser.id,
         listingId: listingId || null,
         reason,
         status: 'pending',
       },
       include: {
         reporter: {
-          select: {
-            id: true,
-            username: true,
-            avatar: true,
-          },
+          select: { id: true, username: true, avatar: true },
         },
         listing: {
-          select: {
-            id: true,
-            title: true,
-          },
+          select: { id: true, title: true },
         },
       },
     });
 
-    // Create notification for admin
-    const admins = await db.user.findMany({
-      where: { role: 'admin' },
-    });
+    const admins = await db.user.findMany({ where: { role: 'admin' } });
 
     await db.notification.createMany({
       data: admins.map((admin) => ({

@@ -190,6 +190,16 @@ export async function POST(request: NextRequest) {
     if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
       return NextResponse.json({ error: 'Price must be greater than zero' }, { status: 400 });
     }
+    if (parsedPrice > 10_000_000) {
+      return NextResponse.json({ error: 'Price cannot exceed ₦10,000,000' }, { status: 400 });
+    }
+
+    if (typeof title === 'string' && title.length > 200) {
+      return NextResponse.json({ error: 'Title must be 200 characters or fewer' }, { status: 400 });
+    }
+    if (typeof description === 'string' && description.length > 5000) {
+      return NextResponse.json({ error: 'Description must be 5000 characters or fewer' }, { status: 400 });
+    }
 
     const processedImages = await enhanceMarketplaceImages(images, { maxWidth: 1600, maxHeight: 1600, quality: 84 });
 

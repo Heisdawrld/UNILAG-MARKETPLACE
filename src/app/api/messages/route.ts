@@ -147,12 +147,14 @@ export async function POST(request: NextRequest) {
     // Create notification for the other user
     const recipientId = senderId === chat.buyerId ? chat.sellerId : chat.buyerId;
     const senderUser = await db.user.findUnique({ where: { id: senderId }, select: { username: true } });
+    // Strip any HTML-like content from the notification preview to prevent XSS if ever rendered unsafely
+    const safePreview = String(message).replace(/<[^>]*>/g, '').slice(0, 80);
     await db.notification.create({
       data: {
         userId: recipientId,
         type: 'new_message',
-        title: 'New Message 💬',
-        message: `${senderUser?.username || 'Someone'}: ${message.slice(0, 80)}`,
+        title: 'New Message',
+        message: `${senderUser?.username || 'Someone'}: ${safePreview}`,
         data: JSON.stringify({ chatId }),
       },
     });

@@ -70,16 +70,28 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/?payment=error&message=Payment+not+found', request.url));
     }
 
-    const verification = await verifyPayment(transactionId);
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
+    // Idempotency: if already processed, just redirect to success
+    if (payment.status === 'successful') {
+      return NextResponse.redirect(new URL(`/?payment=success&tx_ref=${txRef}`, appUrl));
+    }
+
+    const verification = await verifyPayment(transactionId);
+
     if (verification.status === 'successful' && verification.chargecode === '00') {
+      // Amount verification: reject if Flutterwave charged less than what was recorded
+      if (verification.amount < payment.amount) {
+        await db.payment.update({
+          where: { id: payment.id },
+          data: { status: 'failed', flutterwaveId: transactionId },
+        });
+        return NextResponse.redirect(new URL(`/?payment=failed&tx_ref=${txRef}&reason=amount_mismatch`, appUrl));
+      }
+
       await db.payment.update({
         where: { id: payment.id },
-        data: {
-          status: 'successful',
-          flutterwaveId: transactionId,
-        },
+        data: { status: 'successful', flutterwaveId: transactionId },
       });
 
       let metadata: { userId?: string; listingId?: string; type?: string } = {};
@@ -94,43 +106,44 @@ export async function GET(request: NextRequest) {
       const userId = metadata.userId || payment.userId;
 
       if (paymentType === 'boost' && listingId) {
-        const plan = getBoostPlan(payment.amount);
-        const expiresAt = new Date();
-        expiresAt.setHours(expiresAt.getHours() + plan.durationHours);
+        // Idempotency: only create boost if one doesn't already exist for this txRef
+        const existingBoost = await db.boost.findFirst({ where: { flutterwaveTxRef: txRef } });
+        if (!existingBoost) {
+          const plan = getBoostPlan(payment.amount);
+          const expiresAt = new Date();
+          expiresAt.setHours(expiresAt.getHours() + plan.durationHours);
 
-        await db.boost.create({
-          data: {
-            listingId,
-            paymentReference: payment.id,
-            flutterwaveTxRef: txRef,
-            amount: payment.amount,
-            planId: plan.planId,
-            expiresAt,
-          },
-        });
-
-        await db.listing.update({
-          where: { id: listingId },
-          data: {
-            boosted: true,
-            boostedUntil: expiresAt,
-          },
-        });
-
-        const listing = await db.listing.findUnique({
-          where: { id: listingId },
-          select: { sellerId: true, title: true },
-        });
-
-        if (listing) {
-          await db.notification.create({
+          await db.boost.create({
             data: {
-              userId: listing.sellerId,
-              type: 'boost_expiry',
-              title: 'Listing Boosted!',
-              message: `Your listing "${listing.title}" has been boosted for ${plan.durationHours} hours.`,
+              listingId,
+              paymentReference: payment.id,
+              flutterwaveTxRef: txRef,
+              amount: payment.amount,
+              planId: plan.planId,
+              expiresAt,
             },
           });
+
+          await db.listing.update({
+            where: { id: listingId },
+            data: { boosted: true, boostedUntil: expiresAt },
+          });
+
+          const listing = await db.listing.findUnique({
+            where: { id: listingId },
+            select: { sellerId: true, title: true },
+          });
+
+          if (listing) {
+            await db.notification.create({
+              data: {
+                userId: listing.sellerId,
+                type: 'boost_expiry',
+                title: 'Listing Boosted!',
+                message: `Your listing "${listing.title}" has been boosted for ${plan.durationHours} hours.`,
+              },
+            });
+          }
         }
       }
 
@@ -168,10 +181,7 @@ export async function GET(request: NextRequest) {
 
     await db.payment.update({
       where: { id: payment.id },
-      data: {
-        status: 'failed',
-        flutterwaveId: transactionId,
-      },
+      data: { status: 'failed', flutterwaveId: transactionId },
     });
 
     return NextResponse.redirect(new URL(`/?payment=failed&tx_ref=${txRef}`, appUrl));
