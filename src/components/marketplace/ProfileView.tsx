@@ -3,16 +3,20 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useClerk } from '@clerk/nextjs';
 import {
+  ArrowLeft,
   Camera,
   ChevronRight,
   Edit3,
+  ExternalLink,
   LogOut,
+  MapPin,
   Save,
   Settings,
   Shield,
   Star,
   Store as StoreIcon,
   Trash2,
+  Users,
   PlusCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -100,6 +104,9 @@ export default function ProfileView({
   const [loading, setLoading] = useState(true);
   const [showEdit, setShowEdit] = useState(false);
   const [showStoreManager, setShowStoreManager] = useState(false);
+  const [showMyStore, setShowMyStore] = useState(false);
+  const [storeDetail, setStoreDetail] = useState<Store | null>(null);
+  const [storeDetailLoading, setStoreDetailLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingStore, setSavingStore] = useState(false);
   const [deletingListingId, setDeletingListingId] = useState<string | null>(null);
@@ -219,6 +226,131 @@ export default function ProfileView({
     }
   };
 
+  const loadStoreDetail = async () => {
+    if (!myStore) return;
+    setStoreDetailLoading(true);
+    try {
+      const detail = await api.get(`/api/stores/${myStore.id}`);
+      setStoreDetail(detail);
+      setShowMyStore(true);
+    } catch {
+      toast({ title: 'Failed to load store details', variant: 'destructive' });
+    } finally {
+      setStoreDetailLoading(false);
+    }
+  };
+
+  if (showMyStore && storeDetail) {
+    const store = storeDetail as Store & {
+      listings?: Listing[];
+      owner?: { id: string; username: string; avatar?: string; bio?: string; verificationStatus?: string; ratingAverage?: number; totalReviews?: number; phone?: string; whatsapp?: string; createdAt?: string };
+      _count?: { listings?: number; followers?: number };
+      isFollowing?: boolean;
+    };
+    const listingCount = store._count?.listings ?? store.listings?.length ?? 0;
+    const followerCount = store._count?.followers ?? store.followCount ?? 0;
+
+    return (
+      <div className="pb-4">
+        <div className="sticky top-0 z-30 safe-top bg-background/95 backdrop-blur-md border-b px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={() => { setShowMyStore(false); setStoreDetail(null); }}>
+              <ArrowLeft className="w-4 h-4" />
+            </Button>
+            <h1 className="font-bold text-lg">My Store</h1>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => setShowStoreManager(true)}>
+            <Settings className="w-3.5 h-3.5 mr-1.5" /> Manage
+          </Button>
+        </div>
+
+        <div className="relative h-32 bg-gradient-to-br from-primary/20 to-amber-500/10">
+          {store.banner && <img src={store.banner} alt="" className="w-full h-full object-cover" />}
+        </div>
+
+        <div className="px-4 -mt-8 relative z-10">
+          <div className="flex items-end gap-3">
+            {store.logo ? (
+              <img src={store.logo} alt={store.name} className="w-16 h-16 rounded-2xl object-cover border-4 border-background shadow-lg" />
+            ) : (
+              <div className="w-16 h-16 rounded-2xl bg-primary/10 border-4 border-background shadow-lg flex items-center justify-center">
+                <StoreIcon className="w-7 h-7 text-primary" />
+              </div>
+            )}
+            <div className="flex-1 pb-1">
+              <div className="flex items-center gap-1.5">
+                <h2 className="font-bold text-lg">{store.name}</h2>
+                {store.isVerified && <Shield className="w-4 h-4 text-emerald-500" />}
+              </div>
+              <Badge variant="outline" className="text-[10px]">{store.category}</Badge>
+            </div>
+          </div>
+
+          {store.description && (
+            <p className="text-sm text-muted-foreground mt-3">{store.description}</p>
+          )}
+
+          <div className="flex items-center gap-4 mt-3 text-sm">
+            <div className="text-center">
+              <p className="font-bold">{listingCount}</p>
+              <p className="text-[10px] text-muted-foreground">Products</p>
+            </div>
+            <div className="text-center">
+              <p className="font-bold">{followerCount}</p>
+              <p className="text-[10px] text-muted-foreground">Followers</p>
+            </div>
+            {store.rating != null && store.rating > 0 && (
+              <div className="text-center">
+                <p className="font-bold flex items-center gap-0.5"><Star className="w-3 h-3 fill-amber-400 text-amber-400" /> {store.rating.toFixed(1)}</p>
+                <p className="text-[10px] text-muted-foreground">Rating</p>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-2 mt-3">
+            {store.phone && (
+              <a href={`tel:${store.phone}`} className="text-[11px] px-3 py-1.5 rounded-full bg-primary/10 text-primary font-medium flex items-center gap-1">Call</a>
+            )}
+            {store.whatsapp && (
+              <a href={`https://wa.me/${store.whatsapp.replace(/[^0-9]/g, '')}`} target="_blank" className="text-[11px] px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-600 font-medium flex items-center gap-1">WhatsApp</a>
+            )}
+            {store.instagram && (
+              <a href={`https://instagram.com/${store.instagram.replace('@', '')}`} target="_blank" className="text-[11px] px-3 py-1.5 rounded-full bg-pink-500/10 text-pink-600 font-medium flex items-center gap-1"><ExternalLink className="w-3 h-3" /> Instagram</a>
+            )}
+          </div>
+
+          {store.address && (
+            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1"><MapPin className="w-3 h-3" /> {store.address}</p>
+          )}
+          {store.openHours && (
+            <p className="text-xs text-muted-foreground mt-1"> {store.openHours}</p>
+          )}
+
+          <div className="flex gap-2 mt-4">
+            <Button className="flex-1" size="sm" onClick={() => setShowStoreManager(true)}>
+              <Settings className="w-3.5 h-3.5 mr-1.5" /> Edit Store
+            </Button>
+            <Button className="flex-1" size="sm" variant="outline" onClick={onOpenSell}>
+              <PlusCircle className="w-3.5 h-3.5 mr-1.5" /> Add Product
+            </Button>
+          </div>
+        </div>
+
+        <div className="px-4 mt-6">
+          <h3 className="font-bold text-sm mb-3">Products ({store.listings?.length || 0})</h3>
+          <div className="grid grid-cols-2 gap-3">
+            {store.listings?.map((listing: Listing) => (
+              <ListingCard key={listing.id} listing={listing} onClick={() => onSelectListing(listing.id)} isSaved={savedIds.has(listing.id)} onToggleSave={() => onToggleSave(listing.id)} />
+            ))}
+          </div>
+          {(!store.listings || store.listings.length === 0) && (
+            <p className="text-center py-8 text-sm text-muted-foreground">No products listed yet</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="sticky top-0 z-30 safe-top bg-background/95 backdrop-blur-md border-b px-4 py-3 flex items-center justify-between">
@@ -227,7 +359,7 @@ export default function ProfileView({
           <Button variant="ghost" size="icon" onClick={() => setShowEdit(true)}>
             <Edit3 className="w-4 h-4" />
           </Button>
-          <Button variant="ghost" size="icon" onClick={() => signOut()}>
+          <Button variant="ghost" size="icon" onClick={() => signOut({ redirectUrl: '/' })}>
             <LogOut className="w-4 h-4 text-destructive" />
           </Button>
         </div>
@@ -310,10 +442,13 @@ export default function ProfileView({
                 </div>
                 <div className="flex gap-2">
                   <Button size="sm" className="flex-1" onClick={() => setShowStoreManager(true)}>
-                    <Settings className="w-3.5 h-3.5 mr-1.5" /> Manage Store
+                    <Settings className="w-3.5 h-3.5 mr-1.5" /> Manage
+                  </Button>
+                  <Button size="sm" variant="secondary" className="flex-1" onClick={loadStoreDetail} disabled={storeDetailLoading}>
+                    <StoreIcon className="w-3.5 h-3.5 mr-1.5" /> View Store
                   </Button>
                   <Button size="sm" variant="outline" className="flex-1" onClick={onOpenSell}>
-                    <PlusCircle className="w-3.5 h-3.5 mr-1.5" /> Add Product
+                    <PlusCircle className="w-3.5 h-3.5 mr-1.5" /> Add
                   </Button>
                 </div>
               </div>

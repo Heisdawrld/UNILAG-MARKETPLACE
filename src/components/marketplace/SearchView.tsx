@@ -266,10 +266,26 @@ export default function SearchView({
     );
   }
 
+  const hasActiveFilters = search || category || showFilters || negotiable || priceRange[0] > 0 || priceRange[1] < 600000;
+
+  const clearAllFilters = () => {
+    setSearch('');
+    setCategory('');
+    setSortBy('newest');
+    setShowFilters(false);
+    setNegotiable(false);
+    setPriceRange([0, 600000]);
+  };
+
   return (
     <div>
       <div className="sticky top-0 z-30 safe-top bg-background/95 backdrop-blur-md border-b px-4 py-3 space-y-3">
         <div className="flex items-center gap-2">
+          {hasActiveFilters && (
+            <Button variant="ghost" size="icon" onClick={clearAllFilters} className="h-10 w-10" aria-label="Clear all filters">
+              <ArrowLeft className="w-4 h-4" />
+            </Button>
+          )}
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input placeholder={searchTab === 'products' ? 'Search products...' : 'Search stores & services...'} value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-10 bg-muted/50" />

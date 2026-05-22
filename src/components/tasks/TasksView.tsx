@@ -53,6 +53,7 @@ import {
 } from '@/lib/types';
 import { formatPrice, timeAgo, getInitials } from '@/lib/marketplace-utils';
 import { getRunnerPricingGuide, type RunnerPricingGuide } from '@/lib/runner-pricing';
+import CampusMap, { type RunnerLocation } from '@/components/map/CampusMap';
 
 const RUNNER_STORAGE_KEY_PREFIX = 'unilag_runner_mode:';
 const APP_STEP_LABELS = ['About you', 'Runner profile', 'Verification'];
@@ -854,40 +855,24 @@ function CampusMapPreview({
           <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Campus route</p>
           <p className="text-sm font-semibold">UNILAG service area</p>
         </div>
-        <Badge variant="outline" className="rounded-full">Map preview</Badge>
+        <Badge variant="outline" className="rounded-full">Live map</Badge>
       </div>
 
-      <div className="relative h-52 rounded-[1.5rem] overflow-hidden border bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.16),_transparent_38%),linear-gradient(135deg,_rgba(255,255,255,0.95),_rgba(226,232,240,0.95))]">
-        <div className="absolute inset-0 opacity-60">
-          <div className="absolute left-[12%] top-[16%] h-px w-[70%] bg-emerald-200 rotate-[18deg]" />
-          <div className="absolute left-[8%] top-[58%] h-px w-[76%] bg-slate-300 rotate-[-10deg]" />
-          <div className="absolute left-[34%] top-[10%] h-[76%] w-px bg-slate-200" />
-          <div className="absolute left-[58%] top-[18%] h-[68%] w-px bg-slate-200" />
-        </div>
+      <div className="h-52 rounded-[1.5rem] overflow-hidden">
+        <CampusMap
+          pickupLat={pickupPoint?.lat ?? null}
+          pickupLng={pickupPoint?.lng ?? null}
+          dropoffLat={dropoffPoint?.lat ?? null}
+          dropoffLng={dropoffPoint?.lng ?? null}
+          showUserLocation={false}
+          interactive={false}
+          className="h-full w-full"
+        />
+      </div>
 
-        {CAMPUS_POINTS.map((point) => {
-          const isPickup = pickupPoint?.id === point.id;
-          const isDropoff = dropoffPoint?.id === point.id;
-          return (
-            <div
-              key={point.id}
-              className="absolute -translate-x-1/2 -translate-y-1/2"
-              style={{ left: point.x, top: point.y }}
-            >
-              <div className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${isPickup ? 'border-emerald-600 bg-emerald-500' : isDropoff ? 'border-primary bg-primary' : 'border-slate-300 bg-white'}`} />
-              {(isPickup || isDropoff) && (
-                <div className="mt-1 whitespace-nowrap rounded-full bg-background/90 px-2 py-1 text-[10px] font-medium shadow-sm">
-                  {isPickup ? 'Pickup' : 'Drop-off'}: {point.label}
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        <div className="absolute left-4 bottom-4 rounded-2xl bg-background/85 px-3 py-2 shadow-sm">
-          <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Route summary</p>
-          <p className="text-xs font-medium">{getRouteSummary(pickupLabel, dropoffLabel)}</p>
-        </div>
+      <div className="mt-3 rounded-2xl bg-background/85 px-3 py-2 shadow-sm">
+        <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Route summary</p>
+        <p className="text-xs font-medium">{getRouteSummary(pickupLabel, dropoffLabel)}</p>
       </div>
     </div>
   );
@@ -1936,6 +1921,8 @@ export default function TasksView({
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [refreshingMarketplace, setRefreshingMarketplace] = useState(false);
   const [liveActivityCount, setLiveActivityCount] = useState(0);
+  const [showLiveMap, setShowLiveMap] = useState(false);
+  const [runnerLocations, setRunnerLocations] = useState<RunnerLocation[]>([]);
   const previousMarketplaceIdsRef = useRef<Set<string> | null>(null);
   const previousMyRequestOfferCountsRef = useRef<Map<string, number> | null>(null);
 
@@ -2040,6 +2027,21 @@ export default function TasksView({
 
     return () => clearInterval(timer);
   }, [entryMode, fetchTasks, selectedTaskId, showCreate]);
+
+  // Poll runner locations for live map
+  useEffect(() => {
+    const fetchRunnerLocations = () => {
+      api.get('/api/runner-locations')
+        .then((data: { runners: RunnerLocation[]; userLocation?: { lat: number; lng: number } | null }) => {
+          setRunnerLocations(data.runners || []);
+        })
+        .catch(() => {});
+    };
+
+    fetchRunnerLocations();
+    const timer = setInterval(fetchRunnerLocations, 10000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     fetchApplicationState();
@@ -2255,6 +2257,34 @@ export default function TasksView({
     );
   }
 
+  if (showLiveMap) {
+    return (
+      <div className="flex flex-col h-[calc(100vh-4rem)]">
+        <div className="sticky top-0 z-30 safe-top bg-background/95 backdrop-blur-sm border-b px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={() => setShowLiveMap(false)}>
+              <ArrowLeft className="w-4 h-4" />
+            </Button>
+            <div>
+              <h1 className="font-bold text-lg">Live Campus Map</h1>
+              <p className="text-xs text-muted-foreground">{runnerLocations.length} active runner{runnerLocations.length !== 1 ? 's' : ''} on campus</p>
+            </div>
+          </div>
+          <Badge variant="outline" className="rounded-full">
+            <Radio className="w-3 h-3 mr-1 text-emerald-500 animate-pulse" /> Live
+          </Badge>
+        </div>
+        <div className="flex-1">
+          <CampusMap
+            runners={runnerLocations}
+            showUserLocation
+            className="h-full w-full"
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="sticky top-0 z-30 safe-top bg-background/95 backdrop-blur-sm border-b px-4 py-4">
@@ -2303,6 +2333,9 @@ export default function TasksView({
               )}
               <Button variant="outline" onClick={() => fetchTasks({ silent: true })} className="gap-2" disabled={refreshingMarketplace}>
                 <RefreshCcw className={`w-4 h-4 ${refreshingMarketplace ? 'animate-spin' : ''}`} /> Refresh
+              </Button>
+              <Button variant="outline" onClick={() => setShowLiveMap(!showLiveMap)} className="gap-2">
+                <MapPin className="w-4 h-4" /> {showLiveMap ? 'Hide Map' : 'Live Map'}
               </Button>
               <Button variant="ghost" onClick={() => setEntryMode('intro')}>View intro</Button>
             </div>

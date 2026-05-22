@@ -29,7 +29,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const task = await (db as any).task.findUnique({
+    const task = await db.task.findUnique({
       where: { id },
       include: {
         creator: {
@@ -67,7 +67,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     let applications = [];
 
     if (viewer.role === 'admin' || viewer.id === task.creatorId) {
-      applications = await (db as any).taskApplication.findMany({
+      applications = await db.taskApplication.findMany({
         where: { taskId: id },
         include: {
           runner: {
@@ -77,7 +77,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         orderBy: { createdAt: 'desc' },
       });
     } else {
-      applications = await (db as any).taskApplication.findMany({
+      applications = await db.taskApplication.findMany({
         where: { taskId: id, runnerId: viewer.id },
         include: {
           runner: {
@@ -113,7 +113,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       return NextResponse.json({ error: 'Banned users cannot update tasks' }, { status: 403 });
     }
 
-    const task = await (db as any).task.findUnique({
+    const task = await db.task.findUnique({
       where: { id },
       select: { id: true, creatorId: true, assignedRunnerId: true, status: true },
     });
@@ -147,7 +147,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const lifecycleTimestamps = getTaskLifecycleTimestamps(status as any);
 
-    const updatedTask = await (db as any).task.update({
+    const updatedTask = await db.task.update({
       where: { id },
       data: {
         status,
@@ -156,7 +156,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     });
 
     if (status === 'completed' && task.assignedRunnerId && task.status !== 'completed') {
-      await (db as any).user.update({
+      await db.user.update({
         where: { id: task.assignedRunnerId },
         data: { tasksCompleted: { increment: 1 } },
       });
@@ -192,7 +192,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const task = await (db as any).task.findUnique({
+    const task = await db.task.findUnique({
       where: { id },
       select: { id: true, creatorId: true },
     });
@@ -205,8 +205,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: 'Only the task creator can delete this task' }, { status: 403 });
     }
 
-    await (db as any).taskApplication.deleteMany({ where: { taskId: id } });
-    await (db as any).task.delete({ where: { id } });
+    await db.taskApplication.deleteMany({ where: { taskId: id } });
+    await db.task.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error('[tasks/:id DELETE]', err);

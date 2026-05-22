@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
   const category = searchParams.get('category') || '';
   const urgency = searchParams.get('urgency') || '';
   const search = searchParams.get('search') || '';
+  const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
   const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 50);
   const creatorId = searchParams.get('creatorId') || '';
 
@@ -33,53 +34,64 @@ export async function GET(req: NextRequest) {
       ];
     }
 
-    const tasks = await (db as any).task.findMany({
-      where,
-      take: limit,
-      orderBy: [{ urgency: 'desc' }, { createdAt: 'desc' }],
-      include: {
-        creator: {
-          select: {
-            id: true,
-            username: true,
-            avatar: true,
-            verificationStatus: true,
-            trustScore: true,
-            hostel: true,
+    const skip = (page - 1) * limit;
+
+    const [tasks, total] = await Promise.all([
+      db.task.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: [{ urgency: 'desc' }, { createdAt: 'desc' }],
+        include: {
+          creator: {
+            select: {
+              id: true,
+              username: true,
+              avatar: true,
+              verificationStatus: true,
+              trustScore: true,
+              hostel: true,
+            },
           },
-        },
-        assignedRunner: {
-          select: {
-            id: true,
-            username: true,
-            avatar: true,
-            runnerRating: true,
-            tasksCompleted: true,
-            // GPS coordinates omitted from public listing — sensitive runner location data
+          assignedRunner: {
+            select: {
+              id: true,
+              username: true,
+              avatar: true,
+              runnerRating: true,
+              tasksCompleted: true,
+            },
           },
-        },
-        offers: {
-          orderBy: { createdAt: 'desc' },
-          take: 8,
-          include: {
-            runner: {
-              select: {
-                id: true,
-                username: true,
-                avatar: true,
-                runnerRating: true,
-                tasksCompleted: true,
-                trustScore: true,
-                verificationStatus: true,
+          offers: {
+            orderBy: { createdAt: 'desc' },
+            take: 8,
+            include: {
+              runner: {
+                select: {
+                  id: true,
+                  username: true,
+                  avatar: true,
+                  runnerRating: true,
+                  tasksCompleted: true,
+                  trustScore: true,
+                  verificationStatus: true,
+                },
               },
             },
           },
+          _count: { select: { applications: true } },
         },
-        _count: { select: { applications: true } },
-      },
-    });
+      }),
+      db.task.count({ where }),
+    ]);
 
-    return NextResponse.json({ tasks: tasks.map((task: any) => attachRunnerPricingGuide(task)) });
+    return NextResponse.json({
+      tasks: tasks.map((task: any) => attachRunnerPricingGuide(task)),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    });
   } catch (err) {
     console.error('[tasks GET]', err);
     return NextResponse.json({ error: 'Failed to fetch tasks' }, { status: 500 });
@@ -184,7 +196,7 @@ export async function POST(req: NextRequest) {
         )
       : null;
 
-    const task = await (db as any).task.create({
+    const task = await db.task.create({
       data: {
         creatorId,
         title: title.trim(),

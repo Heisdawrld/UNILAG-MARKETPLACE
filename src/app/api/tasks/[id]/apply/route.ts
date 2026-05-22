@@ -51,12 +51,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Proposed price must be greater than zero' }, { status: 400 });
     }
 
-    const task = await (db as any).task.findUnique({ where: { id: taskId } });
+    const task = await db.task.findUnique({ where: { id: taskId } });
     if (!task) return NextResponse.json({ error: 'Task not found' }, { status: 404 });
     if (task.status !== 'open') return NextResponse.json({ error: 'This runner request is no longer accepting offers' }, { status: 400 });
     if (task.creatorId === runnerId) return NextResponse.json({ error: 'You cannot offer on your own runner request' }, { status: 400 });
 
-    const application = await (db as any).taskApplication.upsert({
+    const application = await db.taskApplication.upsert({
       where: { taskId_runnerId: { taskId, runnerId } },
       create: {
         taskId,
@@ -141,7 +141,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
 
-    const task = await (db as any).task.findUnique({
+    const task = await db.task.findUnique({
       where: { id: taskId },
       select: { id: true, creatorId: true, status: true },
     });
@@ -154,7 +154,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       return NextResponse.json({ error: 'Only the task creator can review offers' }, { status: 403 });
     }
 
-    const application = await (db as any).taskApplication.findUnique({
+    const application = await db.taskApplication.findUnique({
       where: { id: applicationId },
       include: {
         runner: {
@@ -179,15 +179,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       const finalReward = application.proposedPrice && application.proposedPrice > 0 ? application.proposedPrice : undefined;
 
       await Promise.all([
-        (db as any).taskApplication.update({
+        db.taskApplication.update({
           where: { id: applicationId },
           data: { status: 'accepted' },
         }),
-        (db as any).taskApplication.updateMany({
+        db.taskApplication.updateMany({
           where: { taskId, id: { not: applicationId } },
           data: { status: 'rejected' },
         }),
-        (db as any).task.update({
+        db.task.update({
           where: { id: taskId },
           data: {
             status: 'matched',
@@ -219,7 +219,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         requireInteraction: true,
       });
     } else {
-      await (db as any).taskApplication.update({
+      await db.taskApplication.update({
         where: { id: applicationId },
         data: { status: 'rejected' },
       });

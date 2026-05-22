@@ -103,7 +103,7 @@ export async function GET(req: NextRequest) {
       db.report.count(),
       db.report.count({ where: { status: 'pending' } }),
       db.chat.count(),
-      (db as any).task.count().catch(() => 0),
+      db.task.count().catch(() => 0),
     ]);
 
     const recentUsers = await db.user.findMany({
