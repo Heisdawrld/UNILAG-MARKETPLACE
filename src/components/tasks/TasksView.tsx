@@ -14,7 +14,6 @@ import {
   AlertTriangle,
   ChevronRight,
   Camera,
-  Sparkles,
   ShieldCheck,
   Route,
   Bike,
@@ -38,7 +37,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Progress } from '@/components/ui/progress';
-import { Switch } from '@/components/ui/switch';
+
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
 import {
@@ -54,287 +53,48 @@ import {
 import { formatPrice, timeAgo, getInitials } from '@/lib/marketplace-utils';
 import { getRunnerPricingGuide, type RunnerPricingGuide } from '@/lib/runner-pricing';
 import CampusMap, { type RunnerLocation } from '@/components/map/CampusMap';
+import {
+  RUNNER_STORAGE_KEY_PREFIX,
+  APP_STEP_LABELS,
+  REQUEST_STEP_LABELS,
+  LIVE_REQUEST_WINDOW_MS,
+  LIVE_OFFER_WINDOW_MS,
+  CAMPUS_POINTS,
+  type RunnerEntryMode,
+  type MarketplaceSortMode,
+  type CampusPoint,
+  type DisplayOffer,
+  type RequestBudgetTone,
+  isFreshTimestamp,
+  getUrgencyRank,
+  getTaskBudgetGap,
+  sortMarketplaceTasks,
+  formatLiveSyncLabel,
+  getRunnerStorageKey,
+  compressImage,
+  parseTaskImages,
+  getRouteSummary,
+  getTaskPickupLabel,
+  getTaskDropoffLabel,
+  getTaskOfferCount,
+  getCampusPoint,
+  getDisplayOffers,
+  getBudgetTone,
+  getBudgetToneCopy,
+  sortOfferApplications,
+} from './task-utils';
+import IntroScreen from './IntroScreen';
+import LiveMapView from './LiveMapView';
+import CustomerDashboard from './CustomerDashboard';
+import RunnerDashboard from './RunnerDashboard';
 
-const RUNNER_STORAGE_KEY_PREFIX = 'unilag_runner_mode:';
-const APP_STEP_LABELS = ['About you', 'Runner profile', 'Verification'];
-const REQUEST_STEP_LABELS = ['What needs to move?', 'Route & timing', 'Budget & review'];
+// All utilities, types, and constants now imported from ./task-utils
 const TRANSPORT_OPTIONS = [
   { value: 'bicycle', label: 'Bicycle', icon: Bike },
   { value: 'motorbike', label: 'Motorbike', icon: Route },
   { value: 'walking', label: 'On foot', icon: Footprints },
   { value: 'scooter', label: 'Scooter', icon: Zap },
 ];
-
-type RunnerEntryMode = 'intro' | 'customer' | 'runner_apply' | 'runner';
-
-type RequestBudgetTone = 'low' | 'fair' | 'premium';
-type MarketplaceSortMode = 'live' | 'urgent' | 'best_budget' | 'highest_budget';
-type CampusPoint = {
-  id: string;
-  label: string;
-  lat: number;
-  lng: number;
-  x: string;
-  y: string;
-};
-type DisplayOffer = {
-  id: string;
-  runnerId: string;
-  amount: number;
-  message: string | null;
-  status: string;
-  createdAt: string;
-  createdByRole?: string;
-  runner: {
-    id: string;
-    username: string;
-    avatar: string | null;
-    runnerRating: number;
-    tasksCompleted: number;
-    trustScore?: number;
-    verificationStatus?: string;
-  };
-};
-
-const LIVE_REQUEST_WINDOW_MS = 1000 * 60 * 45;
-const LIVE_OFFER_WINDOW_MS = 1000 * 60 * 12;
-const CAMPUS_POINTS: CampusPoint[] = [
-  { id: 'main-gate', label: 'Main Gate', lat: 6.5153, lng: 3.3901, x: '18%', y: '70%' },
-  { id: 'jaja', label: 'Jaja Hall', lat: 6.5168, lng: 3.3965, x: '42%', y: '62%' },
-  { id: 'moremi', label: 'Moremi Hall', lat: 6.521, lng: 3.3909, x: '58%', y: '48%' },
-  { id: 'new-hall', label: 'New Hall', lat: 6.5202, lng: 3.3978, x: '69%', y: '44%' },
-  { id: 'unilag-medical', label: 'Medical Centre', lat: 6.5185, lng: 3.3862, x: '34%', y: '56%' },
-  { id: 'faculty-science', label: 'Faculty of Science', lat: 6.5137, lng: 3.3942, x: '49%', y: '72%' },
-  { id: 'lagoon-front', label: 'Lagoon Front', lat: 6.5243, lng: 3.3837, x: '23%', y: '28%' },
-  { id: 'library', label: 'University Library', lat: 6.5148, lng: 3.3885, x: '31%', y: '65%' },
-];
-
-function isFreshTimestamp(value?: string | null, freshnessWindowMs = LIVE_REQUEST_WINDOW_MS) {
-  if (!value) return false;
-
-  const timestamp = new Date(value).getTime();
-  if (Number.isNaN(timestamp)) return false;
-
-  return Date.now() - timestamp <= freshnessWindowMs;
-}
-
-function getUrgencyRank(urgency?: string | null) {
-  return {
-    urgent: 4,
-    high: 3,
-    medium: 2,
-    low: 1,
-  }[urgency || 'medium'] || 0;
-}
-
-function getTaskBudgetGap(task: Task) {
-  if (!task.pricingGuide) return Number.MAX_SAFE_INTEGER;
-  return Math.abs(task.reward - task.pricingGuide.recommended);
-}
-
-function sortMarketplaceTasks(tasks: Task[], mode: MarketplaceSortMode) {
-  return [...tasks].sort((left, right) => {
-    if (mode === 'urgent') {
-      return getUrgencyRank(right.urgency) - getUrgencyRank(left.urgency)
-        || new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
-    }
-
-    if (mode === 'best_budget') {
-      return getTaskBudgetGap(left) - getTaskBudgetGap(right)
-        || new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
-    }
-
-    if (mode === 'highest_budget') {
-      return right.reward - left.reward
-        || new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
-    }
-
-    return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
-  });
-}
-
-function formatLiveSyncLabel(lastSyncedAt: Date | null) {
-  if (!lastSyncedAt) return 'Waiting for first sync';
-
-  const secondsAgo = Math.max(0, Math.round((Date.now() - lastSyncedAt.getTime()) / 1000));
-  if (secondsAgo < 5) return 'Synced just now';
-  if (secondsAgo < 60) return `Synced ${secondsAgo}s ago`;
-
-  const minutesAgo = Math.round(secondsAgo / 60);
-  return `Synced ${minutesAgo}m ago`;
-}
-
-function getRunnerStorageKey(userId: string) {
-  return `${RUNNER_STORAGE_KEY_PREFIX}${userId}`;
-}
-
-async function compressImage(file: File) {
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new Error('Failed to read image'));
-    reader.readAsDataURL(file);
-  });
-
-  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('Failed to load image'));
-    img.src = dataUrl;
-  });
-
-  const canvas = document.createElement('canvas');
-  const maxEdge = 900;
-  let width = image.width;
-  let height = image.height;
-
-  if (width > height && width > maxEdge) {
-    height *= maxEdge / width;
-    width = maxEdge;
-  } else if (height >= width && height > maxEdge) {
-    width *= maxEdge / height;
-    height = maxEdge;
-  }
-
-  canvas.width = width;
-  canvas.height = height;
-  canvas.getContext('2d')?.drawImage(image, 0, 0, width, height);
-  return canvas.toDataURL('image/webp', 0.88);
-}
-
-function parseTaskImages(images: string | null | undefined) {
-  if (!images) return [] as string[];
-
-  try {
-    const parsed = JSON.parse(images);
-    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string' && item.length > 0) : [];
-  } catch {
-    return [];
-  }
-}
-
-function getRouteSummary(pickupLocation?: string | null, dropoffLocation?: string | null) {
-  if (pickupLocation && dropoffLocation) {
-    return `${pickupLocation} → ${dropoffLocation}`;
-  }
-
-  return pickupLocation || dropoffLocation || 'Route details coming soon';
-}
-
-function getTaskPickupLabel(task: Task) {
-  return task.pickupLabel || task.pickupLocation || 'Pickup not pinned yet';
-}
-
-function getTaskDropoffLabel(task: Task) {
-  return task.dropoffLabel || task.location || 'Drop-off not pinned yet';
-}
-
-function getTaskOfferCount(task: Task) {
-  if (Array.isArray(task.offers) && task.offers.length > 0) {
-    return task.offers.filter((offer) => offer.status === 'open' || offer.status === 'accepted').length;
-  }
-  return task._count?.applications || task.applications?.length || 0;
-}
-
-function getCampusPoint(pointId: string | null) {
-  return CAMPUS_POINTS.find((point) => point.id === pointId) || null;
-}
-
-function getDisplayOffers(task: Task): DisplayOffer[] {
-  if (task.offers && task.offers.length > 0) {
-    const latestByRunner = new Map<string, DisplayOffer>();
-    for (const offer of [...task.offers].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())) {
-      if (!offer.runner || latestByRunner.has(offer.runnerId)) continue;
-      latestByRunner.set(offer.runnerId, {
-        id: offer.id,
-        runnerId: offer.runnerId,
-        amount: offer.amount,
-        message: offer.message,
-        status: offer.status,
-        createdAt: offer.createdAt,
-        createdByRole: offer.createdByRole,
-        runner: {
-          id: offer.runner.id,
-          username: offer.runner.username,
-          avatar: offer.runner.avatar,
-          runnerRating: offer.runner.runnerRating,
-          tasksCompleted: offer.runner.tasksCompleted,
-          trustScore: offer.runner.trustScore,
-          verificationStatus: offer.runner.verificationStatus,
-        },
-      });
-    }
-    return [...latestByRunner.values()].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
-  }
-
-  return (task.applications || []).map((application) => ({
-    id: application.id,
-    runnerId: application.runnerId,
-    amount: application.proposedPrice || task.reward,
-    message: application.message,
-    status: application.status,
-    createdAt: application.createdAt,
-    createdByRole: 'runner',
-    runner: application.runner,
-  }));
-}
-
-function getBudgetTone(pricingGuide?: RunnerPricingGuide | null): RequestBudgetTone {
-  if (!pricingGuide?.budgetPosition || pricingGuide.budgetPosition === 'fair') {
-    return 'fair';
-  }
-
-  return pricingGuide.budgetPosition;
-}
-
-function getBudgetToneCopy(pricingGuide?: RunnerPricingGuide | null) {
-  const tone = getBudgetTone(pricingGuide);
-
-  if (tone === 'low') {
-    return {
-      label: 'Below guide',
-      cardClass: 'border-amber-300/40 bg-amber-50/80 dark:bg-amber-900/10',
-      badgeClass: 'bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300',
-      description: 'Expect more counter-offers unless a runner is already moving on the same route.',
-    };
-  }
-
-  if (tone === 'premium') {
-    return {
-      label: 'Premium budget',
-      cardClass: 'border-emerald-300/40 bg-emerald-50/80 dark:bg-emerald-900/10',
-      badgeClass: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300',
-      description: 'You are paying above the current guide, which can pull faster responses.',
-    };
-  }
-
-  return {
-    label: 'Fair budget',
-    cardClass: 'border-primary/20 bg-primary/5',
-    badgeClass: 'bg-primary/10 text-primary',
-    description: 'This sits in the current guide range and should feel balanced to most runners.',
-  };
-}
-
-function sortOfferApplications(task: Task, applications: Task['applications'] = []) {
-  return [...applications].sort((left, right) => {
-    const leftAccepted = left.status === 'accepted' ? 1 : 0;
-    const rightAccepted = right.status === 'accepted' ? 1 : 0;
-    if (leftAccepted !== rightAccepted) return rightAccepted - leftAccepted;
-
-    const leftPending = left.status === 'pending' ? 1 : 0;
-    const rightPending = right.status === 'pending' ? 1 : 0;
-    if (leftPending !== rightPending) return rightPending - leftPending;
-
-    const leftPrice = left.proposedPrice || task.reward;
-    const rightPrice = right.proposedPrice || task.reward;
-    const leftDelta = Math.abs(leftPrice - task.reward);
-    const rightDelta = Math.abs(rightPrice - task.reward);
-    if (leftDelta !== rightDelta) return leftDelta - rightDelta;
-
-    return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
-  });
-}
 
 function RunnerStatusPanel({
   application,
@@ -2169,381 +1929,66 @@ export default function TasksView({
 
   if (entryMode === 'intro') {
     return (
-      <div className="safe-top px-4 py-5 max-w-6xl mx-auto space-y-5">
-        <Card className="border-0 shadow-xl overflow-hidden">
-          <CardContent className="p-0">
-            <div className="bg-gradient-to-br from-primary/15 via-amber-500/10 to-background p-6 md:p-8">
-              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-                <div className="max-w-2xl">
-                  <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground mb-3">Runner</p>
-                  <h1 className="text-3xl md:text-4xl font-bold leading-tight">Campus delivery, errands, and smart runner requests inside UNILAG Marketplace.</h1>
-                  <p className="text-sm md:text-base text-muted-foreground mt-4 leading-7">
-                    Post what you need, compare runner offers, and manage requests in one focused space. Or become a verified Runner and earn by helping students around campus.
-                  </p>
-                </div>
-                <div className="rounded-[2rem] bg-background/80 border shadow-lg p-5 w-full max-w-sm">
-                  <div className="space-y-3 text-sm">
-                    {[
-                      'Guided request builder with smart campus pricing',
-                      'Live runner marketplace with real-time offer refresh',
-                      'Premium runner onboarding with documents',
-                    ].map((item) => (
-                      <div key={item} className="flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0" />
-                        <span>{item}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-2 mt-8">
-                <button onClick={openCustomerView} className="rounded-[2rem] bg-primary text-primary-foreground px-5 py-5 text-left shadow-lg hover:bg-primary/90 transition-colors">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <p className="text-[11px] uppercase tracking-[0.25em] opacity-80 mb-2">Customer view</p>
-                      <p className="text-2xl font-bold">Continue as Customer</p>
-                      <p className="text-sm opacity-80 mt-2">Post runner requests, manage your errands, and choose the best offer when it matters.</p>
-                    </div>
-                    <ChevronRight className="w-5 h-5 flex-shrink-0" />
-                  </div>
-                </button>
-
-                <button onClick={openRunnerApply} className="rounded-[2rem] border bg-background/85 px-5 py-5 text-left shadow-lg hover:border-primary/30 transition-colors">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <p className="text-[11px] uppercase tracking-[0.25em] text-muted-foreground mb-2">Runner path</p>
-                      <p className="text-2xl font-bold">Become a Runner</p>
-                      <p className="text-sm text-muted-foreground mt-2">Submit your profile, get approved by admin, and unlock the runner dashboard and offer tools.</p>
-                    </div>
-                    <ChevronRight className="w-5 h-5 flex-shrink-0 text-primary" />
-                  </div>
-                </button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <div className="grid gap-4 lg:grid-cols-3">
-          {[
-            {
-              icon: Sparkles,
-              title: 'Clean first impression',
-              description: 'Runner feels like its own premium campus service, not a leftover task tab.',
-            },
-            {
-              icon: ShieldCheck,
-              title: 'Admin-controlled trust',
-              description: 'Every runner goes through document review before the marketplace lets them send offers.',
-            },
-            {
-              icon: Route,
-              title: 'Built for delivery growth',
-              description: 'Runner now supports live request discovery and faster offer comparison without jumping into maps or delivery ops yet.',
-            },
-          ].map((item) => (
-            <Card key={item.title} className="border-0 shadow-sm">
-              <CardContent className="p-5">
-                <div className="w-11 h-11 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
-                  <item.icon className="w-5 h-5 text-primary" />
-                </div>
-                <h3 className="font-semibold text-base">{item.title}</h3>
-                <p className="text-sm text-muted-foreground mt-2 leading-6">{item.description}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
+      <IntroScreen
+        runnerLocations={runnerLocations}
+        onCustomerEntry={openCustomerView}
+        onRunnerEntry={openRunnerApply}
+        onCategorySelect={(category: string) => { setCategoryFilter(category); openCustomerView(); }}
+      />
     );
   }
 
   if (showLiveMap) {
     return (
-      <div className="flex flex-col h-[calc(100vh-4rem)]">
-        <div className="sticky top-0 z-30 safe-top bg-background/95 backdrop-blur-sm border-b px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => setShowLiveMap(false)}>
-              <ArrowLeft className="w-4 h-4" />
-            </Button>
-            <div>
-              <h1 className="font-bold text-lg">Live Campus Map</h1>
-              <p className="text-xs text-muted-foreground">{runnerLocations.length} active runner{runnerLocations.length !== 1 ? 's' : ''} on campus</p>
-            </div>
-          </div>
-          <Badge variant="outline" className="rounded-full">
-            <Radio className="w-3 h-3 mr-1 text-emerald-500 animate-pulse" /> Live
-          </Badge>
-        </div>
-        <div className="flex-1">
-          <CampusMap
-            runners={runnerLocations}
-            showUserLocation
-            className="h-full w-full"
-          />
-        </div>
-      </div>
+      <LiveMapView
+        runnerLocations={runnerLocations}
+        onClose={() => setShowLiveMap(false)}
+      />
     );
   }
 
-  return (
-    <div>
-      <div className="sticky top-0 z-30 safe-top bg-background/95 backdrop-blur-sm border-b px-4 py-4">
-        <div className="max-w-6xl mx-auto space-y-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.25em] text-primary border-primary/30">
-                  {entryMode === 'runner' ? 'Runner dashboard' : 'Customer dashboard'}
-                </Badge>
-                {isApprovedRunner && (
-                  <Badge className="bg-emerald-500/10 text-emerald-600 border border-emerald-300/40 rounded-full">
-                    <ShieldCheck className="w-3 h-3 mr-1" /> Approved Runner
-                  </Badge>
-                )}
-              </div>
-              <h1 className="font-bold text-2xl mt-3">{entryMode === 'runner' ? 'Runner' : 'Runner requests'}</h1>
-              <p className="text-sm text-muted-foreground mt-1">
-                {entryMode === 'runner'
-                  ? 'Browse requests, manage your runner identity, and stay ready for campus delivery opportunities.'
-                  : 'Post errands, monitor your requests, and upgrade into the verified Runner side whenever you are ready.'}
-              </p>
-              <div className="flex flex-wrap gap-2 mt-3">
-                <Badge variant="outline" className="rounded-full px-3 py-1 gap-1.5 border-primary/30 text-primary">
-                  <Radio className="w-3 h-3" /> Live marketplace
-                </Badge>
-                <Badge variant="secondary" className="rounded-full px-3 py-1">{formatLiveSyncLabel(lastSyncedAt)}</Badge>
-                {liveActivityCount > 0 && (
-                  <Badge className="rounded-full px-3 py-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300">
-                    +{liveActivityCount} new {entryMode === 'runner' ? 'requests' : 'offer updates'}
-                  </Badge>
-                )}
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              {!isApprovedRunner && (
-                <Button variant="outline" onClick={openRunnerApply} className="gap-2">
-                  <ShieldCheck className="w-4 h-4" /> Become a Runner
-                </Button>
-              )}
-              {entryMode === 'customer' && (
-                <Button onClick={() => setShowCreate(true)} className="gap-2">
-                  <Plus className="w-4 h-4" /> Post request
-                </Button>
-              )}
-              <Button variant="outline" onClick={() => fetchTasks({ silent: true })} className="gap-2" disabled={refreshingMarketplace}>
-                <RefreshCcw className={`w-4 h-4 ${refreshingMarketplace ? 'animate-spin' : ''}`} /> Refresh
-              </Button>
-              <Button variant="outline" onClick={() => setShowLiveMap(!showLiveMap)} className="gap-2">
-                <MapPin className="w-4 h-4" /> {showLiveMap ? 'Hide Map' : 'Live Map'}
-              </Button>
-              <Button variant="ghost" onClick={() => setEntryMode('intro')}>View intro</Button>
-            </div>
-          </div>
-
-          {entryMode === 'customer' ? (
-            <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-              <Card className="border-0 shadow-md overflow-hidden">
-                <CardContent className="p-0">
-                  <div className="bg-gradient-to-br from-primary/15 via-amber-500/10 to-background p-5 md:p-6">
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5">
-                      <div className="max-w-2xl">
-                        <p className="text-[11px] uppercase tracking-[0.25em] text-muted-foreground mb-2">Customer lane</p>
-                        <h2 className="text-2xl font-bold">Turn campus errands into clean, trackable requests.</h2>
-                        <p className="text-sm text-muted-foreground mt-3 leading-7">
-                          Post the errand, get a cleaner route-aware budget guide, and keep every runner conversation in one place. The live board below now refreshes automatically so fresh offers are easier to catch.
-                        </p>
-                      </div>
-                      <Button onClick={() => setShowCreate(true)} className="min-w-[180px] h-11">Create request</Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <div className="grid gap-4 sm:grid-cols-3 xl:grid-cols-1">
-                {[
-                  { label: 'Open requests', value: tasks.length, icon: Route },
-                  { label: 'Your recent posts', value: myRequests.length, icon: Users },
-                  { label: 'Runner-ready mode', value: currentApplication?.status === 'pending' ? 'Pending' : 'Open', icon: ShieldCheck },
-                ].map((item) => (
-                  <Card key={item.label} className="border-0 shadow-sm">
-                    <CardContent className="p-4">
-                      <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center mb-3">
-                        <item.icon className="w-5 h-5 text-primary" />
-                      </div>
-                      <p className="text-2xl font-bold">{item.value}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{item.label}</p>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-              <Card className="border-0 shadow-md overflow-hidden">
-                <CardContent className="p-0">
-                  <div className="bg-gradient-to-br from-emerald-500/15 via-primary/10 to-background p-5 md:p-6">
-                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
-                      <div className="max-w-2xl">
-                        <p className="text-[11px] uppercase tracking-[0.25em] text-muted-foreground mb-2">Approved Runner</p>
-                        <h2 className="text-2xl font-bold">Your Runner identity is live.</h2>
-                        <p className="text-sm text-muted-foreground mt-3 leading-7">
-                          Browse customer requests, send cleaner offers, and build trust with every completed errand. This dashboard now behaves more like a live marketplace so new requests surface faster.
-                        </p>
-                      </div>
-                      <div className="rounded-3xl border bg-background/75 px-4 py-3 min-w-[240px]">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground mb-1">Availability</p>
-                            <p className="font-semibold">{isAvailable ? 'Available for new requests' : 'Taking a short break'}</p>
-                          </div>
-                          <Switch checked={isAvailable} onCheckedChange={setIsAvailable} />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <div className="grid gap-4 sm:grid-cols-3 xl:grid-cols-3">
-                {[
-                  { label: 'Completed', value: user.tasksCompleted, icon: CheckCircle2 },
-                  { label: 'Rating', value: user.runnerRating > 0 ? user.runnerRating.toFixed(1) : 'New', icon: Star },
-                  { label: 'Open requests', value: marketplaceTasks.length, icon: Route },
-                ].map((item) => (
-                  <Card key={item.label} className="border-0 shadow-sm">
-                    <CardContent className="p-4">
-                      <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center mb-3">
-                        <item.icon className="w-5 h-5 text-primary" />
-                      </div>
-                      <p className="text-2xl font-bold">{item.value}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{item.label}</p>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {currentApplication && entryMode === 'customer' && currentApplication.status !== 'approved' && (
-            <RunnerStatusPanel application={currentApplication} onPrimaryAction={openRunnerApply} />
-          )}
-
-          <div className="grid gap-3 lg:grid-cols-[1fr_220px]">
-            <div className="relative">
-              <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-              <Input
-                value={searchInput}
-                onChange={(event) => setSearchInput(event.target.value)}
-                placeholder={entryMode === 'runner' ? 'Search by route, request title, or customer note' : 'Search the live request board'}
-                className="pl-9"
-              />
-            </div>
-
-            <Select value={marketplaceSort} onValueChange={(value) => setMarketplaceSort(value as MarketplaceSortMode)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Sort the live board" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="live">Newest first</SelectItem>
-                <SelectItem value="urgent">Urgent first</SelectItem>
-                <SelectItem value="best_budget">Best budget fit</SelectItem>
-                <SelectItem value="highest_budget">Highest budget</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-3">
-            {[
-              { label: 'Live now', value: liveMarketplaceStats.freshRequests, caption: 'Fresh requests in the board', accent: 'bg-emerald-500/10 text-emerald-600' },
-              { label: 'Urgent now', value: liveMarketplaceStats.urgentRequests, caption: 'High-priority requests', accent: 'bg-amber-500/10 text-amber-600' },
-              { label: 'In guide', value: liveMarketplaceStats.inGuideRequests, caption: 'Budgets near the pricing guide', accent: 'bg-primary/10 text-primary' },
-            ].map((item) => (
-              <Card key={item.label} className="border-0 shadow-sm">
-                <CardContent className="p-4">
-                  <div className={`w-10 h-10 rounded-2xl flex items-center justify-center mb-3 ${item.accent}`}>
-                    <Radio className="w-4 h-4" />
-                  </div>
-                  <p className="text-2xl font-bold">{item.value}</p>
-                  <p className="text-xs font-medium mt-1">{item.label}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{item.caption}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
-            <Badge variant={categoryFilter === '' ? 'default' : 'outline'} className="cursor-pointer flex-shrink-0" onClick={() => setCategoryFilter('')}>All requests</Badge>
-            {TASK_CATEGORIES.map((category) => (
-              <Badge key={category} variant={categoryFilter === category ? 'default' : 'outline'} className="cursor-pointer flex-shrink-0 whitespace-nowrap" onClick={() => setCategoryFilter(categoryFilter === category ? '' : category)}>{category}</Badge>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="px-4 py-5 max-w-6xl mx-auto space-y-6">
-        {entryMode === 'customer' && myRequests.length > 0 && (
-          <section className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h3 className="font-semibold text-base">Your recent requests</h3>
-                <p className="text-sm text-muted-foreground">Keep an eye on what you have already posted inside Runner.</p>
-              </div>
-              <Button variant="outline" size="sm" onClick={() => setShowCreate(true)}>Post another</Button>
-            </div>
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              {myRequests.map((task) => (
-                <RequestCard key={task.id} task={task} onClick={() => setSelectedTaskId(task.id)} />
-              ))}
-            </div>
-          </section>
-        )}
-
-        <section className="space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h3 className="font-semibold text-base">{entryMode === 'runner' ? 'Open runner requests nearby' : 'Open requests from campus customers'}</h3>
-              <p className="text-sm text-muted-foreground">
-                {entryMode === 'runner'
-                  ? 'Browse requests you can offer on right now. The board refreshes automatically in the background.'
-                  : 'See how other customer requests are being structured inside Runner and watch live offer activity build.'}
-              </p>
-            </div>
-            {entryMode === 'customer' && (
-              <Button size="sm" onClick={() => setShowCreate(true)} className="gap-1">
-                <Plus className="w-3.5 h-3.5" /> Post request
-              </Button>
-            )}
-          </div>
-
-          {loading ? (
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {Array.from({ length: 6 }).map((_, index) => (
-                <Card key={index} className="border-0 shadow-sm">
-                  <CardContent className="p-4 space-y-2">
-                    <div className="h-4 w-3/4 bg-muted rounded animate-pulse" />
-                    <div className="h-6 w-1/3 bg-muted rounded animate-pulse" />
-                    <div className="h-3 w-full bg-muted rounded animate-pulse" />
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ) : marketplaceTasks.length === 0 ? (
-            <div className="text-center py-16 text-muted-foreground">
-              <Route className="w-12 h-12 mx-auto mb-3 opacity-40" />
-              <p className="font-medium">No runner requests yet</p>
-              <p className="text-sm mb-4">Be the first to open up Runner on campus.</p>
-              {entryMode === 'customer' && <Button variant="outline" onClick={() => setShowCreate(true)}>Post a request</Button>}
-            </div>
-          ) : (
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {marketplaceTasks.map((task) => (
-                <RequestCard key={task.id} task={task} onClick={() => setSelectedTaskId(task.id)} />
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
-    </div>
+  return entryMode === 'runner' ? (
+    <RunnerDashboard
+      user={user}
+      marketplaceTasks={marketplaceTasks}
+      runnerLocations={runnerLocations}
+      lastSyncedAt={lastSyncedAt}
+      liveActivityCount={liveActivityCount}
+      refreshingMarketplace={refreshingMarketplace}
+      isAvailable={isAvailable}
+      categoryFilter={categoryFilter}
+      marketplaceSort={marketplaceSort}
+      loading={loading}
+      onToggleAvailability={setIsAvailable}
+      onSelectTask={setSelectedTaskId}
+      onRefresh={() => fetchTasks({ silent: true })}
+      onCategoryFilter={setCategoryFilter}
+      onSortChange={setMarketplaceSort}
+      onViewIntro={() => setEntryMode('intro')}
+      onShowLiveMap={() => setShowLiveMap(true)}
+    />
+  ) : (
+    <CustomerDashboard
+      user={user}
+      tasks={tasks}
+      myRequests={myRequests}
+      marketplaceTasks={marketplaceTasks}
+      runnerLocations={runnerLocations}
+      lastSyncedAt={lastSyncedAt}
+      liveActivityCount={liveActivityCount}
+      refreshingMarketplace={refreshingMarketplace}
+      currentApplication={currentApplication}
+      categoryFilter={categoryFilter}
+      marketplaceSort={marketplaceSort}
+      loading={loading}
+      onCreateRequest={() => setShowCreate(true)}
+      onSelectTask={setSelectedTaskId}
+      onRefresh={() => fetchTasks({ silent: true })}
+      onCategoryFilter={setCategoryFilter}
+      onSortChange={setMarketplaceSort}
+      onBecomeRunner={openRunnerApply}
+      onViewIntro={() => setEntryMode('intro')}
+      onShowLiveMap={() => setShowLiveMap(true)}
+    />
   );
 }
