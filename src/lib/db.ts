@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import { PrismaLibSQL } from '@prisma/adapter-libsql'
+import { logger } from './utils'
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
@@ -49,7 +50,7 @@ function createPrismaClient(): PrismaClient | null {
         authToken: process.env.TURSO_AUTH_TOKEN!,
       })
 
-      console.log('[db] Connected to Turso database')
+      logger.log('[db] Connected to Turso database')
       return new PrismaClient({ adapter })
     } catch (err) {
       console.error('[db] Failed to connect to Turso:', err)
@@ -60,7 +61,7 @@ function createPrismaClient(): PrismaClient | null {
   // ── Fallback: local SQLite (development only) ──
   if (isValidDatabaseUrl()) {
     try {
-      console.log('[db] Using database at:', process.env.DATABASE_URL!.substring(0, 30) + '...')
+      logger.log('[db] Using database at:', process.env.DATABASE_URL!.substring(0, 30) + '...')
       return new PrismaClient({
         log: process.env.NODE_ENV === 'development' ? ['query'] : ['error'],
       })
@@ -74,7 +75,7 @@ function createPrismaClient(): PrismaClient | null {
     console.error('[db] CRITICAL: No database configured in production!')
     console.error('[db] Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN in your Render dashboard')
   } else {
-    console.log('[db] No database configured — app will start but API routes will return errors')
+    logger.log('[db] No database configured — app will start but API routes will return errors')
   }
 
   return null

@@ -2,11 +2,19 @@ import { db, isDatabaseAvailable } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { sendPushToUser } from '@/lib/push';
+import { rateLimits } from '@/lib/rate-limit';
+import { validateBody, MessageCreateSchema } from '@/lib/validation';
+import { sanitizeText } from '@/lib/sanitize';
 
 export async function GET(request: NextRequest) {
   if (!isDatabaseAvailable()) {
     return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
   }
+
+  // Rate limit
+  const rl = await rateLimits.standard(request)
+  if (!rl.success) return rl.response!
+
   try {
     const { searchParams } = new URL(request.url);
     const chatId = searchParams.get('chatId');
@@ -73,6 +81,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Rate limit on POST
+  const rl = await rateLimits.write(request)
+  if (!rl.success) return rl.response!
+
   if (!isDatabaseAvailable()) {
     return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
   }
@@ -88,19 +100,16 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { chatId, senderId, message, imageUrl } = body;
 
-    if (!chatId || !senderId || !message) {
-      return NextResponse.json(
-        { error: 'chatId, senderId, and message are required' },
-        { status: 400 }
-      );
-    }
+    // Validate with MessageCreateSchema
+    const { data, error } = validateBody(MessageCreateSchema, body)
+    if (error) return error
+
+    const { chatId, message, imageUrl } = data
+    const senderId = authUser.id
 
     // ── SECURITY: ensure the sender is the authenticated user ──
-    if (senderId !== authUser.id) {
-      return NextResponse.json({ error: 'Forbidden — you can only send messages as yourself' }, { status: 403 });
-    }
+    // (senderId is now always authUser.id, so no need to check body.senderId)
 
     // Check if chat exists
     const chat = await db.chat.findUnique({
@@ -125,11 +134,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Sanitize message text
+    const sanitizedMessage = sanitizeText(message, 5000)
+
     const newMessage = await db.message.create({
       data: {
         chatId,
         senderId,
-        message,
+        message: sanitizedMessage,
         imageUrl: imageUrl || null,
         seen: false,
       },
@@ -148,7 +160,7 @@ export async function POST(request: NextRequest) {
     const recipientId = senderId === chat.buyerId ? chat.sellerId : chat.buyerId;
     const senderUser = await db.user.findUnique({ where: { id: senderId }, select: { username: true } });
     // Strip any HTML-like content from the notification preview to prevent XSS if ever rendered unsafely
-    const safePreview = String(message).replace(/<[^>]*>/g, '').slice(0, 80);
+    const safePreview = sanitizedMessage.replace(/<[^>]*>/g, '').slice(0, 80);
     await db.notification.create({
       data: {
         userId: recipientId,
@@ -162,7 +174,7 @@ export async function POST(request: NextRequest) {
     // Push notification
     sendPushToUser(recipientId, {
       title: `💬 ${senderUser?.username || 'New Message'}`,
-      body: message.slice(0, 100),
+      body: sanitizedMessage.slice(0, 100),
       type: 'new_message',
       tag: `chat-${chatId}`,
       data: { chatId },

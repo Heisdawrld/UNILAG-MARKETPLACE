@@ -103,3 +103,7 @@ generate_report.py
 
 # clerk configuration (can include secrets)
 /.clerk/
+
+# Dev documentation artifacts
+src/lib/conversation-memory.md
+worklog.md

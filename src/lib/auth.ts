@@ -1,4 +1,5 @@
 import { db } from '@/lib/db';
+import { logger } from './utils';
 
 // Check if Clerk is configured
 const isClerkConfigured = !!(
@@ -15,7 +16,7 @@ const isClerkConfigured = !!(
  */
 export async function getCurrentUser() {
   if (!isClerkConfigured) {
-    console.log('[auth] Clerk not configured, skipping getCurrentUser');
+    logger.log('[auth] Clerk not configured, skipping getCurrentUser');
     return null;
   }
 

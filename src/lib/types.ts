@@ -372,7 +372,7 @@ export interface AdminStats {
   completedTasks: number;
 }
 
-export type ViewTab = 'home' | 'search' | 'sell' | 'tasks' | 'messages' | 'profile';
+export type ViewTab = 'home' | 'search' | 'sell' | 'delivery' | 'tasks' | 'messages' | 'profile';
 
 export const CATEGORIES = [
   'Electronics',

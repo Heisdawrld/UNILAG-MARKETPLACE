@@ -2,6 +2,14 @@ import { db, isDatabaseAvailable } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
+  // Belt-and-suspenders: block seeding in production
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json(
+      { error: 'Seeding is not allowed in production' },
+      { status: 403 }
+    );
+  }
+
   if (!isDatabaseAvailable()) {
     return NextResponse.json(
       { error: 'Database not configured. Please set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN environment variables.' },

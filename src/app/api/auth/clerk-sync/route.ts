@@ -1,6 +1,7 @@
 import { db, isDatabaseAvailable } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { Webhook } from 'svix';
+import { logger } from '@/lib/utils';
 
 interface ClerkWebhookEvent {
   type: string;
@@ -84,7 +85,7 @@ export async function POST(request: NextRequest) {
 
         if (existingByClerkId) {
           // User already synced, just update
-          console.log(`User with clerkId ${clerkId} already exists, skipping creation`);
+          logger.log(`User with clerkId ${clerkId} already exists, skipping creation`);
           break;
         }
 
@@ -102,7 +103,7 @@ export async function POST(request: NextRequest) {
               verificationStatus: 'email_verified',
             },
           });
-          console.log(`Linked existing user ${existingByEmail.id} to Clerk ${clerkId}`);
+          logger.log(`Linked existing user ${existingByEmail.id} to Clerk ${clerkId}`);
         } else {
           // Create new user
           let uniqueUsername = username;
@@ -126,7 +127,7 @@ export async function POST(request: NextRequest) {
               role: 'user',
             },
           });
-          console.log(`Created new user for Clerk ${clerkId}`);
+          logger.log(`Created new user for Clerk ${clerkId}`);
         }
         break;
       }
@@ -167,7 +168,7 @@ export async function POST(request: NextRequest) {
               where: { clerkId },
               data: updateData,
             });
-            console.log(`Updated user for Clerk ${clerkId}`);
+            logger.log(`Updated user for Clerk ${clerkId}`);
           }
         } else {
           // User doesn't exist in our DB yet, create them
@@ -192,13 +193,13 @@ export async function POST(request: NextRequest) {
               role: 'user',
             },
           });
-          console.log(`Created user on update event for Clerk ${clerkId}`);
+          logger.log(`Created user on update event for Clerk ${clerkId}`);
         }
         break;
       }
 
       default:
-        console.log(`Unhandled Clerk webhook event type: ${type}`);
+        logger.log(`Unhandled Clerk webhook event type: ${type}`);
     }
 
     return NextResponse.json({ success: true, type });

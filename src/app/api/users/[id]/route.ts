@@ -1,10 +1,21 @@
 import { db, isDatabaseAvailable } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
+import { optionalAuth, requireOwnership } from '@/lib/auth-guard';
+import { rateLimits } from '@/lib/rate-limit';
+import { validateBody, UserProfileUpdateSchema } from '@/lib/validation';
+import { sanitizeText, sanitizeUsername, sanitizePhone, sanitizeDescription, sanitizeUrl } from '@/lib/sanitize';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // 1. Optional auth — public profile but hide sensitive fields for non-owners
+  const { userId } = await optionalAuth()
+
+  // 2. Rate limit
+  const rl = await rateLimits.standard(request)
+  if (!rl.success) return rl.response!
+
   if (!isDatabaseAvailable()) {
     return NextResponse.json(
       { error: 'Database not configured. Please set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN environment variables.' },
@@ -52,13 +63,23 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({
+    // 3. Hide email, phone, whatsapp for non-owners (only show to the user themselves or admins)
+    const isOwner = userId === id
+    const result: Record<string, unknown> = {
       ...user,
       listingsCount: user._count.listings,
       reviewsGivenCount: user._count.reviewsGiven,
       reviewsReceivedCount: user._count.reviewsReceived,
       _count: undefined,
-    });
+    }
+
+    if (!isOwner) {
+      delete result.email
+      delete result.phone
+      delete result.whatsapp
+    }
+
+    return NextResponse.json(result);
   } catch (error) {
     console.error('Error fetching user:', error);
     return NextResponse.json(
@@ -72,6 +93,16 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
+
+  // 1. Auth check — require ownership (only self or admin can update)
+  const { errorResponse } = await requireOwnership(id)
+  if (errorResponse) return errorResponse
+
+  // 2. Rate limit
+  const rl = await rateLimits.write(request)
+  if (!rl.success) return rl.response!
+
   if (!isDatabaseAvailable()) {
     return NextResponse.json(
       { error: 'Database not configured. Please set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN environment variables.' },
@@ -79,9 +110,11 @@ export async function PATCH(
     );
   }
   try {
-    const { id } = await params;
     const body = await request.json();
-    const { username, avatar, faculty, department, level, bio, phone, whatsapp, hostel } = body;
+
+    // 3. Validate input
+    const { data, error } = validateBody(UserProfileUpdateSchema, body)
+    if (error) return error
 
     // Check if user exists
     const existingUser = await db.user.findUnique({ where: { id } });
@@ -93,8 +126,8 @@ export async function PATCH(
     }
 
     // Check username uniqueness if changing
-    if (username && username !== existingUser.username) {
-      const usernameTaken = await db.user.findUnique({ where: { username } });
+    if (data.username && data.username !== existingUser.username) {
+      const usernameTaken = await db.user.findUnique({ where: { username: data.username } });
       if (usernameTaken) {
         return NextResponse.json(
           { error: 'Username already taken' },
@@ -103,16 +136,17 @@ export async function PATCH(
       }
     }
 
+    // 4. Sanitize all text inputs
     const updateData: Record<string, unknown> = {};
-    if (username !== undefined) updateData.username = username;
-    if (avatar !== undefined) updateData.avatar = avatar;
-    if (faculty !== undefined) updateData.faculty = faculty;
-    if (department !== undefined) updateData.department = department;
-    if (level !== undefined) updateData.level = level;
-    if (bio !== undefined) updateData.bio = bio;
-    if (phone !== undefined) updateData.phone = phone;
-    if (whatsapp !== undefined) updateData.whatsapp = whatsapp;
-    if (hostel !== undefined) updateData.hostel = hostel;
+    if (data.username !== undefined) updateData.username = sanitizeUsername(data.username);
+    if (data.avatar !== undefined) updateData.avatar = sanitizeUrl(data.avatar);
+    if (data.faculty !== undefined) updateData.faculty = sanitizeText(data.faculty, 100);
+    if (data.department !== undefined) updateData.department = sanitizeText(data.department, 100);
+    if (data.level !== undefined) updateData.level = sanitizeText(data.level, 20);
+    if (data.bio !== undefined) updateData.bio = sanitizeDescription(data.bio, 500);
+    if (data.phone !== undefined) updateData.phone = sanitizePhone(data.phone);
+    if (data.whatsapp !== undefined) updateData.whatsapp = sanitizePhone(data.whatsapp);
+    if (data.hostel !== undefined) updateData.hostel = sanitizeText(data.hostel, 100);
 
     const updatedUser = await db.user.update({
       where: { id },

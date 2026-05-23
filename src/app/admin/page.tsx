@@ -24,11 +24,24 @@ import {
   MapPin,
   Route,
   X,
+  DollarSign,
+  Truck,
+  CreditCard,
+  Search,
+  Filter,
+  ChevronDown,
+  Banknote,
+  CircleDollarSign,
+  RotateCcw,
+  ExternalLink,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
-type AdminTab = 'overview' | 'users' | 'listings' | 'reports' | 'runner_ops';
+type AdminTab = 'overview' | 'users' | 'listings' | 'reports' | 'runner_ops' | 'payouts' | 'deliveries';
+type PayoutStatusFilter = 'all' | 'pending' | 'processing' | 'completed' | 'failed';
+type DeliveryStatusFilter = 'all' | 'created' | 'searching' | 'runner_assigned' | 'en_route' | 'picked_up' | 'in_transit' | 'delivered' | 'completed' | 'cancelled';
+type PaymentStatusFilter = 'all' | 'unpaid' | 'escrow' | 'released' | 'refunded';
 type RunnerReviewFilter = 'pending' | 'approved' | 'rejected';
 
 const runnerStatusStyles: Record<RunnerReviewFilter, string> = {
@@ -50,6 +63,15 @@ export default function AdminPage() {
   const [runnerFilter, setRunnerFilter] = useState<RunnerReviewFilter>('pending');
   const [selectedRunnerApp, setSelectedRunnerApp] = useState<any | null>(null);
   const [reviewNote, setReviewNote] = useState('');
+  const [payouts, setPayouts] = useState<any[]>([]);
+  const [payoutStats, setPayoutStats] = useState<any>(null);
+  const [payoutFilter, setPayoutFilter] = useState<PayoutStatusFilter>('all');
+  const [deliveries, setDeliveries] = useState<any[]>([]);
+  const [deliveryStats, setDeliveryStats] = useState<any>(null);
+  const [deliveryStatusFilter, setDeliveryStatusFilter] = useState<DeliveryStatusFilter>('all');
+  const [deliveryPaymentFilter, setDeliveryPaymentFilter] = useState<PaymentStatusFilter>('all');
+  const [payoutLoading, setPayoutLoading] = useState(false);
+  const [deliveryLoading, setDeliveryLoading] = useState(false);
 
   useEffect(() => {
     if (!isLoaded || !clerkUser) return;
@@ -84,6 +106,72 @@ export default function AdminPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // ── Payout data fetching ──
+  const fetchPayouts = useCallback(async () => {
+    if (!dbUser?.id) return;
+    setPayoutLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (payoutFilter !== 'all') params.set('status', payoutFilter);
+      const result = await api.get(`/api/admin/payouts?${params.toString()}`);
+      setPayouts(result.payouts || []);
+      setPayoutStats(result.stats || null);
+    } catch (err) {
+      toast({ title: 'Failed to load payouts', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' });
+    } finally {
+      setPayoutLoading(false);
+    }
+  }, [dbUser?.id, payoutFilter]);
+
+  useEffect(() => {
+    if (tab === 'payouts') fetchPayouts();
+  }, [tab, fetchPayouts]);
+
+  // ── Delivery data fetching ──
+  const fetchDeliveries = useCallback(async () => {
+    if (!dbUser?.id) return;
+    setDeliveryLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (deliveryStatusFilter !== 'all') params.set('status', deliveryStatusFilter);
+      const [delResult, statsResult] = await Promise.all([
+        api.get(`/api/admin/deliveries?${params.toString()}`),
+        api.get('/api/admin/deliveries/stats'),
+      ]);
+      setDeliveries(delResult.deliveries || []);
+      setDeliveryStats(statsResult || null);
+    } catch (err) {
+      toast({ title: 'Failed to load deliveries', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' });
+    } finally {
+      setDeliveryLoading(false);
+    }
+  }, [dbUser?.id, deliveryStatusFilter]);
+
+  useEffect(() => {
+    if (tab === 'deliveries') fetchDeliveries();
+  }, [tab, fetchDeliveries]);
+
+  // ── Payout action handler ──
+  const handlePayoutAction = async (payoutId: string, action: string, extra?: any) => {
+    setActionLoading(payoutId);
+    try {
+      await api.patch(`/api/admin/payouts/${payoutId}`, { action, ...extra });
+      await fetchPayouts();
+      toast({
+        title: 'Payout action completed',
+        description: `Successfully processed ${action} for payout.`,
+      });
+    } catch (err) {
+      toast({
+        title: 'Payout action failed',
+        description: err instanceof Error ? err.message : 'Action failed',
+        variant: 'destructive',
+      });
+    } finally {
+      setActionLoading('');
+    }
+  };
 
   const syncRunnerApplicationState = useCallback((applicantId: string, status: RunnerReviewFilter, note?: string) => {
     const reviewedAt = new Date().toISOString();
@@ -256,6 +344,8 @@ export default function AdminPage() {
             <option value="listings">Listings</option>
             <option value="reports">Reports</option>
             <option value="runner_ops">Runner Ops</option>
+            <option value="payouts">Payouts</option>
+            <option value="deliveries">Deliveries</option>
           </select>
         </div>
 
@@ -266,6 +356,8 @@ export default function AdminPage() {
             ['listings', 'Listings'],
             ['reports', 'Reports'],
             ['runner_ops', 'Runner Ops'],
+            ['payouts', 'Payouts'],
+            ['deliveries', 'Deliveries'],
           ] as [AdminTab, string][]).map(([id, label]) => (
             <button
               key={id}
@@ -566,6 +658,336 @@ export default function AdminPage() {
                   })}
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {tab === 'payouts' && (
+          <div className="space-y-5">
+            {/* ── Payout Stats ── */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {[
+                { label: 'Pending Payouts', amount: payoutStats?.pending?.totalAmount || 0, count: payoutStats?.pending?.count || 0, icon: Clock3, color: 'from-amber-500 to-orange-500', textColor: 'text-amber-300' },
+                { label: 'Processing', amount: payoutStats?.processing?.totalAmount || 0, count: payoutStats?.processing?.count || 0, icon: RefreshCw, color: 'from-blue-500 to-cyan-500', textColor: 'text-blue-300' },
+                { label: 'Completed This Month', amount: payoutStats?.completedThisMonth?.totalAmount || 0, count: payoutStats?.completedThisMonth?.count || 0, icon: CheckCircle, color: 'from-emerald-500 to-green-500', textColor: 'text-emerald-300' },
+              ].map((item) => (
+                <div key={item.label} className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                  <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${item.color} flex items-center justify-center mb-3`}>
+                    <item.icon className="w-4 h-4 text-white" />
+                  </div>
+                  <p className="text-2xl font-bold">₦{(item.amount as number).toLocaleString()}</p>
+                  <p className="text-xs text-white/40">{item.label} · {item.count as number} request{(item.count as number) !== 1 ? 's' : ''}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* ── Payout Filter ── */}
+            <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
+              <div className="p-4 border-b border-white/10 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h3 className="font-bold text-sm flex items-center gap-2"><DollarSign className="w-4 h-4" /> Payout Requests</h3>
+                  <p className="text-xs text-white/40 mt-1">Manage runner withdrawal requests</p>
+                </div>
+                <div className="flex gap-2 overflow-x-auto hide-scrollbar">
+                  {(['all', 'pending', 'processing', 'completed', 'failed'] as PayoutStatusFilter[]).map((status) => (
+                    <button
+                      key={status}
+                      onClick={() => setPayoutFilter(status)}
+                      className={`px-3.5 py-2 rounded-full text-xs font-medium border whitespace-nowrap transition-all ${
+                        payoutFilter === status
+                          ? status === 'pending'
+                            ? 'bg-amber-500/15 text-amber-300 border-amber-400/20'
+                            : status === 'processing'
+                              ? 'bg-blue-500/15 text-blue-300 border-blue-400/20'
+                              : status === 'completed'
+                                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-400/20'
+                                : status === 'failed'
+                                  ? 'bg-rose-500/15 text-rose-300 border-rose-400/20'
+                                  : 'bg-white/15 text-white border-white/20'
+                          : 'border-white/10 text-white/55 hover:text-white hover:border-white/20'
+                      }`}
+                    >
+                      {status === 'all' ? 'All' : status[0].toUpperCase() + status.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {payoutLoading ? (
+                <div className="p-10 text-center text-white/45">
+                  <RefreshCw className="w-8 h-8 mx-auto mb-3 animate-spin" />
+                  <p className="text-sm">Loading payouts...</p>
+                </div>
+              ) : payouts.length === 0 ? (
+                <div className="p-10 text-center text-white/45">
+                  <Banknote className="w-12 h-12 mx-auto mb-4 opacity-40" />
+                  <p className="font-medium">No {payoutFilter === 'all' ? '' : payoutFilter + ' '}payout requests</p>
+                  <p className="text-sm mt-1">Payout requests from runners will appear here.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-white/5 max-h-[600px] overflow-y-auto">
+                  {payouts.map((payout: any) => {
+                    const statusStyle: Record<string, string> = {
+                      pending: 'bg-amber-500/15 text-amber-300 border-amber-400/20',
+                      processing: 'bg-blue-500/15 text-blue-300 border-blue-400/20',
+                      completed: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/20',
+                      failed: 'bg-rose-500/15 text-rose-300 border-rose-400/20',
+                      cancelled: 'bg-white/10 text-white/50 border-white/10',
+                    };
+
+                    return (
+                      <div key={payout.id} className="p-4 hover:bg-white/5 transition-colors">
+                        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+                          <div className="flex items-start gap-3 min-w-0">
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center flex-shrink-0">
+                              <DollarSign className="w-4 h-4 text-white" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2 mb-1">
+                                <p className="text-sm font-semibold">{payout.runner?.username || 'Unknown Runner'}</p>
+                                <span className={`text-[10px] uppercase tracking-[0.2em] px-2.5 py-1 rounded-full border ${statusStyle[payout.status] || statusStyle.pending}`}>
+                                  {payout.status}
+                                </span>
+                                <span className="text-[10px] px-2.5 py-1 rounded-full border border-white/10 text-white/60">
+                                  {payout.method || 'bank_transfer'}
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/50">
+                                <span>Amount: <span className="text-white font-semibold">₦{payout.amount?.toLocaleString()}</span></span>
+                                <span>Net: <span className="text-white font-semibold">₦{payout.netAmount?.toLocaleString()}</span></span>
+                                <span>Fee: ₦{payout.fee?.toLocaleString()}</span>
+                              </div>
+                              {(payout.bankName || payout.accountNumber) && (
+                                <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/40 mt-1">
+                                  {payout.bankName && <span>Bank: {payout.bankName}</span>}
+                                  {payout.accountNumber && <span>Acct: {payout.accountNumber}</span>}
+                                  {payout.accountName && <span>Name: {payout.accountName}</span>}
+                                </div>
+                              )}
+                              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/40 mt-1">
+                                <span>Requested: {new Date(payout.createdAt).toLocaleDateString()}</span>
+                                {payout.processedAt && <span>Processed: {new Date(payout.processedAt).toLocaleDateString()}</span>}
+                                {payout.failedReason && <span className="text-rose-400">Reason: {payout.failedReason}</span>}
+                                {payout.flutterwaveTxRef && <span>Ref: {payout.flutterwaveTxRef.slice(0, 16)}…</span>}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                            {payout.status === 'pending' && (
+                              <>
+                                <button
+                                  onClick={() => handlePayoutAction(payout.id, 'approve')}
+                                  disabled={actionLoading === payout.id}
+                                  className="px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 text-[11px] font-medium transition-colors disabled:opacity-50"
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  onClick={() => handlePayoutAction(payout.id, 'reject', { failedReason: 'Rejected by admin' })}
+                                  disabled={actionLoading === payout.id}
+                                  className="px-3 py-1.5 rounded-xl bg-rose-500/15 text-rose-300 hover:bg-rose-500/25 text-[11px] font-medium transition-colors disabled:opacity-50"
+                                >
+                                  Reject
+                                </button>
+                              </>
+                            )}
+                            {payout.status === 'processing' && (
+                              <>
+                                <button
+                                  onClick={() => handlePayoutAction(payout.id, 'complete')}
+                                  disabled={actionLoading === payout.id}
+                                  className="px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 text-[11px] font-medium transition-colors disabled:opacity-50"
+                                >
+                                  Complete
+                                </button>
+                                <button
+                                  onClick={() => handlePayoutAction(payout.id, 'check_status')}
+                                  disabled={actionLoading === payout.id}
+                                  className="px-3 py-1.5 rounded-xl bg-blue-500/15 text-blue-300 hover:bg-blue-500/25 text-[11px] font-medium flex items-center gap-1 transition-colors disabled:opacity-50"
+                                >
+                                  <ExternalLink className="w-3 h-3" /> Check Status
+                                </button>
+                              </>
+                            )}
+                            {payout.status === 'failed' && (
+                              <button
+                                onClick={() => handlePayoutAction(payout.id, 'retry_transfer')}
+                                disabled={actionLoading === payout.id}
+                                className="px-3 py-1.5 rounded-xl bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 text-[11px] font-medium flex items-center gap-1 transition-colors disabled:opacity-50"
+                              >
+                                <RotateCcw className="w-3 h-3" /> Retry Transfer
+                              </button>
+                            )}
+                            {payout.flutterwaveTxRef && payout.status !== 'pending' && payout.status !== 'completed' && (
+                              <button
+                                onClick={() => handlePayoutAction(payout.id, 'check_status')}
+                                disabled={actionLoading === payout.id}
+                                className="px-3 py-1.5 rounded-xl bg-white/10 text-white/60 hover:bg-white/15 text-[11px] font-medium flex items-center gap-1 transition-colors disabled:opacity-50"
+                              >
+                                <ExternalLink className="w-3 h-3" /> Check Status
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {tab === 'deliveries' && (
+          <div className="space-y-5">
+            {/* ── Delivery Stats ── */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[
+                { label: 'Active Deliveries', value: ((deliveryStats?.byStatus?.inTransit || 0) + (deliveryStats?.byStatus?.searching || 0)), icon: Truck, color: 'from-blue-500 to-cyan-500' },
+                { label: 'Completed', value: deliveryStats?.byStatus?.completed || 0, icon: CheckCircle, color: 'from-emerald-500 to-green-500' },
+                { label: 'Revenue', value: `₦${(deliveryStats?.revenue?.total || 0).toLocaleString()}`, icon: CircleDollarSign, color: 'from-amber-500 to-orange-500' },
+                { label: 'Cancelled', value: deliveryStats?.byStatus?.cancelled || 0, icon: XCircle, color: 'from-rose-500 to-red-500' },
+              ].map((item) => (
+                <div key={item.label} className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                  <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${item.color} flex items-center justify-center mb-3`}>
+                    <item.icon className="w-4 h-4 text-white" />
+                  </div>
+                  <p className="text-2xl font-bold">{item.value}</p>
+                  <p className="text-xs text-white/40">{item.label}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* ── Delivery Filters + List ── */}
+            <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
+              <div className="p-4 border-b border-white/10 flex flex-col gap-3">
+                <div>
+                  <h3 className="font-bold text-sm flex items-center gap-2"><Truck className="w-4 h-4" /> Delivery Orders</h3>
+                  <p className="text-xs text-white/40 mt-1">Track and manage all platform deliveries</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {/* Status Filter */}
+                  <div className="flex gap-1.5 overflow-x-auto hide-scrollbar">
+                    {(['all', 'created', 'searching', 'runner_assigned', 'en_route', 'picked_up', 'in_transit', 'delivered', 'completed', 'cancelled'] as DeliveryStatusFilter[]).map((status) => (
+                      <button
+                        key={status}
+                        onClick={() => setDeliveryStatusFilter(status)}
+                        className={`px-3 py-1.5 rounded-full text-[11px] font-medium border whitespace-nowrap transition-all ${
+                          deliveryStatusFilter === status
+                            ? 'bg-white/15 text-white border-white/20'
+                            : 'border-white/10 text-white/55 hover:text-white hover:border-white/20'
+                        }`}
+                      >
+                        {status === 'all' ? 'All' : status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Payment Status Filter */}
+                  <div className="flex gap-1.5 overflow-x-auto hide-scrollbar border-l border-white/10 pl-2">
+                    {(['all', 'unpaid', 'escrow', 'released', 'refunded'] as PaymentStatusFilter[]).map((status) => (
+                      <button
+                        key={status}
+                        onClick={() => setDeliveryPaymentFilter(status)}
+                        className={`px-3 py-1.5 rounded-full text-[11px] font-medium border whitespace-nowrap transition-all ${
+                          deliveryPaymentFilter === status
+                            ? status === 'unpaid'
+                              ? 'bg-white/15 text-white border-white/20'
+                              : status === 'escrow'
+                                ? 'bg-amber-500/15 text-amber-300 border-amber-400/20'
+                                : status === 'released'
+                                  ? 'bg-emerald-500/15 text-emerald-300 border-emerald-400/20'
+                                  : status === 'refunded'
+                                    ? 'bg-rose-500/15 text-rose-300 border-rose-400/20'
+                                    : 'bg-white/15 text-white border-white/20'
+                            : 'border-white/10 text-white/55 hover:text-white hover:border-white/20'
+                        }`}
+                      >
+                        {status === 'all' ? 'All Payments' : status[0].toUpperCase() + status.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {deliveryLoading ? (
+                <div className="p-10 text-center text-white/45">
+                  <RefreshCw className="w-8 h-8 mx-auto mb-3 animate-spin" />
+                  <p className="text-sm">Loading deliveries...</p>
+                </div>
+              ) : (() => {
+                const filteredDeliveries = deliveryPaymentFilter === 'all'
+                  ? deliveries
+                  : deliveries.filter((d: any) => d.paymentStatus === deliveryPaymentFilter);
+
+                return filteredDeliveries.length === 0 ? (
+                  <div className="p-10 text-center text-white/45">
+                    <Truck className="w-12 h-12 mx-auto mb-4 opacity-40" />
+                    <p className="font-medium">No delivery orders found</p>
+                    <p className="text-sm mt-1">Delivery orders will appear here as customers create them.</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-white/5 max-h-[600px] overflow-y-auto">
+                    {filteredDeliveries.map((del: any) => {
+                      const delStatusStyles: Record<string, string> = {
+                        created: 'bg-slate-500/15 text-slate-300 border-slate-400/20',
+                        searching: 'bg-amber-500/15 text-amber-300 border-amber-400/20',
+                        runner_assigned: 'bg-blue-500/15 text-blue-300 border-blue-400/20',
+                        en_route: 'bg-blue-500/15 text-blue-300 border-blue-400/20',
+                        picked_up: 'bg-purple-500/15 text-purple-300 border-purple-400/20',
+                        in_transit: 'bg-cyan-500/15 text-cyan-300 border-cyan-400/20',
+                        delivered: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/20',
+                        completed: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/20',
+                        cancelled: 'bg-rose-500/15 text-rose-300 border-rose-400/20',
+                      };
+                      const paymentStyles: Record<string, string> = {
+                        unpaid: 'bg-white/10 text-white/50',
+                        escrow: 'bg-amber-500/15 text-amber-300',
+                        released: 'bg-emerald-500/15 text-emerald-300',
+                        refunded: 'bg-rose-500/15 text-rose-300',
+                      };
+
+                      return (
+                        <div key={del.id} className="p-4 hover:bg-white/5 transition-colors">
+                          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+                            <div className="flex items-start gap-3 min-w-0">
+                              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-400 to-cyan-500 flex items-center justify-center flex-shrink-0">
+                                <Truck className="w-4 h-4 text-white" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2 mb-1">
+                                  <p className="text-sm font-semibold truncate">{del.title || `Order ${del.id.slice(-6)}`}</p>
+                                  <span className={`text-[10px] uppercase tracking-[0.15em] px-2.5 py-1 rounded-full border ${delStatusStyles[del.status] || delStatusStyles.created}`}>
+                                    {del.status?.replace(/_/g, ' ')}
+                                  </span>
+                                  <span className={`text-[10px] px-2 py-1 rounded-full ${paymentStyles[del.paymentStatus] || paymentStyles.unpaid}`}>
+                                    {del.paymentStatus || 'unpaid'}
+                                  </span>
+                                </div>
+                                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/50">
+                                  <span>Customer: <span className="text-white/70">{del.customer?.username || 'Unknown'}</span></span>
+                                  {del.assignedRunner && <span>Runner: <span className="text-white/70">{del.assignedRunner.username}</span></span>}
+                                  {!del.assignedRunner && del.status !== 'cancelled' && <span className="text-amber-400/70">No runner assigned</span>}
+                                </div>
+                                <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-white/40 mt-1">
+                                  <span>Price: ₦{(del.customerPrice || del.finalPrice || 0).toLocaleString()}</span>
+                                  {del.finalPrice && <span>Final: ₦{del.finalPrice.toLocaleString()}</span>}
+                                  {del.platformCommission > 0 && <span>Commission: ₦{del.platformCommission.toLocaleString()}</span>}
+                                  <span>Category: {del.category}</span>
+                                </div>
+                                <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/35 mt-1">
+                                  <span>{del.pickupAddress?.slice(0, 30) || 'Pickup'} → {del.dropoffAddress?.slice(0, 30) || 'Dropoff'}</span>
+                                  <span>Created: {new Date(del.createdAt).toLocaleDateString()}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}

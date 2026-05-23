@@ -6,9 +6,9 @@ const nextConfig: NextConfig = {
   // We keep it for Render compatibility but Netlify ignores it via @netlify/plugin-nextjs.
   output: "standalone",
   typescript: {
-    ignoreBuildErrors: true,
+    // Type checking enabled — all implicit any errors have been resolved
   },
-  reactStrictMode: false,
+  reactStrictMode: true,
   allowedDevOrigins: ['127.0.0.1', 'localhost'],
   // CRITICAL: @libsql/client uses native Node.js addons that must be
   // externalized in the standalone server bundle. Without this, the
@@ -19,6 +19,19 @@ const nextConfig: NextConfig = {
     'better-sqlite3',
     'sharp',
   ],
+  // ── API Versioning ──
+  // /api/v1/* routes are rewritten to /api/* internally
+  // This allows clients to use versioned endpoints while keeping
+  // the filesystem structure flat. Old /api/* routes still work
+  // for backward compatibility.
+  async rewrites() {
+    return [
+      {
+        source: '/api/v1/:path*',
+        destination: '/api/:path*',
+      },
+    ];
+  },
 };
 
 export default nextConfig;

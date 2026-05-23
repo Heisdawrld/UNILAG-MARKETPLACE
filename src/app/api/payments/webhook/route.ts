@@ -1,6 +1,7 @@
 import { db, isDatabaseAvailable } from '@/lib/db';
 import { verifyWebhookSignature } from '@/lib/flutterwave';
 import { NextRequest, NextResponse } from 'next/server';
+import { logger } from '@/lib/utils';
 
 function getBoostPlan(amount: number) {
   if (amount === 300) return { planId: 'basic', durationHours: 6 };
@@ -208,7 +209,7 @@ export async function POST(request: NextRequest) {
       }
 
       default: {
-        console.log(`Unhandled Flutterwave event: ${event}`);
+        logger.log(`Unhandled Flutterwave event: ${event}`);
       }
     }
 

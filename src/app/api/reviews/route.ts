@@ -1,8 +1,15 @@
 import { auth } from '@clerk/nextjs/server';
 import { db, isDatabaseAvailable } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
+import { rateLimits } from '@/lib/rate-limit';
+import { validateBody, ReviewCreateSchema } from '@/lib/validation';
+import { sanitizeText } from '@/lib/sanitize';
 
 export async function POST(request: NextRequest) {
+  // 1. Rate limit
+  const rl = await rateLimits.write(request)
+  if (!rl.success) return rl.response!
+
   if (!isDatabaseAvailable()) {
     return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
   }
@@ -19,26 +26,37 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { sellerId, rating, comment } = body;
 
-    if (!sellerId || !rating) {
-      return NextResponse.json({ error: 'sellerId and rating are required' }, { status: 400 });
-    }
+    // 2. Validate input
+    const { data, error } = validateBody(ReviewCreateSchema, body)
+    if (error) return error
+
+    const { sellerId, rating, comment } = data
 
     if (sellerId === authUser.id) {
       return NextResponse.json({ error: 'Cannot review yourself' }, { status: 400 });
     }
 
-    if (typeof comment === 'string' && comment.length > 1000) {
-      return NextResponse.json({ error: 'Comment must be 1000 characters or fewer' }, { status: 400 });
+    // 3. Check for duplicate reviews (same reviewer + same seller)
+    const existingReview = await db.review.findFirst({
+      where: {
+        reviewerId: authUser.id,
+        sellerId,
+      },
+    })
+    if (existingReview) {
+      return NextResponse.json({ error: 'You have already reviewed this seller' }, { status: 409 })
     }
+
+    // 4. Sanitize comment
+    const sanitizedComment = comment ? sanitizeText(comment, 1000) : ''
 
     const review = await db.review.create({
       data: {
         reviewerId: authUser.id,
         sellerId,
-        rating: Math.min(5, Math.max(1, rating)),
-        comment: typeof comment === 'string' ? comment.trim() : '',
+        rating,
+        comment: sanitizedComment,
       },
     });
 
@@ -63,6 +81,10 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
+  // Rate limit
+  const rl = await rateLimits.standard(request)
+  if (!rl.success) return rl.response!
+
   if (!isDatabaseAvailable()) {
     return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
   }

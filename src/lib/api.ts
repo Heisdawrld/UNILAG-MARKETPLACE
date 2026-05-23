@@ -1,4 +1,5 @@
 // Shared API client for UNILAG Marketplace
+// Includes X-Requested-With header for CSRF protection (validated in proxy.ts)
 const BASE = '';
 
 export const api = {
@@ -16,7 +17,10 @@ export const api = {
   post: async (url: string, body?: unknown) => {
     const res = await fetch(BASE + url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
       cache: 'no-store',
       credentials: 'same-origin',
       body: JSON.stringify(body || {}),
@@ -30,7 +34,10 @@ export const api = {
   patch: async (url: string, body: unknown) => {
     const res = await fetch(BASE + url, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
       cache: 'no-store',
       credentials: 'same-origin',
       body: JSON.stringify(body),
@@ -44,6 +51,9 @@ export const api = {
   del: async (url: string) => {
     const res = await fetch(BASE + url, {
       method: 'DELETE',
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+      },
       cache: 'no-store',
       credentials: 'same-origin',
     });

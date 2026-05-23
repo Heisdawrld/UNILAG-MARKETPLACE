@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useUser, SignInButton } from '@clerk/nextjs';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Home, Search, PlusCircle, Route, MessageCircle, User, Bell } from 'lucide-react';
+import { Home, Search, PlusCircle, Route, MessageCircle, User, Bell, Truck } from 'lucide-react';
 import { api } from '@/lib/api';
 import { User as UserType, ViewTab, SavedListing } from '@/lib/types';
 import { usePushNotifications } from '@/hooks/use-push';
@@ -14,6 +14,7 @@ const HomeFeed = lazy(() => import('@/components/marketplace/HomeFeed'));
 const SearchView = lazy(() => import('@/components/marketplace/SearchView'));
 const SellView = lazy(() => import('@/components/marketplace/SellView'));
 const RunnerView = lazy(() => import('@/components/tasks/TasksView'));
+const DeliveryView = lazy(() => import('@/components/delivery/DeliveryTabView'));
 const MessagesView = lazy(() => import('@/components/marketplace/MessagesView'));
 const ProfileView = lazy(() => import('@/components/marketplace/ProfileView'));
 const ListingDetail = lazy(() => import('@/components/marketplace/ListingDetail'));
@@ -29,7 +30,7 @@ function BottomNav({ activeTab, onTabChange }: { activeTab: ViewTab; onTabChange
     { id: 'search', icon: Search, label: 'Explore' },
   ];
   const rightTabs: { id: ViewTab; icon: typeof Home; label: string }[] = [
-    { id: 'tasks', icon: Route, label: 'Runner' },
+    { id: 'delivery', icon: Truck, label: 'Delivery' },
     { id: 'messages', icon: MessageCircle, label: 'Chat' },
     { id: 'profile', icon: User, label: 'Me' },
   ];
@@ -95,7 +96,7 @@ export default function MarketplaceApp() {
     const tab = params.get('tab') as ViewTab | null;
     const chatId = params.get('chatId');
     const taskId = params.get('taskId');
-    const validTabs: ViewTab[] = ['home', 'search', 'sell', 'tasks', 'messages', 'profile'];
+    const validTabs: ViewTab[] = ['home', 'search', 'sell', 'delivery', 'tasks', 'messages', 'profile'];
 
     if (tab && validTabs.includes(tab)) {
       setActiveTab(tab);
@@ -441,6 +442,9 @@ export default function MarketplaceApp() {
               )}
               {activeTab === 'sell' && (
                 <SellView user={user} onListingCreated={() => setActiveTab('home')} />
+              )}
+              {activeTab === 'delivery' && (
+                <DeliveryView user={user} />
               )}
               {activeTab === 'tasks' && (
                 <RunnerView user={user} initialTaskId={selectedTaskId} onInitialTaskOpened={handleInitialTaskOpened} />

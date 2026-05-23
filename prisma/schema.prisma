@@ -55,6 +55,11 @@ model User {
   customerOffers      TaskOffer[]       @relation("CustomerOffers")
   assignedTasks       Task[]            @relation("AssignedRunner")
   runnerProfile       RunnerProfile?
+  deliveryOrders      DeliveryOrder[]   @relation("DeliveryCustomer")
+  deliveryAssignments DeliveryOrder[]   @relation("DeliveryRunner")
+  deliveryOffersMade  DeliveryOffer[]   @relation("DeliveryOfferRunner")
+  wallet              RunnerWallet?
+  payouts             PayoutRequest[]
 }
 
 model Listing {
@@ -364,4 +369,174 @@ model RunnerProfile {
   user                         User     @relation(fields: [userId], references: [id])
 
   @@index([status])
+}
+
+// ════════════════════════════════════════════════════════════════
+// ── Real-Time Delivery System (Uber/inDrive Model) ──
+// ════════════════════════════════════════════════════════════════
+
+model DeliveryOrder {
+  id               String   @id @default(cuid())
+  customerId       String
+  assignedRunnerId String?
+  status           String   @default("created")
+  pickupLat        Float
+  pickupLng        Float
+  pickupAddress    String
+  dropoffLat       Float
+  dropoffLng       Float
+  dropoffAddress   String
+  serviceArea      String   @default("unilag")
+  estimatedDistanceMeters  Int?
+  estimatedDurationMinutes Int?
+  customerPrice     Float
+  finalPrice        Float?
+  surgeMultiplier   Float    @default(1.0)
+  platformCommission Float   @default(0)
+  cancellationFee   Float    @default(0)
+  pickupCode        String
+  category          String   @default("other")
+  urgency           String   @default("standard")
+  title             String
+  description       String
+  itemImages        String   @default("[]")
+  cancelReason      String?
+  cancelledBy       String?
+  customerRating    Int?
+  runnerRating      Int?
+  customerReview    String?
+  runnerReview      String?
+  // ── Escrow Payment Fields ──
+  paymentStatus     String   @default("unpaid") // unpaid, escrow, released, refunded
+  paymentMethod     String?  // flutterwave, wallet
+  paymentReference  String?  // Flutterwave tx_ref or internal ref
+  customerPaidAt    DateTime?
+  escrowReleasedAt  DateTime?
+  refundReason      String?
+  refundProcessedAt DateTime?
+  // ── Timestamps ──
+  searchingAt       DateTime?
+  assignedAt        DateTime?
+  enRouteAt         DateTime?
+  pickedUpAt        DateTime?
+  inTransitAt       DateTime?
+  deliveredAt       DateTime?
+  completedAt       DateTime?
+  cancelledAt       DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  customer          User              @relation("DeliveryCustomer", fields: [customerId], references: [id])
+  assignedRunner    User?             @relation("DeliveryRunner", fields: [assignedRunnerId], references: [id])
+  offers            DeliveryOffer[]
+  statusLogs        OrderStatusLog[]
+
+  @@index([status])
+  @@index([customerId])
+  @@index([assignedRunnerId])
+  @@index([category])
+  @@index([serviceArea])
+  @@index([createdAt])
+}
+
+model DeliveryOffer {
+  id                        String   @id @default(cuid())
+  orderId                   String
+  runnerId                  String
+  runnerPrice               Float
+  estimatedArrivalMinutes   Int?
+  message                   String?
+  status                    String   @default("open")
+  expiresAt                 DateTime
+  createdAt                 DateTime @default(now())
+
+  order   DeliveryOrder @relation(fields: [orderId], references: [id])
+  runner  User          @relation("DeliveryOfferRunner", fields: [runnerId], references: [id])
+
+  @@unique([orderId, runnerId])
+  @@index([orderId])
+  @@index([runnerId])
+  @@index([status])
+  @@index([expiresAt])
+}
+
+model OrderStatusLog {
+  id         String   @id @default(cuid())
+  orderId    String
+  fromStatus String?
+  toStatus   String
+  timestamp  DateTime @default(now())
+  metadata   String?
+
+  order DeliveryOrder @relation(fields: [orderId], references: [id])
+
+  @@index([orderId])
+  @@index([timestamp])
+}
+
+// ════════════════════════════════════════════════════════════════
+// ── Runner Wallet & Payout System ──
+// ════════════════════════════════════════════════════════════════
+
+model RunnerWallet {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  balance         Float    @default(0)     // Available balance (can withdraw)
+  pendingBalance  Float    @default(0)     // In escrow (being held for active deliveries)
+  totalEarned     Float    @default(0)     // Lifetime earnings
+  totalWithdrawn  Float    @default(0)     // Lifetime withdrawals
+  totalHeld       Float    @default(0)     // Total platform commission collected
+  lastPayoutAt    DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user   User            @relation(fields: [userId], references: [id])
+  transactions  WalletTransaction[]
+
+  @@index([userId])
+}
+
+model WalletTransaction {
+  id          String   @id @default(cuid())
+  walletId    String
+  type        String   // credit, debit, escrow_hold, escrow_release, payout, refund, commission
+  amount      Float
+  balance     Float    // Balance after transaction
+  reference   String?  // DeliveryOrder ID or PayoutRequest ID
+  description String?
+  metadata    String?  // JSON
+  createdAt   DateTime @default(now())
+
+  wallet RunnerWallet @relation(fields: [walletId], references: [id])
+
+  @@index([walletId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model PayoutRequest {
+  id              String   @id @default(cuid())
+  runnerId        String
+  amount          Float
+  fee             Float    @default(0)     // Payout processing fee
+  netAmount       Float                     // amount - fee
+  status          String   @default("pending") // pending, processing, completed, failed, cancelled
+  method          String   @default("bank_transfer") // bank_transfer, mobile_money
+  bankName        String?
+  bankCode        String?     // Flutterwave bank code (e.g. '044' for Access Bank)
+  accountNumber   String?
+  accountName     String?
+  flutterwaveTxRef String?
+  processedAt     DateTime?
+  failedReason    String?
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  runner User @relation(fields: [runnerId], references: [id])
+
+  @@index([runnerId])
+  @@index([status])
+  @@index([createdAt])
 }
