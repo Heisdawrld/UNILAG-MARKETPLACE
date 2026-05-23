@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useCallback } from 'react'
+import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Truck, Package, MapPin, Clock, Star, ChevronRight, Zap, ArrowRight } from 'lucide-react'
+import { Truck, Package, MapPin, Clock, Star, ChevronRight, Zap, ArrowRight, ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -10,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useCustomerDeliveryStore, UNILAG_LANDMARKS } from '@/store/customer-delivery-store'
 import { useCustomerSocket } from '@/hooks/use-customer-socket'
+import { useToast } from '@/hooks/use-toast'
 import { DELIVERY_CATEGORY_BASELINES, URGENCY_MULTIPLIERS } from '@/lib/delivery-types'
 import type { DeliveryCategory, UrgencyLevel } from '@/lib/delivery-types'
 import type { ViewTab } from '@/lib/types'
@@ -36,9 +38,11 @@ interface DeliveryTabViewProps {
 }
 
 export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
+  const { toast } = useToast()
   const form = useCustomerDeliveryStore((s) => s.form)
   const updateForm = useCustomerDeliveryStore((s) => s.updateForm)
   const activeDelivery = useCustomerDeliveryStore((s) => s.activeDelivery)
+  const searchOrderId = useCustomerDeliveryStore((s) => s.searchOrderId)
   const offers = useCustomerDeliveryStore((s) => s.offers)
   const isSearching = useCustomerDeliveryStore((s) => s.isSearching)
   const isSocketConnected = useCustomerDeliveryStore((s) => s.isSocketConnected)
@@ -61,7 +65,7 @@ export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
   const handleSubmit = useCallback(() => {
     if (!isFormValid) return
     if (!isSocketConnected) {
-      alert('Delivery service is offline. Please wait for the connection to be established, then try again.')
+      toast({ title: 'Delivery service offline', description: 'Please wait for connection and try again.', variant: 'destructive' })
       return
     }
     createDelivery({
@@ -141,7 +145,7 @@ export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
                   <p className="text-xs text-muted-foreground">Your runner</p>
                 </div>
                 {activeDelivery.finalPrice && (
-                  <Badge variant="secondary">N{activeDelivery.finalPrice.toLocaleString()}</Badge>
+                  <Badge variant="secondary">₦{activeDelivery.finalPrice.toLocaleString()}</Badge>
                 )}
               </CardContent>
             </Card>
@@ -167,7 +171,7 @@ export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
           )}
 
           {/* Link to full page */}
-          <a href="/delivery" className="block">
+          <Link href="/delivery" className="block">
             <Card className="hover:bg-muted/50 transition-colors cursor-pointer">
               <CardContent className="p-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -177,7 +181,7 @@ export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
                 <ChevronRight className="w-4 h-4 text-muted-foreground" />
               </CardContent>
             </Card>
-          </a>
+          </Link>
         </div>
       </div>
     )
@@ -210,16 +214,16 @@ export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-lg font-bold">N{offer.runnerPrice.toLocaleString()}</p>
+                    <p className="text-lg font-bold">₦{offer.runnerPrice.toLocaleString()}</p>
                     {offer.runnerPrice !== form.customerPrice && (
                       <span className={`text-[10px] ${offer.runnerPrice > form.customerPrice ? 'text-red-500' : 'text-emerald-500'}`}>
-                        {offer.runnerPrice > form.customerPrice ? '+' : ''}N{(offer.runnerPrice - form.customerPrice).toLocaleString()}
+                        {offer.runnerPrice > form.customerPrice ? '+' : ''}₦{(offer.runnerPrice - form.customerPrice).toLocaleString()}
                       </span>
                     )}
                   </div>
                 </div>
                 <div className="flex gap-2 mt-3">
-                  <Button variant="outline" size="sm" className="flex-1 text-xs h-8" onClick={() => rejectOffer('', offer.offerId)}>Decline</Button>
+                  <Button variant="outline" size="sm" className="flex-1 text-xs h-8" onClick={() => rejectOffer(searchOrderId ?? '', offer.offerId)}>Decline</Button>
                   <Button size="sm" className="flex-1 text-xs h-8 bg-emerald-500 hover:bg-emerald-600" onClick={() => handleAcceptOffer(offer.offerId)}>Accept</Button>
                 </div>
               </CardContent>
@@ -268,7 +272,7 @@ export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
       <div className="h-full flex flex-col">
         <div className="p-4 pb-2 flex items-center gap-2">
           <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setStep('quick')}>
-            ←
+            <ArrowLeft className="w-4 h-4" />
           </Button>
           <h2 className="font-bold text-sm">Request Delivery</h2>
         </div>
@@ -373,7 +377,7 @@ export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
           <div className="space-y-1.5">
             <label className="text-xs font-medium">Your offer</label>
             <div className="bg-emerald-500/10 rounded-xl p-3 text-center">
-              <p className="text-2xl font-bold text-emerald-600">N{suggestedPrice.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-emerald-600">₦{suggestedPrice.toLocaleString()}</p>
               <p className="text-[10px] text-muted-foreground">Suggested price · Runners may counter-offer</p>
             </div>
             <Input
@@ -391,7 +395,7 @@ export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
             className="w-full h-12 text-sm font-bold"
           >
             <Zap className="w-4 h-4 mr-2" />
-            Request Delivery — N{(form.customerPrice || suggestedPrice).toLocaleString()}
+            Request Delivery — ₦{(form.customerPrice || suggestedPrice).toLocaleString()}
           </Button>
         </div>
       </div>
@@ -413,11 +417,11 @@ export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
               </span>
             </div>
           </div>
-          <a href="/delivery">
+          <Link href="/delivery">
             <Button variant="outline" size="sm" className="h-8 gap-1 text-xs">
               Full View <ArrowRight className="w-3 h-3" />
             </Button>
-          </a>
+          </Link>
         </div>
 
         {/* Quick category grid */}
@@ -474,7 +478,7 @@ export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
         </Card>
 
         {/* Runner link */}
-        <a href="/runner" className="block">
+        <Link href="/runner" className="block">
           <Card className="hover:bg-muted/50 transition-colors">
             <CardContent className="p-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -489,7 +493,7 @@ export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
               <ChevronRight className="w-4 h-4 text-muted-foreground" />
             </CardContent>
           </Card>
-        </a>
+        </Link>
       </div>
     </div>
   )

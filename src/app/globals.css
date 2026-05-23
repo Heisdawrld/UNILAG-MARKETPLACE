@@ -110,7 +110,7 @@
   html, body {
     @apply bg-background text-foreground;
     overflow-x: hidden;
-    max-width: 100vw;
+    max-width: 100%;
     min-height: 100svh;
   }
 }
@@ -123,8 +123,19 @@
 .safe-top { padding-top: env(safe-area-inset-top, 0px); }
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
 
+/* Currency formatting */
+.naira::before { content: '\20A6'; }
+
+/* Pulse once animation */
+@keyframes pulse-once {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+.animate-pulse-once {
+  animation: pulse-once 2s ease-in-out 3;
+}
+
 /* No overscroll bounce */
-body { overscroll-behavior-y: none; -webkit-overflow-scrolling: touch; }
 
 /* No tap highlight */
 nav, button { -webkit-tap-highlight-color: transparent; }

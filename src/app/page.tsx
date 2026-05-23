@@ -38,21 +38,21 @@ function BottomNav({ activeTab, onTabChange }: { activeTab: ViewTab; onTabChange
   const renderTab = (id: ViewTab, Icon: typeof Home, label: string) => {
     const isActive = activeTab === id;
     return (
-      <button key={id} onClick={() => onTabChange(id)} aria-current={isActive ? 'page' : undefined} aria-label={label} className={`relative flex flex-col items-center justify-center py-2.5 px-2 transition-all ${isActive ? 'text-primary' : 'text-muted-foreground'}`}>
+      <button key={id} onClick={() => onTabChange(id)} aria-current={isActive ? 'page' : undefined} aria-label={label} className={`relative flex flex-col items-center justify-center py-3 px-2.5 min-h-[44px] transition-all ${isActive ? 'text-primary' : 'text-muted-foreground'}`}>
         <Icon className={`w-5 h-5 ${isActive ? 'scale-110' : ''} transition-transform`} />
-        <span className="text-[9px] mt-0.5 font-medium">{label}</span>
+        <span className="text-[10px] mt-0.5 font-medium">{label}</span>
         {isActive && <div className="absolute top-0 left-1/4 right-1/4 h-0.5 bg-primary rounded-full" />}
       </button>
     );
   };
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t safe-bottom z-50 w-full">
+    <nav aria-label="Main navigation" className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t safe-bottom z-50">
       <div className="flex items-center justify-between max-w-lg mx-auto px-1">
         <div className="flex flex-1 justify-around">
           {leftTabs.map(({ id, icon, label }) => renderTab(id, icon, label))}
         </div>
-        <button onClick={() => onTabChange('sell')} className="relative -mt-4 mx-1 flex-shrink-0">
+        <button onClick={() => onTabChange('sell')} aria-label="Sell item" className="relative -mt-4 mx-1 flex-shrink-0">
           <div className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all ${activeTab === 'sell' ? 'bg-primary scale-110 shadow-primary/30' : 'bg-primary hover:scale-105'}`}>
             <PlusCircle className="w-7 h-7 text-primary-foreground" />
           </div>
@@ -150,14 +150,14 @@ export default function MarketplaceApp() {
       try {
         const data = await api.get('/api/auth/clerk-me');
         if (data?.id) { setUser(data); setLoading(false); return; }
-      } catch { }
+      } catch (e) { console.error('[auth] clerk-me failed:', e) }
 
       const email = clerkUser.primaryEmailAddress?.emailAddress;
       if (email) {
         try {
           const data = await api.get('/api/auth/me');
           if (data?.id) { setUser(data); setLoading(false); return; }
-        } catch { }
+        } catch (e) { console.error('[auth] me failed:', e) }
 
         try {
           const data = await api.post('/api/auth/register', {
@@ -193,7 +193,8 @@ export default function MarketplaceApp() {
   // Show push prompt after a delay if not subscribed
   useEffect(() => {
     if (!user || !isSupported || isSubscribed || permission === 'denied') return;
-    const dismissed = localStorage.getItem('push_prompt_dismissed');
+    let dismissed: string | null = null;
+    try { dismissed = localStorage.getItem('push_prompt_dismissed'); } catch {}
     if (dismissed) return;
     const timer = setTimeout(() => setShowPushPrompt(true), 5000);
     return () => clearTimeout(timer);
@@ -202,21 +203,25 @@ export default function MarketplaceApp() {
   const handleToggleSave = useCallback(async (listingId: string) => {
     if (!user) return;
     const isSaved = savedIds.has(listingId);
+    // Optimistic update — update UI immediately
+    setSavedIds(prev => {
+      const n = new Set(prev);
+      if (isSaved) n.delete(listingId); else n.add(listingId);
+      return n;
+    });
     try {
       if (isSaved) {
         await api.del(`/api/saved?userId=${user.id}&listingId=${listingId}`);
-        setSavedIds(prev => { const n = new Set(prev); n.delete(listingId); return n; });
       } else {
         await api.post('/api/saved', { userId: user.id, listingId });
-        setSavedIds(prev => new Set(prev).add(listingId));
       }
     } catch (e) {
       console.error(e);
       toast({ title: 'Could not update saved listings', variant: 'destructive' });
-      // Revert optimistic update
+      // Revert optimistic update on failure
       setSavedIds(prev => {
         const n = new Set(prev);
-        if (savedIds.has(listingId)) n.add(listingId); else n.delete(listingId);
+        if (isSaved) n.add(listingId); else n.delete(listingId);
         return n;
       });
     }
@@ -343,7 +348,7 @@ export default function MarketplaceApp() {
           ) : (
             <>
               <p className="text-sm text-muted-foreground mb-4 animate-pulse">Setting up your account...</p>
-              <div className="mt-4 w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+              <div className="mt-4 w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
             </>
           )}
         </div>
@@ -383,14 +388,14 @@ export default function MarketplaceApp() {
             initial={{ y: -80, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -80, opacity: 0 }}
-            className="absolute top-0 left-0 right-0 z-[90] safe-top p-3 bg-primary/95 backdrop-blur-sm text-primary-foreground shadow-lg"
+            className="fixed top-0 left-0 right-0 z-[90] safe-top p-3 bg-primary/95 backdrop-blur-sm text-primary-foreground shadow-lg"
           >
             <div className="flex items-center gap-3 max-w-lg mx-auto">
               <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
                 <Bell className="w-5 h-5" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold">Enable Notifications 🔔</p>
+                <p className="text-sm font-semibold flex items-center gap-1.5">Enable Notifications</p>
                 <p className="text-[11px] opacity-80">Get alerts for messages, runner updates & more</p>
               </div>
               <button
@@ -405,9 +410,9 @@ export default function MarketplaceApp() {
               <button
                 onClick={() => {
                   setShowPushPrompt(false);
-                  localStorage.setItem('push_prompt_dismissed', 'true');
+                  try { localStorage.setItem('push_prompt_dismissed', 'true'); } catch {}
                 }}
-                className="text-white/60 text-xs"
+                className="text-white/80 text-xs p-1"
               >
                 ✕
               </button>

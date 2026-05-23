@@ -193,36 +193,40 @@ export default function HomeFeed({
 
       {/* Notification Dropdown */}
       {showNotifs && (
-        <div className="mx-4 mt-2 bg-card border rounded-xl shadow-lg overflow-hidden z-40 relative">
-          <div className="p-3 border-b flex items-center justify-between">
-            <p className="font-semibold text-sm">Notifications</p>
-            <div className="flex items-center gap-2">
-              {unreadCount > 0 && <Badge variant="secondary" className="text-[10px]">{unreadCount} new</Badge>}
-              {unreadCount > 0 && (
-                <button onClick={handleMarkAllRead} className="text-[10px] font-medium text-primary hover:underline">
-                  Mark all as read
-                </button>
+        <>
+          {/* Backdrop to close on click-outside */}
+          <div className="fixed inset-0 z-35" onClick={() => setShowNotifs(false)} />
+          <div className="mx-4 mt-2 bg-card border rounded-xl shadow-lg overflow-hidden z-40 relative">
+            <div className="p-3 border-b flex items-center justify-between">
+              <p className="font-semibold text-sm">Notifications</p>
+              <div className="flex items-center gap-2">
+                {unreadCount > 0 && <Badge variant="secondary" className="text-[10px]">{unreadCount} new</Badge>}
+                {unreadCount > 0 && (
+                  <button onClick={handleMarkAllRead} className="text-[10px] font-medium text-primary hover:underline">
+                    Mark all as read
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="max-h-64 overflow-y-auto">
+              {notifications.length === 0 ? (
+                <p className="p-4 text-sm text-muted-foreground text-center">No notifications yet</p>
+              ) : (
+                notifications.slice(0, 10).map(notif => (
+                  <button
+                    key={notif.id}
+                    onClick={() => handleNotificationClick(notif)}
+                    className={`block w-full p-3 border-b last:border-0 text-left hover:bg-muted/60 transition-colors ${!notif.read ? 'bg-primary/5' : ''}`}
+                  >
+                    <p className="text-xs font-medium">{notif.title}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{notif.message}</p>
+                    {notif.type === 'new_message' && <p className="text-[10px] text-primary font-medium mt-1">Open message</p>}
+                  </button>
+                ))
               )}
             </div>
           </div>
-          <div className="max-h-64 overflow-y-auto">
-            {notifications.length === 0 ? (
-              <p className="p-4 text-sm text-muted-foreground text-center">No notifications yet</p>
-            ) : (
-              notifications.slice(0, 10).map(notif => (
-                <button
-                  key={notif.id}
-                  onClick={() => handleNotificationClick(notif)}
-                  className={`block w-full p-3 border-b last:border-0 text-left hover:bg-muted/60 transition-colors ${!notif.read ? 'bg-primary/5' : ''}`}
-                >
-                  <p className="text-xs font-medium">{notif.title}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">{notif.message}</p>
-                  {notif.type === 'new_message' && <p className="text-[10px] text-primary font-medium mt-1">Open message</p>}
-                </button>
-              ))
-            )}
-          </div>
-        </div>
+        </>
       )}
 
       <div className="px-4 space-y-6 py-4">
@@ -235,7 +239,7 @@ export default function HomeFeed({
                 <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
                   <Icon className="w-5 h-5 text-primary" />
                 </div>
-                <span className="text-[9px] text-center leading-tight font-medium text-muted-foreground">{name.split(' ')[0]}</span>
+                <span className="text-[10px] text-center leading-tight font-medium text-muted-foreground line-clamp-2">{name}</span>
               </button>
             ))}
           </div>
@@ -271,22 +275,26 @@ export default function HomeFeed({
             <h2 className="font-bold text-lg">Fresh Listings</h2>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {recent.map(listing => (
+            {recent.length > 0 ? recent.map(listing => (
               <ListingCard key={listing.id} listing={listing} onClick={() => onSelectListing(listing.id)} isSaved={savedIds.has(listing.id)} onToggleSave={() => onToggleSave(listing.id)} />
-            ))}
+            )) : (
+              <p className="col-span-full text-sm text-muted-foreground text-center py-8">No listings yet</p>
+            )}
           </div>
         </section>
 
         {/* Most Viewed */}
         <section>
           <div className="flex items-center gap-2 mb-3">
-            <Eye className="w-5 h-5 text-blue-500" />
+            <Eye className="w-5 h-5 text-blue-500 dark:text-blue-400" />
             <h2 className="font-bold text-lg">Most Viewed</h2>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {popular.map(listing => (
+            {popular.length > 0 ? popular.map(listing => (
               <ListingCard key={listing.id} listing={listing} onClick={() => onSelectListing(listing.id)} isSaved={savedIds.has(listing.id)} onToggleSave={() => onToggleSave(listing.id)} />
-            ))}
+            )) : (
+              <p className="col-span-full text-sm text-muted-foreground text-center py-8">No popular listings yet</p>
+            )}
           </div>
         </section>
 

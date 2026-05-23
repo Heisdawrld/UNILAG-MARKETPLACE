@@ -7,6 +7,17 @@ export default function GlobalError({
   error: Error & { digest?: string }
   reset: () => void
 }) {
+  // Detect dark mode via media query (can't rely on Tailwind/theme in global error boundary)
+  const isDark = typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches
+
+  const bg = isDark ? '#09090b' : '#fafafa'
+  const cardBg = isDark ? '#18181b' : '#ffffff'
+  const text = isDark ? '#fafafa' : '#18181b'
+  const muted = isDark ? '#a1a1aa' : '#71717a'
+  const border = isDark ? '#27272a' : '#e4e4e7'
+  const primary = isDark ? '#dc6b7c' : '#6B1D2A'
+  const primaryFg = isDark ? '#09090b' : '#ffffff'
+
   return (
     <html>
       <body>
@@ -16,21 +27,21 @@ export default function GlobalError({
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            minHeight: '100vh',
+            minHeight: '100dvh',
             padding: '2rem',
             textAlign: 'center',
             fontFamily: 'system-ui, -apple-system, sans-serif',
-            backgroundColor: '#f9fafb',
+            backgroundColor: bg,
           }}
         >
           <div
             style={{
               maxWidth: '28rem',
               width: '100%',
-              backgroundColor: '#ffffff',
+              backgroundColor: cardBg,
               borderRadius: '1rem',
               boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)',
-              border: '1px solid #f3f4f6',
+              border: `1px solid ${border}`,
               padding: '2rem',
             }}
           >
@@ -38,7 +49,7 @@ export default function GlobalError({
               style={{
                 width: '4rem',
                 height: '4rem',
-                backgroundColor: '#fef2f2',
+                backgroundColor: isDark ? '#451a1a' : '#fef2f2',
                 borderRadius: '9999px',
                 display: 'flex',
                 alignItems: 'center',
@@ -61,32 +72,50 @@ export default function GlobalError({
                 <path d="M12 17h.01" />
               </svg>
             </div>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: '700', color: '#111827', marginBottom: '0.5rem' }}>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: '700', color: text, marginBottom: '0.5rem' }}>
               Something went wrong!
             </h2>
-            <p style={{ color: '#6b7280', marginBottom: '1.5rem', fontSize: '0.875rem' }}>
+            <p style={{ color: muted, marginBottom: '1.5rem', fontSize: '0.875rem' }}>
               An unexpected error occurred. Please try again.
             </p>
             {error.digest && (
-              <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: '1rem', fontFamily: 'monospace' }}>
+              <p style={{ fontSize: '0.75rem', color: muted, marginBottom: '1rem', fontFamily: 'monospace', opacity: 0.6 }}>
                 Error ID: {error.digest}
               </p>
             )}
-            <button
-              onClick={reset}
-              style={{
-                padding: '0.625rem 1.25rem',
-                background: '#10b981',
-                color: 'white',
-                border: 'none',
-                borderRadius: '0.5rem',
-                cursor: 'pointer',
-                fontWeight: 500,
-                fontSize: '0.875rem',
-              }}
-            >
-              Try again
-            </button>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+              <button
+                onClick={reset}
+                style={{
+                  padding: '0.625rem 1.25rem',
+                  background: primary,
+                  color: primaryFg,
+                  border: 'none',
+                  borderRadius: '0.5rem',
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                  fontSize: '0.875rem',
+                }}
+              >
+                Try again
+              </button>
+              <a
+                href="/"
+                style={{
+                  padding: '0.625rem 1.25rem',
+                  background: isDark ? '#27272a' : '#f4f4f5',
+                  color: text,
+                  border: 'none',
+                  borderRadius: '0.5rem',
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                  fontSize: '0.875rem',
+                  textDecoration: 'none',
+                }}
+              >
+                Go Home
+              </a>
+            </div>
           </div>
         </div>
       </body>

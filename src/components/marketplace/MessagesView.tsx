@@ -162,7 +162,7 @@ function ChatDetail({ chat, user, onBack }: { chat: Chat; user: UserType; onBack
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-3 safe-top p-3 border-b bg-background/95 backdrop-blur-md">
-        <button onClick={onBack} className="p-1"><ArrowLeft className="w-5 h-5" /></button>
+        <button onClick={onBack} className="p-2 rounded-full hover:bg-muted"><ArrowLeft className="w-5 h-5" /></button>
         <Avatar className="w-8 h-8"><AvatarImage src={counterparty.avatar || undefined} /><AvatarFallback>{getInitials(counterparty.name)}</AvatarFallback></Avatar>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium truncate">{counterparty.name}</p>
@@ -234,8 +234,8 @@ function ChatDetail({ chat, user, onBack }: { chat: Chat; user: UserType; onBack
       )}
 
       <div className="p-3 border-t flex gap-2">
-        <Input value={newMsg} onChange={e => setNewMsg(e.target.value)} placeholder="Type a message..." className="flex-1" onKeyDown={e => e.key === 'Enter' && handleSend()} />
-        <button onClick={handleSend} disabled={sending || !newMsg.trim()} className="p-2 bg-primary text-primary-foreground rounded-full disabled:opacity-50">
+        <Input value={newMsg} onChange={e => setNewMsg(e.target.value)} placeholder="Type a message..." className="flex-1" onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()} />
+        <button onClick={handleSend} disabled={sending || !newMsg.trim()} className="p-2.5 bg-primary text-primary-foreground rounded-full disabled:opacity-50 min-w-[44px] min-h-[44px] flex items-center justify-center">
           <Send className="w-4 h-4" />
         </button>
       </div>
@@ -307,7 +307,7 @@ export default function MessagesView({
               <button key={chat.id} onClick={() => setActiveChat(chat)} className="w-full flex items-center gap-3 p-4 hover:bg-muted/50 transition-colors border-b text-left">
                 <div className="relative">
                   <Avatar className="w-12 h-12"><AvatarImage src={counterparty.avatar || undefined} /><AvatarFallback>{getInitials(counterparty.name)}</AvatarFallback></Avatar>
-                  {chat.unreadCount > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-primary text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center">{chat.unreadCount}</span>}
+                  {chat.unreadCount > 0 && <span className="absolute -top-1 -right-1 min-w-[20px] h-5 bg-primary text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center px-1">{chat.unreadCount > 99 ? '99+' : chat.unreadCount}</span>}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
@@ -315,7 +315,7 @@ export default function MessagesView({
                     {chat.lastMessage && <span className="text-[10px] text-muted-foreground">{timeAgo(chat.lastMessage.createdAt)}</span>}
                   </div>
                   <p className="text-xs text-muted-foreground truncate">{chat.listing.title}</p>
-                  {chat.lastMessage && <p className="text-xs text-muted-foreground truncate mt-0.5">{chat.lastMessage.message}</p>}
+                  {chat.lastMessage && <p className="text-xs text-muted-foreground truncate mt-0.5">{chat.lastMessage.message.includes('[SYSTEM:') ? 'System notification' : chat.lastMessage.message}</p>}
                 </div>
               </button>
             );
