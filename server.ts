@@ -13,6 +13,14 @@ const __dirname = dirname(__filename)
 const projectDir = __dirname
 
 async function main() {
+  // Validate environment on startup
+  try {
+    const { checkEnvironment } = await import(resolve(projectDir, 'src/lib/env-check.ts'))
+    checkEnvironment()
+  } catch {
+    // env-check is optional; don't block startup
+  }
+
   const app = next({ dev, hostname, port, dir: projectDir })
   const handle = app.getRequestHandler()
 
