@@ -1,3 +1,17 @@
+/**
+ * proxy.ts — Next.js 16 Middleware (Proxy)
+ *
+ * In Next.js 16+, the middleware file is called "proxy.ts" instead of "middleware.ts".
+ * This is the canonical middleware file for the application.
+ *
+ * Handles:
+ * - Clerk authentication (public/protected/optional routes)
+ * - CSRF protection (two-layer: Origin/Referer + X-Requested-With)
+ * - API versioning (/api/v1/* → /api/*)
+ * - Security headers (X-Content-Type-Options, X-Frame-Options, etc.)
+ * - Production seed endpoint blocking
+ */
+
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 import { NextResponse, NextRequest } from 'next/server'
 

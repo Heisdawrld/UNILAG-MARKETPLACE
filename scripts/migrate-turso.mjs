@@ -1,9 +1,17 @@
 // Migration script — run with: npx tsx scripts/migrate-turso.mjs
 import { createClient } from '@libsql/client';
 
+if (!process.env.TURSO_DATABASE_URL || !process.env.TURSO_AUTH_TOKEN) {
+  console.error('ERROR: TURSO_DATABASE_URL and TURSO_AUTH_TOKEN environment variables are required.');
+  console.error('Set them before running this script:');
+  console.error('  export TURSO_DATABASE_URL=libsql://your-db.turso.io');
+  console.error('  export TURSO_AUTH_TOKEN=your-auth-token');
+  process.exit(1);
+}
+
 const client = createClient({
-  url: process.env.TURSO_DATABASE_URL || 'libsql://unilag-marketplace-xgvantage.aws-us-west-2.turso.io',
-  authToken: process.env.TURSO_AUTH_TOKEN || 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3Nzg5MDk2NzQsImlkIjoiMDE5ZTJmMjAtY2UwMS03ZDUwLWI1YjMtNDQzYzE5MjIxZWY3IiwicmlkIjoiNTNhZjdiODUtODIyNy00NmQ1LThiYTQtNmJkMzViNmRmNWE1In0.0WdmVzlEMvqAV6c-l-ZA5kunbF2UEI8ZtyYWXcpyBMxolB8E3KbJL8nXRpBl7mVuCxd7Nu-cdzk1GEA14PUHBw',
+  url: process.env.TURSO_DATABASE_URL,
+  authToken: process.env.TURSO_AUTH_TOKEN,
 });
 
 const migrations = [

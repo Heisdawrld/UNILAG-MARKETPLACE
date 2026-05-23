@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Truck, MapPin, Package, Clock, ArrowLeft, Send, History } from 'lucide-react'
+import { useUser } from '@clerk/nextjs'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useCustomerDeliveryStore, type CustomerDeliveryView, type CustomerActiveDelivery } from '@/store/customer-delivery-store'
@@ -13,8 +14,6 @@ import CustomerOfferViewer from '@/components/delivery/CustomerOfferViewer'
 import CustomerTrackingView from '@/components/delivery/CustomerTrackingView'
 import CustomerDeliveryMap from '@/components/delivery/CustomerDeliveryMap'
 import CustomerDeliveryHistory from '@/components/delivery/CustomerDeliveryHistory'
-
-const MOCK_CUSTOMER = { id: 'mock-customer-001', username: 'Ada (Customer)' }
 
 const VIEW_CONFIG: Record<CustomerDeliveryView, { label: string; icon: any }> = {
   form: { label: 'New Delivery', icon: Send },
@@ -40,7 +39,7 @@ export default function DeliveryPage() {
   const {
     isConnected, createDelivery, acceptOffer, rejectOffer,
     confirmDelivery, cancelDelivery, watchDelivery, unwatchDelivery,
-  } = useCustomerSocket({ userId: MOCK_CUSTOMER.id })
+  } = useCustomerSocket({ userId: null }) // Uses Clerk auth token automatically
 
   const [mapExpanded, setMapExpanded] = useState(false)
 
