@@ -47,7 +47,7 @@ function BottomNav({ activeTab, onTabChange }: { activeTab: ViewTab; onTabChange
   };
 
   return (
-    <nav className="flex-shrink-0 bg-background/95 backdrop-blur-md border-t safe-bottom z-50 w-full">
+    <nav className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t safe-bottom z-50 w-full">
       <div className="flex items-center justify-between max-w-lg mx-auto px-1">
         <div className="flex flex-1 justify-around">
           {leftTabs.map(({ id, icon, label }) => renderTab(id, icon, label))}
@@ -354,7 +354,7 @@ export default function MarketplaceApp() {
   // Listing Detail View
   if (selectedListingId) {
     return (
-      <div className="h-[100svh] flex flex-col bg-background">
+      <div className="h-[100dvh] flex flex-col bg-background">
         <main className="flex-1 min-h-0 overflow-hidden">
           <Suspense fallback={<TabLoading />}>
             <ListingDetail
@@ -373,7 +373,7 @@ export default function MarketplaceApp() {
 
 
   return (
-    <div className="h-[100svh] flex flex-col bg-background">
+    <div className="h-[100dvh] flex flex-col bg-background">
       {!onboarded && <Onboarding onComplete={() => setOnboarded(true)} />}
 
       {/* Push Notification Prompt */}
@@ -416,7 +416,7 @@ export default function MarketplaceApp() {
         )}
       </AnimatePresence>
 
-      <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden relative">
+      <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden relative pb-16 safe-bottom">
         <Suspense fallback={<TabLoading />}>
           <AnimatePresence mode="wait">
             <motion.div

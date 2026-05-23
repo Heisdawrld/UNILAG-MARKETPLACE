@@ -44,7 +44,7 @@ export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
   const isSocketConnected = useCustomerDeliveryStore((s) => s.isSocketConnected)
   const resetForm = useCustomerDeliveryStore((s) => s.resetForm)
 
-  const { isConnected, createDelivery, acceptOffer, rejectOffer, confirmDelivery, cancelDelivery } = useCustomerSocket({ userId: user.id })
+  const { isConnected, connectionError, createDelivery, acceptOffer, rejectOffer, confirmDelivery, cancelDelivery } = useCustomerSocket({ userId: user.id })
 
   const [step, setStep] = useState<'quick' | 'form' | 'searching' | 'offers' | 'tracking'>(activeDelivery ? 'tracking' : 'quick')
 
@@ -60,6 +60,10 @@ export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
 
   const handleSubmit = useCallback(() => {
     if (!isFormValid) return
+    if (!isSocketConnected) {
+      alert('Delivery service is offline. Please wait for the connection to be established, then try again.')
+      return
+    }
     createDelivery({
       pickupLat: form.pickupLat!, pickupLng: form.pickupLng!, pickupAddress: form.pickupAddress,
       dropoffLat: form.dropoffLat!, dropoffLng: form.dropoffLng!, dropoffAddress: form.dropoffAddress,
@@ -67,7 +71,7 @@ export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
       title: form.title, description: form.description, itemImages: form.itemImages,
     })
     setStep('searching')
-  }, [isFormValid, createDelivery, form])
+  }, [isFormValid, isSocketConnected, createDelivery, form])
 
   const handleAcceptOffer = useCallback((offerId: string) => {
     const orderId = activeDelivery?.orderId ?? ''
@@ -402,7 +406,12 @@ export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-bold">Delivery</h2>
-            <p className="text-xs text-muted-foreground">Get anything delivered on campus</p>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <div className={`w-1.5 h-1.5 rounded-full ${isSocketConnected ? 'bg-emerald-500' : connectionError ? 'bg-amber-500' : 'bg-red-500'}`} />
+              <span className="text-[10px] text-muted-foreground">
+                {isSocketConnected ? 'Live' : connectionError ? 'Limited — ' + connectionError : 'Connecting...'}
+              </span>
+            </div>
           </div>
           <a href="/delivery">
             <Button variant="outline" size="sm" className="h-8 gap-1 text-xs">
@@ -412,6 +421,20 @@ export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
         </div>
 
         {/* Quick category grid */}
+        {!isSocketConnected && (
+          <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-xl p-3 flex items-start gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center shrink-0 mt-0.5">
+              <Truck className="w-3.5 h-3.5 text-amber-600" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">Delivery service offline</p>
+              <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">
+                {connectionError || 'Connecting to delivery servers...'}
+                You can still browse, but creating deliveries requires a live connection.
+              </p>
+            </div>
+          </div>
+        )}
         <div className="space-y-2">
           <p className="text-xs font-medium text-muted-foreground">What do you need delivered?</p>
           <div className="grid grid-cols-2 gap-2">

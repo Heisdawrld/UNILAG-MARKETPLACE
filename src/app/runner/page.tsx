@@ -57,7 +57,7 @@ export default function RunnerPage() {
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-9 h-9 bg-emerald-500 rounded-xl flex items-center justify-center"><Truck className="w-4 h-4 text-white" /></div>
-            <div><h1 className="font-bold text-sm">Runner Dashboard</h1><div className="flex items-center gap-1.5"><div className={`w-2 h-2 rounded-full ${isSocketConnected ? 'bg-emerald-500' : 'bg-red-500'}`} /><span className="text-[10px] text-muted-foreground">{isSocketConnected ? 'Live' : 'Connecting...'}</span>{isSimulated && isOnline && <Badge variant="secondary" className="text-[8px] h-3.5 px-1 ml-1">SIM GPS</Badge>}</div></div>
+            <div><h1 className="font-bold text-sm">Runner Dashboard</h1><div className="flex items-center gap-1.5"><div className={`w-2 h-2 rounded-full ${isSocketConnected ? 'bg-emerald-500' : 'bg-amber-500'}`} /><span className="text-[10px] text-muted-foreground">{isSocketConnected ? 'Live' : 'Offline'}</span>{isSimulated && isOnline && <Badge variant="secondary" className="text-[8px] h-3.5 px-1 ml-1">SIM GPS</Badge>}</div></div>
           </div>
           <div className="flex items-center gap-2">{isOnline && <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 rounded-full text-[10px]"><div className="w-1.5 h-1.5 bg-emerald-500 rounded-full mr-1 animate-pulse" />Online</Badge>}{incomingRequests.length > 0 && <Badge className="bg-orange-500 text-white rounded-full text-[10px]">{incomingRequests.length} new</Badge>}</div>
         </div>
@@ -80,7 +80,7 @@ export default function RunnerPage() {
         </AnimatePresence>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t z-40"><div className="max-w-2xl mx-auto flex">{VIEW_TABS.map(tab => { const isActive = currentView === tab.id; return (<button key={tab.id} onClick={() => setCurrentView(tab.id)} className={`flex-1 py-3 flex flex-col items-center gap-1 transition-colors ${isActive ? 'text-emerald-600' : 'text-muted-foreground'}`}><tab.icon className="w-5 h-5" /><span className="text-[10px] font-medium">{tab.label}</span></button>) })}</div></div>
+      <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t z-40 safe-bottom"><div className="max-w-2xl mx-auto flex">{VIEW_TABS.map(tab => { const isActive = currentView === tab.id; return (<button key={tab.id} onClick={() => setCurrentView(tab.id)} className={`flex-1 py-3 flex flex-col items-center gap-1 transition-colors ${isActive ? 'text-emerald-600' : 'text-muted-foreground'}`}><tab.icon className="w-5 h-5" /><span className="text-[10px] font-medium">{tab.label}</span></button>) })}</div></div>
     </div>
   )
 }

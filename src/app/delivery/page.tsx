@@ -37,7 +37,7 @@ export default function DeliveryPage() {
   const resetForm = useCustomerDeliveryStore((s) => s.resetForm)
 
   const {
-    isConnected, createDelivery, acceptOffer, rejectOffer,
+    isConnected, connectionError, createDelivery, acceptOffer, rejectOffer,
     confirmDelivery, cancelDelivery, watchDelivery, unwatchDelivery,
   } = useCustomerSocket({ userId: null }) // Uses Clerk auth token automatically
 
@@ -176,9 +176,9 @@ export default function DeliveryPage() {
             <div>
               <h1 className="font-bold text-sm">Delivery</h1>
               <div className="flex items-center gap-1.5">
-                <div className={`w-2 h-2 rounded-full ${isSocketConnected ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                <div className={`w-2 h-2 rounded-full ${isSocketConnected ? 'bg-emerald-500' : connectionError ? 'bg-amber-500' : 'bg-red-500 animate-pulse'}`} />
                 <span className="text-[10px] text-muted-foreground">
-                  {isSocketConnected ? 'Live' : 'Connecting...'}
+                  {isSocketConnected ? 'Live' : connectionError ? 'Offline — ' + connectionError : 'Connecting...'}
                 </span>
               </div>
             </div>
@@ -288,7 +288,7 @@ export default function DeliveryPage() {
       </div>
 
       {/* Bottom nav */}
-      <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t z-40">
+      <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t z-40 safe-bottom">
         <div className="max-w-2xl mx-auto flex">
           {(['form', 'tracking', 'history'] as CustomerDeliveryView[]).map((view) => {
             const config = VIEW_CONFIG[view]

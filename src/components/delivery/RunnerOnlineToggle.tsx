@@ -38,7 +38,7 @@ export default function RunnerOnlineToggle({ isConnected, onToggle }: RunnerOnli
           {isOnline && (
             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-3 pt-3 border-t border-emerald-500/20">
               <div className="flex items-center gap-4">
-                <div className="flex items-center gap-1.5">{isConnected ? <Wifi className="w-3.5 h-3.5 text-emerald-500" /> : <WifiOff className="w-3.5 h-3.5 text-red-500" />}<span className="text-[10px] text-muted-foreground">{isConnected ? 'Connected' : 'Reconnecting...'}</span></div>
+                <div className="flex items-center gap-1.5">{isConnected ? <Wifi className="w-3.5 h-3.5 text-emerald-500" /> : <WifiOff className="w-3.5 h-3.5 text-amber-500" />}<span className="text-[10px] text-muted-foreground">{isConnected ? 'Connected' : 'Offline'}</span></div>
                 <div className="flex items-center gap-1.5"><Radio className={`w-3.5 h-3.5 ${gpsActive ? 'text-emerald-500' : 'text-amber-500'}`} /><span className="text-[10px] text-muted-foreground">{gpsActive ? 'GPS Active' : 'Waiting for GPS...'}</span></div>
                 {locationUpdatedAt && <span className="text-[10px] text-muted-foreground ml-auto">Updated {Math.round((Date.now() - locationUpdatedAt) / 1000)}s ago</span>}
               </div>

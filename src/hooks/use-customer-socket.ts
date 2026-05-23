@@ -9,7 +9,7 @@ interface UseCustomerSocketOptions { userId?: string | null }
 
 export function useCustomerSocket({ userId: _userId }: UseCustomerSocketOptions) {
   // Socket auth now uses Clerk-based tokens — userId is no longer needed
-  const { socket, isConnected } = useSocket({ autoConnect: true })
+  const { socket, isConnected, connectionError } = useSocket({ autoConnect: true })
   const setSocketConnected = useCustomerDeliveryStore((s) => s.setSocketConnected)
   const addOffer = useCustomerDeliveryStore((s) => s.addOffer)
   const removeOffer = useCustomerDeliveryStore((s) => s.removeOffer)
@@ -153,7 +153,7 @@ export function useCustomerSocket({ userId: _userId }: UseCustomerSocketOptions)
   }, [socket])
 
   return {
-    socket, isConnected,
+    socket, isConnected, connectionError,
     createDelivery, acceptOffer, rejectOffer,
     confirmDelivery, cancelDelivery,
     watchDelivery, unwatchDelivery,
