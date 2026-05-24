@@ -53,7 +53,8 @@ const isProtectedApiRoute = createRouteMatcher([
   '/api/auth/profile(.*)',
   '/api/auth/register(.*)',
   '/api/auth/clerk-me(.*)',
-  '/api/auth/socket-token(.*)',
+  // socket-token moved to optional auth — the route handler has its own
+  // auth logic with fallbacks (header-based userId, fallbackId param)
   '/api/chats(.*)',
   '/api/messages(.*)',
   '/api/reports(.*)',
@@ -85,6 +86,7 @@ const isOptionalAuthApiRoute = createRouteMatcher([
   '/api/stores(.*)',
   '/api/reviews(.*)',
   '/api/runner-locations(.*)',
+  '/api/auth/socket-token(.*)',  // Has internal auth with header fallbacks
 ])
 
 // ── Webhook / external-service routes excluded from CSRF checks ──
