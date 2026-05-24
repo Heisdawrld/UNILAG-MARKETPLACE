@@ -37,7 +37,7 @@ export default function DeliveryPage() {
   const resetForm = useCustomerDeliveryStore((s) => s.resetForm)
 
   const {
-    isConnected, connectionError, createDelivery, acceptOffer, rejectOffer,
+    isConnected, connectionError, retry, createDelivery, acceptOffer, rejectOffer,
     confirmDelivery, cancelDelivery, watchDelivery, unwatchDelivery,
   } = useCustomerSocket({ userId: null }) // Uses Clerk auth token automatically
 
@@ -178,8 +178,16 @@ export default function DeliveryPage() {
               <div className="flex items-center gap-1.5">
                 <div className={`w-2 h-2 rounded-full ${isSocketConnected ? 'bg-emerald-500' : connectionError ? 'bg-amber-500' : 'bg-red-500 animate-pulse'}`} />
                 <span className="text-[10px] text-muted-foreground">
-                  {isSocketConnected ? 'Live' : connectionError ? 'Offline — ' + connectionError : 'Connecting...'}
+                  {isSocketConnected ? 'Live' : connectionError ? 'Reconnecting...' : 'Connecting...'}
                 </span>
+                {!isSocketConnected && (
+                  <button
+                    onClick={retry}
+                    className="text-[10px] text-blue-500 hover:text-blue-600 font-medium ml-1"
+                  >
+                    Retry
+                  </button>
+                )}
               </div>
             </div>
           </div>

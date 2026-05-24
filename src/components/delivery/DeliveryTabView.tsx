@@ -48,7 +48,7 @@ export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
   const isSocketConnected = useCustomerDeliveryStore((s) => s.isSocketConnected)
   const resetForm = useCustomerDeliveryStore((s) => s.resetForm)
 
-  const { isConnected, connectionError, createDelivery, acceptOffer, rejectOffer, confirmDelivery, cancelDelivery } = useCustomerSocket({ userId: user.id })
+  const { isConnected, connectionError, retry, createDelivery, acceptOffer, rejectOffer, confirmDelivery, cancelDelivery } = useCustomerSocket({ userId: user.id })
 
   const [step, setStep] = useState<'quick' | 'form' | 'searching' | 'offers' | 'tracking'>(activeDelivery ? 'tracking' : 'quick')
 
@@ -411,10 +411,18 @@ export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
           <div>
             <h2 className="text-lg font-bold">Delivery</h2>
             <div className="flex items-center gap-1.5 mt-0.5">
-              <div className={`w-1.5 h-1.5 rounded-full ${isSocketConnected ? 'bg-emerald-500' : connectionError ? 'bg-amber-500' : 'bg-red-500'}`} />
+              <div className={`w-1.5 h-1.5 rounded-full ${isSocketConnected ? 'bg-emerald-500' : connectionError ? 'bg-amber-500' : 'bg-red-500 animate-pulse'}`} />
               <span className="text-[10px] text-muted-foreground">
-                {isSocketConnected ? 'Live' : connectionError ? 'Limited — ' + connectionError : 'Connecting...'}
+                {isSocketConnected ? 'Live' : connectionError ? 'Reconnecting...' : 'Connecting...'}
               </span>
+              {!isSocketConnected && (
+                <button
+                  onClick={retry}
+                  className="text-[10px] text-blue-500 hover:text-blue-600 font-medium ml-1"
+                >
+                  Retry
+                </button>
+              )}
             </div>
           </div>
           <Link href="/delivery">
@@ -430,12 +438,17 @@ export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
             <div className="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center shrink-0 mt-0.5">
               <Truck className="w-3.5 h-3.5 text-amber-600" />
             </div>
-            <div>
-              <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">Delivery service offline</p>
+            <div className="flex-1">
+              <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">Delivery service connecting</p>
               <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">
-                {connectionError || 'Connecting to delivery servers...'}
-                You can still browse, but creating deliveries requires a live connection.
+                We're connecting you to nearby runners. You can still browse while we reconnect.
               </p>
+              <button
+                onClick={retry}
+                className="text-[10px] text-amber-700 dark:text-amber-300 font-semibold mt-1 hover:underline"
+              >
+                Retry connection
+              </button>
             </div>
           </div>
         )}

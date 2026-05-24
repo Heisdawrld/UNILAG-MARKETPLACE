@@ -8,7 +8,7 @@ interface UseRunnerSocketOptions { userId?: string | null; isRunner: boolean }
 
 export function useRunnerSocket({ userId: _userId, isRunner }: UseRunnerSocketOptions) {
   // Socket auth now uses Clerk-based tokens — userId is no longer needed
-  const { socket, isConnected } = useSocket({ autoConnect: true })
+  const { socket, isConnected, connectionError, retry } = useSocket({ autoConnect: true })
   const setSocketConnected = useRunnerStore((s) => s.setSocketConnected)
   const addIncomingRequest = useRunnerStore((s) => s.addIncomingRequest)
   const removeIncomingRequest = useRunnerStore((s) => s.removeIncomingRequest)
@@ -49,5 +49,5 @@ export function useRunnerSocket({ userId: _userId, isRunner }: UseRunnerSocketOp
   const startNavigation = useCallback(() => { const { activeDelivery } = useRunnerStore.getState(); if (!activeDelivery || !socket?.connected) return; updateActiveDeliveryStatus('runner_en_route') }, [socket, updateActiveDeliveryStatus])
   const startTransit = useCallback(() => { const { activeDelivery } = useRunnerStore.getState(); if (!activeDelivery || !socket?.connected) return; updateActiveDeliveryStatus('in_transit') }, [socket, updateActiveDeliveryStatus])
 
-  return { socket, isConnected, goOnline, goOffline, acceptRequest, counterOffer, declineRequest, confirmPickup, confirmDropoff, cancelDelivery, startNavigation, startTransit }
+  return { socket, isConnected, connectionError, retry, goOnline, goOffline, acceptRequest, counterOffer, declineRequest, confirmPickup, confirmDropoff, cancelDelivery, startNavigation, startTransit }
 }

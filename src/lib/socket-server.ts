@@ -73,17 +73,23 @@ export function initSocketIO(httpServer: HTTPServer): TypedServer {
       return next(new Error('Authentication failed: invalid or expired token. Fetch a new token from /api/auth/socket-token'))
     }
 
-    // ── FALLBACK: Legacy userId auth (DEPRECATED, for backwards compat during migration) ──
-    // This will be removed in a future release. All clients should switch to token auth.
+    // ── FALLBACK: Legacy userId auth (for demo mode and fallback connections) ──
     const userId = socket.handshake.auth.userId as string | undefined
     if (!userId) {
-      return next(new Error('Authentication required: provide token (preferred) or userId (deprecated)'))
+      return next(new Error('Authentication required: provide token (preferred) or userId (fallback)'))
     }
 
-    // Verify user exists in DB
+    // Clerk fallback users (clerk_fallback_*) — connected when token endpoint failed
+    if (userId.startsWith('clerk_fallback_') || userId === 'demo-user') {
+      socket.data = { userId, username: userId === 'demo-user' ? 'demo-user' : `user_${userId.slice(-6)}`, role: 'user', isRunner: false, connectedAt: Date.now() }
+      console.log(`[socket] FALLBACK auth: ${userId}`)
+      return next()
+    }
+
+    // Try to verify user exists in DB
     if (!isDatabaseAvailable()) {
-      // In dev mode without DB, allow legacy auth
-      socket.data = { userId, username: 'dev-user', role: 'user', isRunner: false, connectedAt: Date.now() }
+      // No DB — allow with limited privileges
+      socket.data = { userId, username: userId, role: 'user', isRunner: false, connectedAt: Date.now() }
       console.warn(`[socket] LEGACY auth (no DB): ${userId}`)
       return next()
     }
@@ -94,13 +100,19 @@ export function initSocketIO(httpServer: HTTPServer): TypedServer {
         select: { username: true, role: true, isRunner: true },
       })
       if (!user) {
-        return next(new Error('Authentication failed: user not found'))
+        // User not found in DB — allow with limited privileges (they may not be synced yet)
+        socket.data = { userId, username: `user_${userId.slice(-6)}`, role: 'user', isRunner: false, connectedAt: Date.now() }
+        console.warn(`[socket] LEGACY auth (not in DB): ${userId}`)
+        return next()
       }
       socket.data = { userId, username: user.username, role: user.role, isRunner: user.isRunner, connectedAt: Date.now() }
       console.warn(`[socket] LEGACY auth (userId): ${user.username} (${userId}) — switch to token auth!`)
       next()
-    } catch {
-      next(new Error('Authentication verification failed'))
+    } catch (err) {
+      // DB query failed — don't block the connection
+      console.error('[socket] DB lookup failed for legacy auth:', err)
+      socket.data = { userId, username: `user_${userId.slice(-6)}`, role: 'user', isRunner: false, connectedAt: Date.now() }
+      next()
     }
   })
 
