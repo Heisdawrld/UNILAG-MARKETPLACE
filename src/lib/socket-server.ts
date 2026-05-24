@@ -80,9 +80,47 @@ export function initSocketIO(httpServer: HTTPServer): TypedServer {
     }
 
     // Clerk fallback users (clerk_fallback_*) — connected when token endpoint failed
-    if (userId.startsWith('clerk_fallback_') || userId === 'demo-user') {
-      socket.data = { userId, username: userId === 'demo-user' ? 'demo-user' : `user_${userId.slice(-6)}`, role: 'user', isRunner: false, connectedAt: Date.now() }
-      console.log(`[socket] FALLBACK auth: ${userId}`)
+    // Also handle fallback_* from server-side route when Clerk auth() throws
+    if (userId.startsWith('clerk_fallback_') || userId.startsWith('fallback_') || userId === 'demo-user') {
+      // For stable fallback IDs (clerk_fallback_<clerkId>), try to look up user in DB
+      const stableId = userId.replace('clerk_fallback_', '').replace('fallback_', '')
+      let username = userId === 'demo-user' ? 'demo-user' : `user_${stableId.slice(-6)}`
+      let isRunner = false
+      let role = 'user'
+      let actualUserId = userId
+
+      // If we have a DB, try to resolve the stable ID to a real user
+      if (isDatabaseAvailable() && userId !== 'demo-user' && !userId.endsWith(`${Date.now()}`)) {
+        try {
+          const { db } = await import('./db')
+          // Try by clerkId first
+          const user = await db.user.findUnique({
+            where: { clerkId: stableId },
+            select: { id: true, username: true, isRunner: true, role: true },
+          })
+          if (user) {
+            actualUserId = user.id
+            username = user.username
+            isRunner = user.isRunner
+            role = user.role
+          } else {
+            // Try by user id
+            const userById = await db.user.findUnique({
+              where: { id: stableId },
+              select: { id: true, username: true, isRunner: true, role: true },
+            })
+            if (userById) {
+              actualUserId = userById.id
+              username = userById.username
+              isRunner = userById.isRunner
+              role = userById.role
+            }
+          }
+        } catch {}
+      }
+
+      socket.data = { userId: actualUserId, username, role, isRunner, connectedAt: Date.now() }
+      console.log(`[socket] FALLBACK auth: ${username} (${actualUserId}) [runner=${isRunner}]`)
       return next()
     }
 

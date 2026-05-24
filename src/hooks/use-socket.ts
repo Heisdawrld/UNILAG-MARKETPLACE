@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { io, Socket } from 'socket.io-client'
-import { useAuth } from '@clerk/nextjs'
+import { useAuth, useUser } from '@clerk/nextjs'
 import type { ClientToServerEvents, ServerToClientEvents } from '@/lib/delivery-types'
 
 type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>
@@ -25,6 +25,10 @@ export function useSocket({ userId: _userId, autoConnect = true }: UseSocketOpti
   const retryCountRef = useRef(0)
   const MAX_RETRIES = 10
   const { isSignedIn, isLoaded } = useAuth()
+  const { user } = useUser()
+  // Deterministic userId for fallback — uses Clerk user ID so reconnects
+  // get the same identity instead of creating a new one each time
+  const stableClerkId = user?.id || null
 
   const cleanupSocket = useCallback(() => {
     if (socketInstance) {
@@ -121,7 +125,14 @@ export function useSocket({ userId: _userId, autoConnect = true }: UseSocketOpti
     try {
       setConnectionError('Connecting...')
       // Fetch a signed Socket.io auth token from our API
-      const tokenRes = await fetch('/api/auth/socket-token')
+      // Send the Clerk userId as a header so the server can use it as fallback
+      // if Clerk's server-side auth() fails
+      const headers: Record<string, string> = {}
+      if (stableClerkId) {
+        headers['x-socket-user-id'] = stableClerkId
+      }
+      const fallbackParam = stableClerkId ? `?fallbackId=${stableClerkId}` : ''
+      const tokenRes = await fetch(`/api/auth/socket-token${fallbackParam}`, { headers })
       if (!tokenRes.ok) {
         let errorMsg: string
         if (tokenRes.status === 401) {
@@ -129,10 +140,14 @@ export function useSocket({ userId: _userId, autoConnect = true }: UseSocketOpti
         } else if (tokenRes.status === 429) {
           errorMsg = 'Rate limited — retrying soon'
         } else {
-          // 500, 503, etc. — try the demo fallback
+          // 500, 503, etc. — try the fallback with a STABLE userId
           console.warn('[socket] Token endpoint returned', tokenRes.status, '— trying fallback')
           const socketUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
-          connectSocket(socketUrl, { userId: `clerk_fallback_${Date.now()}` })
+          // Use deterministic userId so reconnections maintain identity
+          const fallbackId = stableClerkId
+            ? `clerk_fallback_${stableClerkId}`
+            : `clerk_fallback_${Date.now()}`
+          connectSocket(socketUrl, { userId: fallbackId })
           setConnectionError('Limited connection')
           return
         }

@@ -178,7 +178,7 @@ export default function DeliveryPage() {
               <div className="flex items-center gap-1.5">
                 <div className={`w-2 h-2 rounded-full ${isSocketConnected ? 'bg-emerald-500' : connectionError ? 'bg-amber-500' : 'bg-red-500 animate-pulse'}`} />
                 <span className="text-[10px] text-muted-foreground">
-                  {isSocketConnected ? 'Live' : connectionError ? 'Reconnecting...' : 'Connecting...'}
+                  {isSocketConnected ? 'Live' : connectionError === 'Limited connection' ? 'Limited' : connectionError === 'Sign in required' ? 'Sign in needed' : connectionError ? 'Reconnecting...' : 'Connecting...'}
                 </span>
                 {!isSocketConnected && (
                   <button
