@@ -176,7 +176,7 @@ export default function HomeFeed({
             </div>
           </div>
           <div className="flex items-center gap-1">
-            <button onClick={() => setShowNotifs(!showNotifs)} className="relative p-2 rounded-full hover:bg-muted">
+            <button onClick={() => setShowNotifs(!showNotifs)} className="relative p-2 rounded-full hover:bg-muted" aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}>
               <Bell className="w-5 h-5" />
               {unreadCount > 0 && (
                 <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-destructive text-white text-[9px] font-bold rounded-full flex items-center justify-center">
@@ -195,7 +195,7 @@ export default function HomeFeed({
       {showNotifs && (
         <>
           {/* Backdrop to close on click-outside */}
-          <div className="fixed inset-0 z-35" onClick={() => setShowNotifs(false)} />
+          <div className="fixed inset-0 z-[35]" onClick={() => setShowNotifs(false)} />
           <div className="mx-4 mt-2 bg-card border rounded-xl shadow-lg overflow-hidden z-40 relative">
             <div className="p-3 border-b flex items-center justify-between">
               <p className="font-semibold text-sm">Notifications</p>
@@ -233,7 +233,7 @@ export default function HomeFeed({
         {/* Categories */}
         <section>
           <h2 className="font-bold text-sm mb-3">Browse Categories</h2>
-          <div className="grid grid-cols-5 gap-2">
+          <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
             {categories.map(([name, Icon]) => (
               <button key={name} onClick={() => onSelectListing(`cat:${name}`)} className="flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-muted/80 transition-colors">
                 <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -247,17 +247,18 @@ export default function HomeFeed({
 
         {/* Trending */}
         {boosted.length > 0 && (
-          <section className="overflow-hidden relative -mx-4 px-4">
+          <section className="relative -mx-4 px-4">
             <div className="flex items-center gap-2 mb-3">
               <TrendingUp className="w-5 h-5 text-amber-500" />
               <h2 className="font-bold text-lg">Trending 🔥</h2>
             </div>
-            {/* Fade edges */}
-            <div className="absolute left-0 top-10 bottom-0 w-8 bg-gradient-to-r from-background to-transparent z-10" />
-            <div className="absolute right-0 top-10 bottom-0 w-8 bg-gradient-to-l from-background to-transparent z-10" />
+            {/* Fade edges — hidden on mobile since we use scroll */}
+            <div className="hidden md:block absolute left-0 top-10 bottom-0 w-8 bg-gradient-to-r from-background to-transparent z-10" />
+            <div className="hidden md:block absolute right-0 top-10 bottom-0 w-8 bg-gradient-to-l from-background to-transparent z-10" />
             
-            <div className="overflow-hidden pb-2">
-              <div className="animate-marquee hover:[animation-play-state:paused] flex gap-3">
+            {/* Mobile: scrollable horizontal list; Desktop: marquee animation */}
+            <div className="md:overflow-hidden pb-2">
+              <div className="flex gap-3 overflow-x-auto md:overflow-hidden md:animate-marquee md:hover:[animation-play-state:paused]">
                 {[...boosted, ...boosted, ...boosted].map((listing, i) => (
                   <div key={`${listing.id}-${i}`} className="flex-shrink-0 w-44">
                     <ListingCard listing={listing} onClick={() => onSelectListing(listing.id)} isSaved={savedIds.has(listing.id)} onToggleSave={() => onToggleSave(listing.id)} />

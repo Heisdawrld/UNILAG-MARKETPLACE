@@ -318,7 +318,7 @@ export default function SearchView({
         {/* Product Filters */}
         <AnimatePresence>
           {showFilters && searchTab === 'products' && (
-            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden max-h-[40vh] overflow-y-auto">
               <div className="space-y-4 pt-2">
                 <div>
                   <Label className="text-xs mb-1 block">Sort By</Label>
@@ -334,7 +334,7 @@ export default function SearchView({
                 </div>
                 <div>
                   <Label className="text-xs mb-2 block">Price: {formatPrice(priceRange[0])} — {formatPrice(priceRange[1])}</Label>
-                  <Slider value={priceRange} onValueChange={v => setPriceRange(v as [number, number])} min={0} max={600000} step={5000} />
+                  <Slider value={priceRange} onValueChange={v => setPriceRange(v as [number, number])} min={0} max={600000} step={500} />
                 </div>
                 <div className="flex items-center justify-between">
                   <Label className="text-xs">Negotiable Only</Label>

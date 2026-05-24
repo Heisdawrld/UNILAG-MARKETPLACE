@@ -87,6 +87,9 @@ function StoreSetupFlow({ user, onStoreCreated }: { user: UserType; onStoreCreat
   const [openHours, setOpenHours] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Scroll to top on step change
+  useEffect(() => { window.scrollTo(0, 0) }, [step]);
+
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -264,6 +267,10 @@ export default function SellView({ user, onListingCreated }: { user: UserType; o
       toast({ title: 'Missing fields', description: 'Fill in all required fields', variant: 'destructive' });
       return;
     }
+    if (parseFloat(price) <= 0) {
+      toast({ title: 'Invalid price', description: 'Price must be greater than zero', variant: 'destructive' });
+      return;
+    }
     setSubmitting(true);
     try {
       await api.post('/api/listings', {
@@ -338,8 +345,8 @@ export default function SellView({ user, onListingCreated }: { user: UserType; o
           {images.map((img, i) => (
             <div key={i} className="relative w-20 h-20 rounded-lg overflow-hidden border">
               <img src={img} alt="" className="w-full h-full object-cover" />
-              <button onClick={() => setImages(prev => prev.filter((_, j) => j !== i))} className="absolute top-0.5 right-0.5 p-0.5 rounded-full bg-black/60 text-white">
-                <X className="w-3 h-3" />
+              <button onClick={() => setImages(prev => prev.filter((_, j) => j !== i))} className="absolute top-0.5 right-0.5 p-1 rounded-full bg-black/60 text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
           ))}
@@ -361,12 +368,13 @@ export default function SellView({ user, onListingCreated }: { user: UserType; o
       <div>
         <Label className="text-sm font-medium mb-1.5 block">Description *</Label>
         <Textarea placeholder="Describe your item..." value={description} onChange={e => setDescription(e.target.value)} rows={4} maxLength={1000} />
+        <p className="text-[10px] text-muted-foreground text-right">{description.length}/1000</p>
       </div>
       <div>
         <Label className="text-sm font-medium mb-1.5 block">Price (₦) *</Label>
         <div className="relative">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">₦</span>
-          <Input type="number" placeholder="0" value={price} onChange={e => setPrice(e.target.value)} className="pl-8" min="1" />
+          <Input inputMode="decimal" placeholder="0" value={price} onChange={e => setPrice(e.target.value)} className="pl-8" min="1" />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3">

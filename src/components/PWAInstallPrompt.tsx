@@ -39,12 +39,11 @@ export default function PWAInstallPrompt() {
     };
     window.addEventListener('beforeinstallprompt', handler);
 
-    // iOS: detect Safari and show custom prompt after delay
+    // iOS: detect any iOS browser and show custom prompt after delay
     const ua = navigator.userAgent;
     const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    const isSafari = /Safari/.test(ua) && !/Chrome/.test(ua) && !/CriOS/.test(ua) && !/FxiOS/.test(ua);
 
-    if (isIOS && isSafari) {
+    if (isIOS) {
       const timer = setTimeout(() => setShowIOSPrompt(true), 6000);
       return () => { clearTimeout(timer); window.removeEventListener('beforeinstallprompt', handler); };
     }
@@ -74,7 +73,7 @@ export default function PWAInstallPrompt() {
   // Android/Chrome install prompt
   if (deferredPrompt) {
     return (
-      <div className="fixed bottom-20 left-3 right-3 z-[80] animate-in slide-in-from-bottom-4 duration-500">
+      <div className="fixed top-4 left-3 right-3 z-[80] animate-in slide-in-from-top-4 duration-500">
         <div className="max-w-lg mx-auto bg-background border shadow-2xl rounded-2xl p-4 flex items-center gap-3">
           <img src="/logo.png" alt="UNILAG" className="w-12 h-12 rounded-xl flex-shrink-0" />
           <div className="flex-1 min-w-0">
@@ -95,7 +94,7 @@ export default function PWAInstallPrompt() {
   // iOS Safari install instructions
   if (showIOSPrompt) {
     return (
-      <div className="fixed bottom-20 left-3 right-3 z-[80] animate-in slide-in-from-bottom-4 duration-500">
+      <div className="fixed top-4 left-3 right-3 z-[80] animate-in slide-in-from-top-4 duration-500">
         <div className="max-w-lg mx-auto bg-background border shadow-2xl rounded-2xl p-4">
           <div className="flex items-start gap-3">
             <img src="/logo.png" alt="UNILAG" className="w-12 h-12 rounded-xl flex-shrink-0" />

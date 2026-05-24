@@ -55,7 +55,7 @@ export default function RunnerEarnings() {
   // Default earnings view
   return (
     <div className="space-y-4">
-      <Card className="bg-gradient-to-br from-emerald-500 to-emerald-700 text-white border-0">
+      <Card className="bg-gradient-to-br from-emerald-500 to-emerald-700 dark:from-emerald-800 dark:to-emerald-950 text-white border-0">
         <CardContent className="p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">

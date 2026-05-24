@@ -88,7 +88,7 @@ export default function CustomerDeliveryForm({ onSubmit, isSubmitting = false }:
       {/* Category Selection */}
       <div className="space-y-2">
         <label className="text-sm font-medium">What are you sending?</label>
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
           {CATEGORIES.map((cat) => (
             <button
               key={cat.id}
@@ -151,6 +151,11 @@ export default function CustomerDeliveryForm({ onSubmit, isSubmitting = false }:
             </motion.div>
           )}
         </AnimatePresence>
+        {form.pickupAddress && !form.pickupLat && (
+          <p className="text-[10px] text-amber-600 flex items-center gap-1">
+            <Info className="w-3 h-3" />Tap a landmark above or your location won't be precise
+          </p>
+        )}
       </div>
 
       {/* Dropoff Location */}
@@ -198,6 +203,11 @@ export default function CustomerDeliveryForm({ onSubmit, isSubmitting = false }:
             </motion.div>
           )}
         </AnimatePresence>
+        {form.dropoffAddress && !form.dropoffLat && (
+          <p className="text-[10px] text-amber-600 flex items-center gap-1">
+            <Info className="w-3 h-3" />Tap a landmark above or your location won't be precise
+          </p>
+        )}
       </div>
 
       {/* Title & Description */}
@@ -268,7 +278,7 @@ export default function CustomerDeliveryForm({ onSubmit, isSubmitting = false }:
           {priceMode === 'suggested' ? (
             <div className="bg-emerald-500/10 rounded-xl p-3 text-center">
               <p className="text-xs text-muted-foreground mb-1">Suggested price</p>
-              <p className="text-3xl font-bold text-emerald-600">N{suggestedPrice.toLocaleString()}</p>
+              <p className="text-3xl font-bold text-emerald-600">₦{suggestedPrice.toLocaleString()}</p>
               <p className="text-[10px] text-muted-foreground mt-1">
                 Based on {form.category} delivery · {form.urgency} urgency
               </p>
@@ -276,7 +286,7 @@ export default function CustomerDeliveryForm({ onSubmit, isSubmitting = false }:
           ) : (
             <div className="space-y-2">
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-muted-foreground">N</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-muted-foreground">₦</span>
                 <Input
                   type="number"
                   value={form.customerPrice}
@@ -287,7 +297,7 @@ export default function CustomerDeliveryForm({ onSubmit, isSubmitting = false }:
                 />
               </div>
               <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                <span>Range: N{baseline.min.toLocaleString()} - N{baseline.max.toLocaleString()}</span>
+                <span>Range: ₦{baseline.min.toLocaleString()} - ₦{baseline.max.toLocaleString()}</span>
                 <span>{urgencyMultiplier}x urgency</span>
               </div>
             </div>
@@ -315,7 +325,7 @@ export default function CustomerDeliveryForm({ onSubmit, isSubmitting = false }:
         ) : (
           <>
             <Zap className="w-5 h-5 mr-2" />
-            Request Delivery — N{(priceMode === 'suggested' ? suggestedPrice : form.customerPrice).toLocaleString()}
+            Request Delivery — ₦{(priceMode === 'suggested' ? suggestedPrice : form.customerPrice).toLocaleString()}
           </>
         )}
       </Button>

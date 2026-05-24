@@ -28,7 +28,7 @@ function PaymentLockedContent() {
       <div className="max-w-md w-full">
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 text-center">
           {/* Lock Icon */}
-          <div className="mx-auto w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center mb-6">
+          <div className="mx-auto w-20 h-20 bg-amber-50 dark:bg-amber-950/20 rounded-full flex items-center justify-center mb-6">
             <Lock className="w-10 h-10 text-amber-500" />
           </div>
 

@@ -108,6 +108,7 @@ function ChatDetail({ chat, user, onBack }: { chat: Chat; user: UserType; onBack
     }
   }, [chat.id, user.id]);
 
+  // TODO: Replace polling with WebSocket integration for real-time chat
   useEffect(() => { fetchMessages(); const i = setInterval(fetchMessages, 10000); return () => clearInterval(i); }, [fetchMessages]);
   useEffect(() => { markChatNotificationsRead(); }, [markChatNotificationsRead]);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
@@ -233,7 +234,7 @@ function ChatDetail({ chat, user, onBack }: { chat: Chat; user: UserType; onBack
         </div>
       )}
 
-      <div className="p-3 border-t flex gap-2">
+      <div className="p-3 border-t flex gap-2 pb-16 safe-bottom">
         <Input value={newMsg} onChange={e => setNewMsg(e.target.value)} placeholder="Type a message..." className="flex-1" onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()} />
         <button onClick={handleSend} disabled={sending || !newMsg.trim()} className="p-2.5 bg-primary text-primary-foreground rounded-full disabled:opacity-50 min-w-[44px] min-h-[44px] flex items-center justify-center">
           <Send className="w-4 h-4" />

@@ -35,6 +35,8 @@ export default function RunnerIncomingRequest({ onAccept, onCounter, onDecline }
   const [showCounterInput, setShowCounterInput] = useState(false)
   const [remainingSeconds, setRemainingSeconds] = useState(30)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const onDeclineRef = useRef(onDecline)
+  useEffect(() => { onDeclineRef.current = onDecline }, [onDecline])
 
   const activeRequest = currentRequestId ? incomingRequests.find(r => r.orderId === currentRequestId) : incomingRequests[0]
 
@@ -44,9 +46,13 @@ export default function RunnerIncomingRequest({ onAccept, onCounter, onDecline }
 
   useEffect(() => {
     if (!activeRequest) return
-    timerRef.current = setInterval(() => { setRemainingSeconds(prev => { if (prev <= 1) { onDecline(activeRequest.orderId); return 0 } return prev - 1 }) }, 1000)
+    timerRef.current = setInterval(() => { setRemainingSeconds(prev => { if (prev <= 1) { onDeclineRef.current(activeRequest.orderId); return 0 } return prev - 1 }) }, 1000)
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
-  }, [activeRequest?.orderId, onDecline])
+  }, [activeRequest?.orderId])
+
+  const handleExtendTimer = () => {
+    setRemainingSeconds(prev => prev + 15)
+  }
 
   if (!activeRequest) return null
   const categoryConfig = CATEGORY_CONFIG[activeRequest.category] || CATEGORY_CONFIG.other
@@ -87,9 +93,14 @@ export default function RunnerIncomingRequest({ onAccept, onCounter, onDecline }
             )}
             <div className="flex gap-2">
               <Button onClick={() => onDecline(activeRequest.orderId)} variant="outline" className="flex-1 h-11 text-xs" size="lg"><X className="w-4 h-4 mr-1" />Decline</Button>
-              {!showCounterInput ? (<Button onClick={() => setShowCounterInput(true)} variant="outline" className="flex-1 h-11 text-xs border-amber-500/30 text-amber-600 hover:bg-amber-50" size="lg"><ArrowUpDown className="w-4 h-4 mr-1" />Counter</Button>) : (<Button onClick={() => { onCounter(activeRequest.orderId, counterPrice, 'Counter-offer'); setShowCounterInput(false) }} className="flex-1 h-11 text-xs bg-amber-500 hover:bg-amber-600" size="lg">Send N{counterPrice.toLocaleString()}</Button>)}
+              {!showCounterInput ? (<Button onClick={() => setShowCounterInput(true)} variant="outline" className="flex-1 h-11 text-xs border-amber-500/30 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/20" size="lg"><ArrowUpDown className="w-4 h-4 mr-1" />Counter</Button>) : (<Button onClick={() => { onCounter(activeRequest.orderId, counterPrice, 'Counter-offer'); setShowCounterInput(false) }} className="flex-1 h-11 text-xs bg-amber-500 hover:bg-amber-600" size="lg">Send N{counterPrice.toLocaleString()}</Button>)}
               <Button onClick={() => onAccept(activeRequest.orderId, activeRequest.customerPrice)} className="flex-1 h-11 text-xs bg-emerald-500 hover:bg-emerald-600" size="lg"><Check className="w-4 h-4 mr-1" />Accept</Button>
             </div>
+            {remainingSeconds <= 10 && (
+              <button onClick={handleExtendTimer} className="w-full text-xs text-amber-600 hover:text-amber-700 font-medium py-2 text-center transition-colors">
+                Need more time? +15s
+              </button>
+            )}
             {incomingRequests.length > 1 && <p className="text-[10px] text-muted-foreground text-center">+{incomingRequests.length - 1} more request{incomingRequests.length - 1 > 1 ? 's' : ''} in queue</p>}
           </CardContent>
         </Card>

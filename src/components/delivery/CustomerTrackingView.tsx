@@ -283,7 +283,7 @@ export default function CustomerTrackingView({ onConfirmDelivery, onCancelDelive
       {!['delivered', 'completed', 'cancelled'].includes(activeDelivery.status) && !showCancelConfirm && (
         <Button
           variant="ghost"
-          className="w-full text-xs text-red-500 hover:text-red-600 hover:bg-red-50"
+          className="w-full text-xs text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
           onClick={() => setShowCancelConfirm(true)}
         >
           Cancel Delivery

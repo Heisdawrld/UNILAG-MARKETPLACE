@@ -94,10 +94,10 @@ function OfferCard({
 
             {/* Price */}
             <div className="text-right shrink-0">
-              <p className="text-xl font-bold">N{offer.runnerPrice.toLocaleString()}</p>
+              <p className="text-xl font-bold">₦{offer.runnerPrice.toLocaleString()}</p>
               {diff !== 0 && (
                 <Badge variant={diff > 0 ? 'destructive' : 'default'} className="text-[10px] h-4">
-                  {diff > 0 ? '+' : ''}N{diff.toLocaleString()}
+                  {diff > 0 ? '+' : ''}₦{diff.toLocaleString()}
                 </Badge>
               )}
             </div>
@@ -200,7 +200,7 @@ export default function CustomerOfferViewer({ onAccept, onReject, onCancel }: Cu
           <p className="text-xs text-muted-foreground">{offers.length} runner{offers.length > 1 ? 's' : ''} available</p>
         </div>
         <Badge variant="secondary" className="text-[10px]">
-          Your offer: N{customerPrice.toLocaleString()}
+          Your offer: ₦{customerPrice.toLocaleString()}
         </Badge>
       </div>
 

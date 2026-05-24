@@ -77,6 +77,7 @@ export default function ListingDetail({
   const [showPayment, setShowPayment] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [showBoost, setShowBoost] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -142,8 +143,13 @@ export default function ListingDetail({
           </button>
           <div className="flex gap-2">
             <button onClick={() => {
-              navigator.clipboard?.writeText(window.location.href);
-              toast({ title: 'Link copied!' });
+              const shareData = { title: listing?.title || 'UNILAG Marketplace', text: `Check out "${listing?.title}" on UNILAG Marketplace!`, url: window.location.href };
+              if (navigator.share) {
+                navigator.share(shareData).catch(() => {});
+              } else {
+                navigator.clipboard?.writeText(window.location.href);
+                toast({ title: 'Link copied!' });
+              }
             }} className="p-2 rounded-full bg-black/30 backdrop-blur-sm text-white">
               <Share2 className="w-5 h-5" />
             </button>
@@ -156,10 +162,10 @@ export default function ListingDetail({
         {/* Image dots */}
         {images.length > 1 && (
           <>
-            <button onClick={() => setCurrentImage(i => Math.max(0, i - 1))} className="absolute left-2 top-1/2 -translate-y-1/2 p-1 rounded-full bg-black/30 backdrop-blur-sm text-white">
+            <button onClick={() => setCurrentImage(i => Math.max(0, i - 1))} className="absolute left-2 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-black/30 backdrop-blur-sm text-white min-w-[44px] min-h-[44px] flex items-center justify-center">
               <ChevronLeft className="w-5 h-5" />
             </button>
-            <button onClick={() => setCurrentImage(i => Math.min(images.length - 1, i + 1))} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full bg-black/30 backdrop-blur-sm text-white">
+            <button onClick={() => setCurrentImage(i => Math.min(images.length - 1, i + 1))} className="absolute right-2 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-black/30 backdrop-blur-sm text-white min-w-[44px] min-h-[44px] flex items-center justify-center">
               <ChevronRight className="w-5 h-5" />
             </button>
             <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
@@ -283,7 +289,7 @@ export default function ListingDetail({
 
       {/* Bottom Action Bar */}
       {isOwner ? (
-        <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t px-4 py-3 safe-bottom z-50">
+        <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t px-4 py-3 safe-bottom z-50 relative">
           <div className="flex gap-2 max-w-lg mx-auto">
             {listing.status === 'active' && (
               <Button onClick={() => setShowBoost(true)} className="h-11 flex-1 bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-md shadow-amber-500/20">
@@ -301,16 +307,25 @@ export default function ListingDetail({
                 Mark Sold
               </Button>
             )}
-            <Button variant="destructive" className="h-11 px-3" onClick={async () => {
-              if (!confirm('Delete this listing?')) return;
-              try {
-                await api.del(`/api/listings/${listing.id}`);
-                toast({ title: 'Listing deleted' });
-                onBack();
-              } catch { toast({ title: 'Failed to delete', variant: 'destructive' }); }
-            }}>
+            <Button variant="destructive" className="h-11 px-3" onClick={() => setShowDeleteConfirm(true)}>
               Delete
             </Button>
+            {showDeleteConfirm && (
+              <div className="absolute bottom-full left-0 right-0 mb-2 bg-background border rounded-xl p-3 shadow-lg z-10">
+                <p className="text-sm font-medium text-destructive mb-1">Are you sure?</p>
+                <p className="text-xs text-muted-foreground mb-3">This cannot be undone.</p>
+                <div className="flex gap-2">
+                  <Button variant="outline" className="flex-1 h-9 text-xs" onClick={() => setShowDeleteConfirm(false)}>Cancel</Button>
+                  <Button variant="destructive" className="flex-1 h-9 text-xs" onClick={async () => {
+                    try {
+                      await api.del(`/api/listings/${listing.id}`);
+                      toast({ title: 'Listing deleted' });
+                      onBack();
+                    } catch { toast({ title: 'Failed to delete', variant: 'destructive' }); }
+                  }}>Confirm Delete</Button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       ) : (

@@ -94,11 +94,11 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
   const isLast = step === STEPS.length - 1;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-label="Welcome tutorial">
       <div className="w-full max-w-sm bg-background rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-300">
         {/* Gradient header */}
         <div className={`bg-gradient-to-br ${current.color} p-8 flex flex-col items-center text-center relative`}>
-          <button onClick={handleSkip} className="absolute top-3 right-3 p-1.5 rounded-full bg-background/50 hover:bg-background/80 transition-colors">
+          <button onClick={handleSkip} className="absolute top-3 right-3 p-1.5 rounded-full bg-background/50 hover:bg-background/80 transition-colors focus-visible:ring-2 focus-visible:ring-primary">
             <X className="w-4 h-4" />
           </button>
           <div className={`w-16 h-16 rounded-2xl bg-background/80 flex items-center justify-center mb-4 shadow-lg`}>
@@ -120,17 +120,17 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
           {/* Buttons */}
           <div className="flex gap-2">
             {step > 0 && (
-              <button onClick={handlePrev} className="flex-1 h-11 rounded-xl border border-border flex items-center justify-center gap-1 text-sm font-medium hover:bg-muted transition-colors">
+              <button onClick={handlePrev} className="flex-1 h-11 rounded-xl border border-border flex items-center justify-center gap-1 text-sm font-medium hover:bg-muted transition-colors focus-visible:ring-2 focus-visible:ring-primary">
                 <ChevronLeft className="w-4 h-4" /> Back
               </button>
             )}
-            <button onClick={handleNext} className="flex-1 h-11 rounded-xl bg-primary text-primary-foreground flex items-center justify-center gap-1 text-sm font-medium hover:bg-primary/90 transition-colors">
+            <button onClick={handleNext} className="flex-1 h-11 rounded-xl bg-primary text-primary-foreground flex items-center justify-center gap-1 text-sm font-medium hover:bg-primary/90 transition-colors focus-visible:ring-2 focus-visible:ring-primary">
               {isLast ? "Let's Go! 🚀" : 'Next'} {!isLast && <ChevronRight className="w-4 h-4" />}
             </button>
           </div>
 
           {step === 0 && (
-            <button onClick={handleSkip} className="w-full mt-2 text-xs text-muted-foreground hover:text-foreground transition-colors py-1">
+            <button onClick={handleSkip} className="w-full mt-2 text-xs text-muted-foreground hover:text-foreground transition-colors py-1 focus-visible:ring-2 focus-visible:ring-primary">
               Skip tutorial
             </button>
           )}

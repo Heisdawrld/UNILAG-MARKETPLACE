@@ -511,7 +511,7 @@ export default function ProfileView({
           <div className="space-y-4">
             <div>
               <Label className="text-xs font-medium mb-2 block">Choose Avatar or Upload</Label>
-              <div className="grid grid-cols-6 gap-2 mb-2">
+              <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 mb-2">
                 <label className="w-11 h-11 rounded-full border-2 border-dashed flex items-center justify-center cursor-pointer hover:border-primary transition-colors bg-muted/30">
                   <Camera className="w-4 h-4 text-muted-foreground" />
                   <input type="file" accept="image/*" className="hidden" onChange={async (e) => {

@@ -156,17 +156,11 @@ export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
             <div className="text-center py-6 space-y-3">
               <Package className="w-12 h-12 text-emerald-500 mx-auto" />
               <p className="font-bold">Delivered!</p>
-              <Button
-                className="bg-emerald-500 hover:bg-emerald-600"
-                onClick={() => {
-                  confirmDelivery(activeDelivery.orderId, 5)
-                  useCustomerDeliveryStore.getState().setActiveDelivery(null)
-                  resetForm()
-                  setStep('quick')
-                }}
-              >
-                Confirm Delivery
-              </Button>
+              <Link href="/delivery">
+                <Button className="bg-emerald-500 hover:bg-emerald-600">
+                  Rate & Confirm Delivery
+                </Button>
+              </Link>
             </div>
           )}
 

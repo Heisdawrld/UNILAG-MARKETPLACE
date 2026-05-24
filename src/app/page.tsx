@@ -241,6 +241,9 @@ export default function MarketplaceApp() {
       setActiveTab('search');
     } else {
       setSelectedListingId(id);
+      setSelectedChatId(null);
+      setSelectedTaskId(null);
+      setSelectedCategory('');
     }
   }, []);
 
