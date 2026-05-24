@@ -161,6 +161,9 @@ export const useCustomerDeliveryStore = create<CustomerDeliveryState>()(
       partialize: (state) => ({
         deliveryHistory: state.deliveryHistory,
         form: state.form,
+        // Persist active delivery so it survives PWA background/foreground
+        activeDelivery: state.activeDelivery,
+        searchOrderId: state.searchOrderId,
       }),
     }
   )

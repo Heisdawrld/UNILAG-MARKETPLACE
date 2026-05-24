@@ -203,14 +203,54 @@ export function initSocketIO(httpServer: HTTPServer): TypedServer {
           if (!order || order.status !== 'searching') { socket.emit('error', { message: 'Order not available for offers', code: 'ORDER_UNAVAILABLE' }); return }
           const expiresAt = new Date(Date.now() + 30 * 1000)
           const sanitizedMessage = message ? String(message).trim().slice(0, 500) : null
-          const offer = await db.deliveryOffer.create({ data: { orderId, runnerId: userId, runnerPrice, estimatedArrivalMinutes: estimatedArrivalMinutes ?? null, message: sanitizedMessage, status: 'open', expiresAt }, include: { runner: { select: { id: true, username: true, avatar: true, runnerRating: true, tasksCompleted: true, runnerProfile: { select: { transportMode: true } } } } } })
+          // Upsert offer — allow runners to counter-offer (fixes unique constraint bug)
+          const existing = await db.deliveryOffer.findUnique({ where: { orderId_runnerId: { orderId, runnerId: userId } } })
+          let offer
+          if (existing && existing.status === 'open') {
+            offer = await db.deliveryOffer.update({
+              where: { id: existing.id },
+              data: { runnerPrice, estimatedArrivalMinutes: estimatedArrivalMinutes ?? null, message: sanitizedMessage, expiresAt },
+              include: { runner: { select: { id: true, username: true, avatar: true, runnerRating: true, tasksCompleted: true, runnerProfile: { select: { transportMode: true } } } } }
+            })
+          } else {
+            offer = await db.deliveryOffer.create({
+              data: { orderId, runnerId: userId, runnerPrice, estimatedArrivalMinutes: estimatedArrivalMinutes ?? null, message: sanitizedMessage, status: 'open', expiresAt },
+              include: { runner: { select: { id: true, username: true, avatar: true, runnerRating: true, tasksCompleted: true, runnerProfile: { select: { transportMode: true } } } } }
+            })
+          }
           io!.to(`customer:${order.customerId}`).emit('delivery:offer-received', { offerId: offer.id, orderId, runnerId: userId, runnerUsername: offer.runner.username, runnerAvatar: offer.runner.avatar, runnerRating: offer.runner.runnerRating, runnerTasksCompleted: offer.runner.tasksCompleted, runnerTransportMode: (offer.runner.runnerProfile?.transportMode as any) || 'walking', runnerPrice, estimatedArrivalMinutes: estimatedArrivalMinutes ?? null, message: sanitizedMessage, expiresAt: expiresAt.toISOString() })
         } catch (err) { socket.emit('error', { message: 'Failed to create offer', code: 'OFFER_ERROR' }) }
       })
 
+      socket.on('delivery:runner-en-route', async (data) => {
+        try {
+          if (!isDatabaseAvailable()) { socket.emit('error', { message: 'Database unavailable', code: 'DB_UNAVAILABLE' }); return }
+          const order = await db.deliveryOrder.findUnique({ where: { id: data.orderId }, select: { status: true, assignedRunnerId: true, customerId: true } })
+          if (!order || order.assignedRunnerId !== userId) { socket.emit('error', { message: 'Not authorized', code: 'UNAUTHORIZED' }); return }
+          if (order.status !== 'runner_assigned') { socket.emit('error', { message: 'Invalid status', code: 'INVALID_STATUS' }); return }
+          const now = new Date()
+          await db.deliveryOrder.update({ where: { id: data.orderId }, data: { status: 'runner_en_route' } })
+          await db.orderStatusLog.create({ data: { orderId: data.orderId, fromStatus: 'runner_assigned', toStatus: 'runner_en_route', metadata: JSON.stringify({ runnerId: userId }) } })
+          io!.to(`delivery:${data.orderId}`).emit('delivery:status', { orderId: data.orderId, status: 'runner_en_route', timestamp: now.toISOString(), metadata: { runnerId: userId } })
+        } catch (err) { socket.emit('error', { message: 'Failed to update status', code: 'STATUS_ERROR' }) }
+      })
+
+      socket.on('delivery:in-transit', async (data) => {
+        try {
+          if (!isDatabaseAvailable()) { socket.emit('error', { message: 'Database unavailable', code: 'DB_UNAVAILABLE' }); return }
+          const order = await db.deliveryOrder.findUnique({ where: { id: data.orderId }, select: { status: true, assignedRunnerId: true, customerId: true } })
+          if (!order || order.assignedRunnerId !== userId) { socket.emit('error', { message: 'Not authorized', code: 'UNAUTHORIZED' }); return }
+          if (order.status !== 'picked_up') { socket.emit('error', { message: 'Invalid status', code: 'INVALID_STATUS' }); return }
+          const now = new Date()
+          await db.deliveryOrder.update({ where: { id: data.orderId }, data: { status: 'in_transit' } })
+          await db.orderStatusLog.create({ data: { orderId: data.orderId, fromStatus: 'picked_up', toStatus: 'in_transit', metadata: JSON.stringify({ runnerId: userId }) } })
+          io!.to(`delivery:${data.orderId}`).emit('delivery:status', { orderId: data.orderId, status: 'in_transit', timestamp: now.toISOString(), metadata: { runnerId: userId } })
+        } catch (err) { socket.emit('error', { message: 'Failed to update status', code: 'STATUS_ERROR' }) }
+      })
+
       socket.on('delivery:pickup', async (data) => {
         try {
-          if (!isDatabaseAvailable()) return
+          if (!isDatabaseAvailable()) { socket.emit('error', { message: 'Database unavailable', code: 'DB_UNAVAILABLE' }); return }
           const order = await db.deliveryOrder.findUnique({ where: { id: data.orderId }, select: { pickupCode: true, status: true, assignedRunnerId: true, customerId: true } })
           if (!order || order.assignedRunnerId !== userId) { socket.emit('error', { message: 'Not authorized', code: 'UNAUTHORIZED' }); return }
           if (order.status !== 'runner_en_route') { socket.emit('error', { message: 'Invalid status', code: 'INVALID_STATUS' }); return }
@@ -222,12 +262,12 @@ export function initSocketIO(httpServer: HTTPServer): TypedServer {
           await setRunnerStatus(userId, 'busy'); socket.leave('runners:available')
           // Push notification
           notifyPackagePickedUp(order.customerId, data.orderId).catch(() => {})
-        } catch {}
+        } catch (err) { socket.emit('error', { message: 'Pickup failed', code: 'PICKUP_ERROR' }) }
       })
 
       socket.on('delivery:dropoff', async (data) => {
         try {
-          if (!isDatabaseAvailable()) return
+          if (!isDatabaseAvailable()) { socket.emit('error', { message: 'Database unavailable', code: 'DB_UNAVAILABLE' }); return }
           const order = await db.deliveryOrder.findUnique({ where: { id: data.orderId }, select: { status: true, assignedRunnerId: true, customerId: true } })
           if (!order || order.assignedRunnerId !== userId) { socket.emit('error', { message: 'Not authorized', code: 'UNAUTHORIZED' }); return }
           if (order.status !== 'in_transit') { socket.emit('error', { message: 'Invalid status', code: 'INVALID_STATUS' }); return }
@@ -237,7 +277,7 @@ export function initSocketIO(httpServer: HTTPServer): TypedServer {
           io!.to(`delivery:${data.orderId}`).emit('delivery:status', { orderId: data.orderId, status: 'delivered', timestamp: now.toISOString(), metadata: { runnerId: userId } })
           // Push notification
           notifyDeliveryDelivered(order.customerId, data.orderId).catch(() => {})
-        } catch {}
+        } catch (err) { socket.emit('error', { message: 'Dropoff failed', code: 'DROPOFF_ERROR' }) }
       })
     }
 
@@ -273,7 +313,7 @@ export function initSocketIO(httpServer: HTTPServer): TypedServer {
 
     socket.on('delivery:accept-offer', async (data) => {
       try {
-        if (!isDatabaseAvailable()) return
+        if (!isDatabaseAvailable()) { socket.emit('error', { message: 'Database unavailable', code: 'DB_UNAVAILABLE' }); return }
         const offer = await db.deliveryOffer.findUnique({ where: { id: data.offerId }, include: { order: { select: { customerId: true, status: true } } } })
         if (!offer || offer.order.customerId !== userId) { socket.emit('error', { message: 'Not authorized', code: 'UNAUTHORIZED' }); return }
         if (offer.order.status !== 'searching') { socket.emit('error', { message: 'Order unavailable', code: 'ORDER_UNAVAILABLE' }); return }
@@ -288,16 +328,16 @@ export function initSocketIO(httpServer: HTTPServer): TypedServer {
         // Push notifications
         notifyRunnerAssigned(userId, socket.data.username, data.orderId).catch(() => {})
         notifyOfferAccepted(offer.runnerId, data.orderId).catch(() => {})
-      } catch {}
+      } catch (err) { socket.emit('error', { message: 'Failed to accept offer', code: 'ACCEPT_ERROR' }) }
     })
 
     socket.on('delivery:reject-offer', async (data) => {
-      try { if (!isDatabaseAvailable()) return; await db.deliveryOffer.update({ where: { id: data.offerId }, data: { status: 'rejected' } }); const offer = await db.deliveryOffer.findUnique({ where: { id: data.offerId }, select: { runnerId: true } }); if (offer) io!.to(`runner:${offer.runnerId}`).emit('delivery:offer-rejected', { orderId: data.orderId }) } catch {}
+      try { if (!isDatabaseAvailable()) { socket.emit('error', { message: 'Database unavailable', code: 'DB_UNAVAILABLE' }); return }; await db.deliveryOffer.update({ where: { id: data.offerId }, data: { status: 'rejected' } }); const offer = await db.deliveryOffer.findUnique({ where: { id: data.offerId }, select: { runnerId: true } }); if (offer) io!.to(`runner:${offer.runnerId}`).emit('delivery:offer-rejected', { orderId: data.orderId }) } catch (err) { socket.emit('error', { message: 'Failed to reject offer', code: 'REJECT_ERROR' }) }
     })
 
     socket.on('delivery:confirm', async (data) => {
       try {
-        if (!isDatabaseAvailable()) return
+        if (!isDatabaseAvailable()) { socket.emit('error', { message: 'Database unavailable', code: 'DB_UNAVAILABLE' }); return }
         const order = await db.deliveryOrder.findUnique({ where: { id: data.orderId }, select: { status: true, customerId: true, assignedRunnerId: true, finalPrice: true, customerPrice: true, paymentStatus: true } })
         if (!order || order.customerId !== userId) { socket.emit('error', { message: 'Not authorized', code: 'UNAUTHORIZED' }); return }
         if (order.status !== 'delivered') { socket.emit('error', { message: 'Not yet delivered', code: 'INVALID_STATUS' }); return }
@@ -318,12 +358,12 @@ export function initSocketIO(httpServer: HTTPServer): TypedServer {
           releaseEscrow(data.orderId).catch(err => console.error('[socket] Escrow release failed:', err))
         }
         io!.to(`delivery:${data.orderId}`).emit('delivery:status', { orderId: data.orderId, status: 'completed', timestamp: now.toISOString(), metadata: { rating } })
-      } catch {}
+      } catch (err) { socket.emit('error', { message: 'Confirmation failed', code: 'CONFIRM_ERROR' }) }
     })
 
     socket.on('delivery:cancel', async (data) => {
       try {
-        if (!isDatabaseAvailable()) return
+        if (!isDatabaseAvailable()) { socket.emit('error', { message: 'Database unavailable', code: 'DB_UNAVAILABLE' }); return }
         const order = await db.deliveryOrder.findUnique({ where: { id: data.orderId }, select: { status: true, customerId: true, assignedRunnerId: true, paymentStatus: true } })
         if (!order) { socket.emit('error', { message: 'Not found', code: 'NOT_FOUND' }); return }
         if (order.customerId !== userId && order.assignedRunnerId !== userId) { socket.emit('error', { message: 'Not authorized', code: 'UNAUTHORIZED' }); return }
@@ -342,7 +382,7 @@ export function initSocketIO(httpServer: HTTPServer): TypedServer {
         // Push notifications
         const otherUserId = order.customerId === userId ? order.assignedRunnerId : order.customerId
         if (otherUserId) notifyDeliveryCancelled(otherUserId, reason || 'Delivery cancelled', data.orderId).catch(() => {})
-      } catch {}
+      } catch (err) { socket.emit('error', { message: 'Cancellation failed', code: 'CANCEL_ERROR' }) }
     })
 
     socket.on('delivery:watch', async (data) => { socket.join(`delivery:${data.orderId}`); await addDeliveryWatcher(data.orderId, socket.id) })

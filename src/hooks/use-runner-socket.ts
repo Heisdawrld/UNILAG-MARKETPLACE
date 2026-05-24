@@ -46,8 +46,8 @@ export function useRunnerSocket({ userId: _userId, isRunner }: UseRunnerSocketOp
   const confirmPickup = useCallback((orderId: string, pickupCode: string) => { if (!socket?.connected) return; socket.emit('delivery:pickup', { orderId, pickupCode }) }, [socket])
   const confirmDropoff = useCallback((orderId: string) => { if (!socket?.connected) return; socket.emit('delivery:dropoff', { orderId }) }, [socket])
   const cancelDelivery = useCallback((orderId: string, reason: string) => { if (!socket?.connected) return; socket.emit('delivery:cancel', { orderId, reason: reason as any }) }, [socket])
-  const startNavigation = useCallback(() => { const { activeDelivery } = useRunnerStore.getState(); if (!activeDelivery || !socket?.connected) return; updateActiveDeliveryStatus('runner_en_route') }, [socket, updateActiveDeliveryStatus])
-  const startTransit = useCallback(() => { const { activeDelivery } = useRunnerStore.getState(); if (!activeDelivery || !socket?.connected) return; updateActiveDeliveryStatus('in_transit') }, [socket, updateActiveDeliveryStatus])
+  const startNavigation = useCallback(() => { const { activeDelivery } = useRunnerStore.getState(); if (!activeDelivery || !socket?.connected) return; socket.emit('delivery:runner-en-route', { orderId: activeDelivery.orderId }); updateActiveDeliveryStatus('runner_en_route') }, [socket, updateActiveDeliveryStatus])
+  const startTransit = useCallback(() => { const { activeDelivery } = useRunnerStore.getState(); if (!activeDelivery || !socket?.connected) return; socket.emit('delivery:in-transit', { orderId: activeDelivery.orderId }); updateActiveDeliveryStatus('in_transit') }, [socket, updateActiveDeliveryStatus])
 
   return { socket, isConnected, connectionError, retry, goOnline, goOffline, acceptRequest, counterOffer, declineRequest, confirmPickup, confirmDropoff, cancelDelivery, startNavigation, startTransit }
 }

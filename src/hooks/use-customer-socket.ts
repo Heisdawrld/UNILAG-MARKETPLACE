@@ -22,7 +22,16 @@ export function useCustomerSocket({ userId: _userId }: UseCustomerSocketOptions)
   const setShowRatingModal = useCustomerDeliveryStore((s) => s.setShowRatingModal)
   const mountedRef = useRef(true)
 
-  useEffect(() => { setSocketConnected(isConnected) }, [isConnected, setSocketConnected])
+  useEffect(() => {
+    setSocketConnected(isConnected)
+    // Re-subscribe to active delivery room on reconnect (PWA background/foreground)
+    if (isConnected && socket) {
+      const { activeDelivery } = useCustomerDeliveryStore.getState()
+      if (activeDelivery?.orderId) {
+        socket.emit('delivery:watch', { orderId: activeDelivery.orderId })
+      }
+    }
+  }, [isConnected, setSocketConnected, socket])
 
   useEffect(() => {
     if (!socket) return
@@ -48,6 +57,15 @@ export function useCustomerSocket({ userId: _userId }: UseCustomerSocketOptions)
     const handleDeliveryStatus = (data: any) => {
       if (!mountedRef.current) return
       const status = data.status as DeliveryOrderStatus
+
+      // Capture orderId for searching status (Bug #1 fix — searchOrderId was never set)
+      if (data.orderId) {
+        const store = useCustomerDeliveryStore.getState()
+        if (status === 'searching' && !store.searchOrderId) {
+          store.setSearchOrderId(data.orderId)
+        }
+      }
+
       updateActiveDeliveryStatus(status)
 
       if (status === 'runner_assigned') {

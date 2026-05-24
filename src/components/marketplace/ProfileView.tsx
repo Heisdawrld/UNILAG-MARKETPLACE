@@ -96,7 +96,7 @@ export default function ProfileView({
   onToggleSave: (id: string) => void;
   onOpenSell: () => void;
 }) {
-  const { signOut } = useClerk();
+  const { signOut, isSignedIn } = useClerk();
   const { toast } = useToast();
   const [myListings, setMyListings] = useState<Listing[]>([]);
   const [savedListings, setSavedListings] = useState<Listing[]>([]);
@@ -359,8 +359,21 @@ export default function ProfileView({
           <Button variant="ghost" size="icon" onClick={() => setShowEdit(true)}>
             <Edit3 className="w-4 h-4" />
           </Button>
-          <Button variant="ghost" size="icon" onClick={() => signOut({ redirectUrl: '/' })}>
+          <Button variant="ghost" size="sm" className="gap-1.5 h-9" onClick={() => {
+            try {
+              if (isSignedIn) {
+                signOut({ redirectUrl: '/' });
+              } else {
+                // Fallback: just redirect if not signed in
+                window.location.href = '/';
+              }
+            } catch {
+              // If signOut fails (Clerk misconfigured), just redirect
+              window.location.href = '/';
+            }
+          }}>
             <LogOut className="w-4 h-4 text-destructive" />
+            <span className="text-xs text-destructive">Logout</span>
           </Button>
         </div>
       </div>

@@ -32,6 +32,8 @@ export interface ClientToServerEvents {
   'delivery:offer': (data: { orderId: string; runnerPrice: number; estimatedArrivalMinutes?: number; message?: string }) => void
   'delivery:accept-offer': (data: { orderId: string; offerId: string }) => void
   'delivery:reject-offer': (data: { orderId: string; offerId: string }) => void
+  'delivery:runner-en-route': (data: { orderId: string }) => void
+  'delivery:in-transit': (data: { orderId: string }) => void
   'delivery:pickup': (data: { orderId: string; pickupCode: string }) => void
   'delivery:dropoff': (data: { orderId: string }) => void
   'delivery:confirm': (data: { orderId: string; rating: number; review?: string }) => void

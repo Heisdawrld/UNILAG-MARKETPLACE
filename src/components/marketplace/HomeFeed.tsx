@@ -195,35 +195,38 @@ export default function HomeFeed({
       {showNotifs && (
         <>
           {/* Backdrop to close on click-outside */}
-          <div className="fixed inset-0 z-[35]" onClick={() => setShowNotifs(false)} />
-          <div className="mx-4 mt-2 bg-card border rounded-xl shadow-lg overflow-hidden z-40 relative">
-            <div className="p-3 border-b flex items-center justify-between">
-              <p className="font-semibold text-sm">Notifications</p>
-              <div className="flex items-center gap-2">
-                {unreadCount > 0 && <Badge variant="secondary" className="text-[10px]">{unreadCount} new</Badge>}
-                {unreadCount > 0 && (
-                  <button onClick={handleMarkAllRead} className="text-[10px] font-medium text-primary hover:underline">
-                    Mark all as read
-                  </button>
+          <div className="fixed inset-0 z-[100]" onClick={() => setShowNotifs(false)} />
+          {/* Dropdown panel — fixed so it escapes parent stacking context */}
+          <div className="fixed top-[52px] left-0 right-0 z-[101] px-4">
+            <div className="bg-card border rounded-xl shadow-lg overflow-hidden">
+              <div className="p-3 border-b flex items-center justify-between">
+                <p className="font-semibold text-sm">Notifications</p>
+                <div className="flex items-center gap-2">
+                  {unreadCount > 0 && <Badge variant="secondary" className="text-[10px]">{unreadCount} new</Badge>}
+                  {unreadCount > 0 && (
+                    <button onClick={handleMarkAllRead} className="text-[10px] font-medium text-primary hover:underline">
+                      Mark all as read
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="max-h-64 overflow-y-auto">
+                {notifications.length === 0 ? (
+                  <p className="p-4 text-sm text-muted-foreground text-center">No notifications yet</p>
+                ) : (
+                  notifications.slice(0, 10).map(notif => (
+                    <button
+                      key={notif.id}
+                      onClick={() => handleNotificationClick(notif)}
+                      className={`block w-full p-3 border-b last:border-0 text-left hover:bg-muted/60 transition-colors ${!notif.read ? 'bg-primary/5' : ''}`}
+                    >
+                      <p className="text-xs font-medium">{notif.title}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{notif.message}</p>
+                      {notif.type === 'new_message' && <p className="text-[10px] text-primary font-medium mt-1">Open message</p>}
+                    </button>
+                  ))
                 )}
               </div>
-            </div>
-            <div className="max-h-64 overflow-y-auto">
-              {notifications.length === 0 ? (
-                <p className="p-4 text-sm text-muted-foreground text-center">No notifications yet</p>
-              ) : (
-                notifications.slice(0, 10).map(notif => (
-                  <button
-                    key={notif.id}
-                    onClick={() => handleNotificationClick(notif)}
-                    className={`block w-full p-3 border-b last:border-0 text-left hover:bg-muted/60 transition-colors ${!notif.read ? 'bg-primary/5' : ''}`}
-                  >
-                    <p className="text-xs font-medium">{notif.title}</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">{notif.message}</p>
-                    {notif.type === 'new_message' && <p className="text-[10px] text-primary font-medium mt-1">Open message</p>}
-                  </button>
-                ))
-              )}
             </div>
           </div>
         </>
