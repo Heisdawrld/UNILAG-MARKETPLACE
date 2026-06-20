@@ -147,8 +147,25 @@ export async function GET(req: NextRequest) {
       },
     }).catch(() => []);
 
+    // ── Financial overview ──
+    const [platformWallet, totalMarketplaceGMV, totalDeliveryRevenue, pendingPayouts] = await Promise.all([
+      db.platformWallet.findFirst().catch(() => null),
+      db.marketplaceOrder.aggregate({ where: { status: 'completed' }, _sum: { amount: true } }).catch(() => ({ _sum: { amount: 0 } })),
+      db.deliveryOrder.aggregate({ where: { paymentStatus: 'released' }, _sum: { platformCommission: true } }).catch(() => ({ _sum: { platformCommission: 0 } })),
+      db.payoutRequest.aggregate({ where: { status: 'pending' }, _sum: { amount: true } }).catch(() => ({ _sum: { amount: 0 } })),
+    ]);
+
+    const financials = {
+      platformBalance: platformWallet?.balance || 0,
+      totalRevenue: platformWallet?.totalEarned || 0,
+      marketplaceGMV: totalMarketplaceGMV._sum.amount || 0,
+      deliveryCommission: totalDeliveryRevenue._sum.platformCommission || 0,
+      pendingPayouts: pendingPayouts._sum.amount || 0,
+    };
+
     return NextResponse.json({
       stats: { totalUsers, totalListings, activeListings, soldListings, totalReviews, totalReports, pendingReports, totalChats, totalTasks },
+      financials,
       recentUsers, recentReports, allUsers, allListings, recentOrders,
       usersPage: page,
       usersTotal: totalUserCount,

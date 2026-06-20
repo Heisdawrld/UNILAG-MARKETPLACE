@@ -51,8 +51,21 @@ setInterval(() => {
 export function initSocketIO(httpServer: HTTPServer): TypedServer {
   if (io) return io
   const corsOrigin = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const allowedOrigins = [
+    corsOrigin,
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    // Production variants — ensure both www and bare domain work over both schemes
+    corsOrigin.replace(/^https?:\/\//, 'https://'),
+    corsOrigin.replace(/^https?:\/\//, 'http://'),
+    'https://unilagmarketplace.online',
+    'http://unilagmarketplace.online',
+    'https://www.unilagmarketplace.online',
+    'http://www.unilagmarketplace.online',
+  ].filter((v, i, a) => v && a.indexOf(v) === i) // dedupe
+
   io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>(httpServer, {
-    cors: { origin: [corsOrigin, 'http://localhost:3000', 'http://127.0.0.1:3000'], methods: ['GET', 'POST'], credentials: true },
+    cors: { origin: allowedOrigins, methods: ['GET', 'POST'], credentials: true },
     pingInterval: 10000, pingTimeout: 5000, connectTimeout: 10000, maxHttpBufferSize: 1e6, transports: ['websocket', 'polling'],
   })
 

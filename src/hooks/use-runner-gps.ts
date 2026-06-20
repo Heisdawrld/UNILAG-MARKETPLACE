@@ -12,7 +12,7 @@ interface UseRunnerGpsOptions {
 }
 
 export function useRunnerGps({ enabled, updateInterval = 3000, heartbeatInterval = 15000, simulate = false, highAccuracy = true }: UseRunnerGpsOptions) {
-  const { socket, isConnected } = useSocket({ userId: null, autoConnect: false })
+  const { socket, isConnected } = useSocket({ autoConnect: false })
   const setLocation = useRunnerStore((s) => s.setLocation)
   const setGpsAccuracy = useRunnerStore((s) => s.setGpsAccuracy)
   const locationIntervalRef = useRef<NodeJS.Timeout | null>(null)

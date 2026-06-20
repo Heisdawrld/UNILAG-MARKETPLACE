@@ -70,6 +70,7 @@ model User {
   deliveryOffersMade  DeliveryOffer[]   @relation("DeliveryOfferRunner")
   sentDeliveryMessages DeliveryMessage[]
   wallet              RunnerWallet?
+  sellerWallet        SellerWallet?
   payouts             PayoutRequest[]
   marketplacePurchases MarketplaceOrder[] @relation("BuyerOrders")
   marketplaceSales    MarketplaceOrder[] @relation("SellerOrders")
@@ -550,19 +551,22 @@ model RunnerWallet {
 }
 
 model WalletTransaction {
-  id          String   @id @default(cuid())
-  walletId    String
-  type        String   // credit, debit, escrow_hold, escrow_release, payout, refund, commission
-  amount      Float
-  balance     Float    // Balance after transaction
-  reference   String?  // DeliveryOrder ID or PayoutRequest ID
-  description String?
-  metadata    String?  // JSON
-  createdAt   DateTime @default(now())
+  id             String   @id @default(cuid())
+  walletId       String
+  sellerWalletId String?
+  type           String   // credit, debit, escrow_hold, escrow_release, payout, refund, commission, marketplace_sale
+  amount         Float
+  balance        Float    // Balance after transaction
+  reference      String?  // DeliveryOrder ID, MarketplaceOrder ID, or PayoutRequest ID
+  description    String?
+  metadata       String?  // JSON
+  createdAt      DateTime @default(now())
 
-  wallet RunnerWallet @relation(fields: [walletId], references: [id])
+  wallet       RunnerWallet  @relation(fields: [walletId], references: [id])
+  sellerWallet SellerWallet? @relation("SellerTransactions", fields: [sellerWalletId], references: [id])
 
   @@index([walletId])
+  @@index([sellerWalletId])
   @@index([type])
   @@index([createdAt])
 }
@@ -592,6 +596,39 @@ model PayoutRequest {
   @@index([runnerId])
   @@index([status])
   @@index([createdAt])
+}
+
+// ════════════════════════════════════════════════════════════════
+// ── Seller Wallet System ──
+// ════════════════════════════════════════════════════════════════
+
+model SellerWallet {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  balance         Float    @default(0)
+  pendingBalance  Float    @default(0)
+  totalEarned     Float    @default(0)
+  totalWithdrawn  Float    @default(0)
+  totalHeld       Float    @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id])
+  transactions    WalletTransaction[] @relation("SellerTransactions")
+
+  @@index([userId])
+}
+
+// ════════════════════════════════════════════════════════════════
+// ── Platform Wallet (Singleton) ──
+// ════════════════════════════════════════════════════════════════
+
+model PlatformWallet {
+  id              String   @id @default(cuid())
+  balance         Float    @default(0)
+  totalEarned     Float    @default(0)    // Total commissions earned
+  totalWithdrawn  Float    @default(0)    // Total withdrawn to bank
+  lastUpdatedAt   DateTime @default(now())
 }
 
 // ════════════════════════════════════════════════════════════════
