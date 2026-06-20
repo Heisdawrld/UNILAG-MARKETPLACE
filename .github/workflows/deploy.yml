@@ -1,0 +1,38 @@
+# Deploy workflow for Render deployment trigger
+#
+# This workflow is optional and documents the Render deployment process.
+# Render auto-deploys on push to main, so this file serves as documentation.
+#
+# To set up Render deployment:
+# 1. Connect your GitHub repo to Render (https://dashboard.render.com)
+# 2. Create a new Web Service pointing to this repo
+# 3. Set the following environment variables in Render:
+#    - TURSO_DATABASE_URL
+#    - TURSO_AUTH_TOKEN
+#    - FLUTTERWAVE_SECRET_KEY
+#    - FLUTTERWAVE_MODE (locked|sandbox|live)
+#    - FLUTTERWAVE_WEBHOOK_HASH
+#    - CRON_SECRET
+#    - NEXT_PUBLIC_APP_URL
+# 4. Set Build Command: npm ci && npx prisma generate && npm run build
+# 5. Set Start Command: npm run start
+#
+# Render will auto-deploy on every push to main.
+# No additional workflow configuration is needed.
+
+name: Deploy (Render)
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy-info:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deployment Info
+        run: |
+          echo "🚀 Render auto-deploy is triggered by push to main"
+          echo "📋 Monitor deployment at: https://dashboard.render.com"
+          echo "⏱️  Typical deploy time: 3-5 minutes"
+          echo "🔗 Commit: ${{ github.sha }}"

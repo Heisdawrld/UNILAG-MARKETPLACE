@@ -40,15 +40,70 @@ export default function RunnerPage() {
 
   useEffect(() => { if (activeDelivery && currentView === 'dashboard') setCurrentView('active') }, [activeDelivery, currentView, setCurrentView])
 
+  // Fetch real earnings and delivery data from API
   useEffect(() => {
-    const store = useRunnerStore.getState()
-    store.setEarnings({ today: 4200, week: 18700, month: 52300, totalDeliveries: 12, avgRating: 4.7, pendingPayout: 3200 })
-    store.setStats(12, 4.7)
-    store.setDeliveryHistory([
-      { id: 'hist-1', title: 'Food Delivery from Jaja', category: 'food', finalPrice: 1500, status: 'completed', completedAt: new Date(Date.now() - 86400000).toISOString(), customerRating: 5, customerReview: 'Great service!', estimatedDistanceMeters: 800 },
-      { id: 'hist-2', title: 'Document Pickup', category: 'documents', finalPrice: 800, status: 'completed', completedAt: new Date(Date.now() - 172800000).toISOString(), customerRating: 4, customerReview: null, estimatedDistanceMeters: 600 },
-      { id: 'hist-3', title: 'Package to Moremi', category: 'packages', finalPrice: 1200, status: 'cancelled', completedAt: null, customerRating: null, customerReview: null, estimatedDistanceMeters: 1200 },
-    ])
+    let cancelled = false
+    async function fetchRunnerData() {
+      try {
+        // Fetch earnings stats
+        const earningsRes = await fetch('/api/runner/earnings?runnerId=me')
+        if (earningsRes.ok && !cancelled) {
+          const earningsData = await earningsRes.json()
+          const store = useRunnerStore.getState()
+          store.setEarnings({
+            today: earningsData.today || 0,
+            week: earningsData.week || 0,
+            month: earningsData.month || 0,
+            totalDeliveries: earningsData.totalDeliveries || 0,
+            avgRating: earningsData.avgRating || 0,
+            pendingPayout: earningsData.pendingPayout || 0,
+          })
+          store.setStats(earningsData.totalDeliveries || 0, earningsData.avgRating || 0)
+        }
+      } catch (err) {
+        console.error('[runner] Failed to fetch earnings:', err)
+      }
+      try {
+        // Fetch wallet balance for pending payout
+        const walletRes = await fetch('/api/runner/wallet')
+        if (walletRes.ok && !cancelled) {
+          const walletData = await walletRes.json()
+          const store = useRunnerStore.getState()
+          const currentEarnings = store.earnings
+          store.setEarnings({
+            ...currentEarnings,
+            pendingPayout: walletData.pendingBalance || 0,
+          })
+        }
+      } catch (err) {
+        console.error('[runner] Failed to fetch wallet:', err)
+      }
+      try {
+        // Fetch delivery history
+        const historyRes = await fetch('/api/runner/deliveries')
+        if (historyRes.ok && !cancelled) {
+          const historyData = await historyRes.json()
+          const store = useRunnerStore.getState()
+          if (Array.isArray(historyData.deliveries)) {
+            store.setDeliveryHistory(historyData.deliveries.map((d: any) => ({
+              id: d.id,
+              title: d.title || 'Delivery',
+              category: d.category || 'other',
+              finalPrice: d.finalPrice || d.customerPrice || 0,
+              status: d.status,
+              completedAt: d.completedAt || null,
+              customerRating: d.customerRating || null,
+              customerReview: d.customerReview || null,
+              estimatedDistanceMeters: d.estimatedDistanceMeters || null,
+            })))
+          }
+        }
+      } catch (err) {
+        console.error('[runner] Failed to fetch delivery history:', err)
+      }
+    }
+    fetchRunnerData()
+    return () => { cancelled = true }
   }, [])
 
   return (

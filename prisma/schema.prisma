@@ -68,6 +68,7 @@ model User {
   deliveryOrders      DeliveryOrder[]   @relation("DeliveryCustomer")
   deliveryAssignments DeliveryOrder[]   @relation("DeliveryRunner")
   deliveryOffersMade  DeliveryOffer[]   @relation("DeliveryOfferRunner")
+  sentDeliveryMessages DeliveryMessage[]
   wallet              RunnerWallet?
   payouts             PayoutRequest[]
 }
@@ -419,6 +420,15 @@ model DeliveryOrder {
   title             String
   description       String
   itemImages        String   @default("[]")
+  itemCost           Float?
+  itemPaymentMethod  String?
+  deliveryType       String   @default("marketplace")
+  dropoffCode        String?
+  pickupPhotoUrl     String?
+  dropoffPhotoUrl    String?
+  preferredRunnerGender String?    // 'male' | 'female' | 'any'
+  safeMeetupPoint       String?    // 'hostel_lobby' | 'faculty_entrance' | 'gate' | null
+  quickAccept        Boolean  @default(false)
   cancelReason      String?
   cancelledBy       String?
   customerRating    Int?
@@ -450,6 +460,7 @@ model DeliveryOrder {
   assignedRunner    User?             @relation("DeliveryRunner", fields: [assignedRunnerId], references: [id])
   offers            DeliveryOffer[]
   statusLogs        OrderStatusLog[]
+  deliveryMessages  DeliveryMessage[]
 
   @@index([status])
   @@index([customerId])
@@ -478,6 +489,20 @@ model DeliveryOffer {
   @@index([runnerId])
   @@index([status])
   @@index([expiresAt])
+}
+
+model DeliveryMessage {
+  id        String   @id @default(cuid())
+  orderId   String
+  senderId  String
+  message   String
+  type      String   @default("text")
+  createdAt DateTime @default(now())
+
+  order     DeliveryOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sender    User          @relation(fields: [senderId], references: [id])
+
+  @@index([orderId, createdAt])
 }
 
 model OrderStatusLog {

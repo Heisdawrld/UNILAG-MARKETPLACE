@@ -68,3 +68,19 @@ services:
         generateValue: true
       - key: CRON_SECRET
         generateValue: true
+
+# ── Cron Jobs ──
+# Render does not support cron jobs on free plans. Use an external cron
+# service (e.g. cron-job.org, EasyCron, or GitHub Actions) to call the
+# delivery-timeouts endpoint every 5 minutes:
+#
+#   GET https://<your-app>.onrender.com/api/cron/delivery-timeouts
+#   Header: Authorization: Bearer <CRON_SECRET>
+#   — or —
+#   Header: x-cron-secret: <CRON_SECRET>
+#
+# This endpoint handles:
+#   1. Auto-cancel stale searching orders (>5 min, no offers)
+#   2. Auto-cancel runner no-shows (>15 min without pickup)
+#   3. Flag stuck deliveries for admin review (>60 min in transit)
+#   4. Auto-cancel unpaid orders after runner assignment (>5 min)

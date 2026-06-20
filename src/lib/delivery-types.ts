@@ -17,6 +17,10 @@ export type TransportMode = 'walking' | 'bicycle' | 'motorcycle' | 'car'
 
 export type DeliveryCategory = 'food' | 'documents' | 'packages' | 'groceries' | 'laundry' | 'medication' | 'electronics' | 'other'
 
+export type DeliveryType = 'marketplace' | 'food_pickup' | 'errand' | 'pharmacy'
+
+export type ItemPaymentMethod = 'prepaid' | 'cash_on_delivery' | 'already_paid'
+
 export type UrgencyLevel = 'standard' | 'express' | 'urgent'
 
 export interface ClientToServerEvents {
@@ -28,18 +32,21 @@ export interface ClientToServerEvents {
     dropoffLat: number; dropoffLng: number; dropoffAddress: string
     customerPrice: number; category: DeliveryCategory; urgency: UrgencyLevel
     title: string; description: string; itemImages?: string[]
+    deliveryType?: DeliveryType; itemCost?: number; itemPaymentMethod?: ItemPaymentMethod
+    quickAccept?: boolean; preferredRunnerGender?: 'male' | 'female' | 'any'; safeMeetupPoint?: string
   }) => void
   'delivery:offer': (data: { orderId: string; runnerPrice: number; estimatedArrivalMinutes?: number; message?: string }) => void
   'delivery:accept-offer': (data: { orderId: string; offerId: string }) => void
   'delivery:reject-offer': (data: { orderId: string; offerId: string }) => void
   'delivery:runner-en-route': (data: { orderId: string }) => void
   'delivery:in-transit': (data: { orderId: string }) => void
-  'delivery:pickup': (data: { orderId: string; pickupCode: string }) => void
-  'delivery:dropoff': (data: { orderId: string }) => void
+  'delivery:pickup': (data: { orderId: string; pickupCode?: string }) => void
+  'delivery:dropoff': (data: { orderId: string; dropoffCode?: string }) => void
   'delivery:confirm': (data: { orderId: string; rating: number; review?: string }) => void
   'delivery:cancel': (data: { orderId: string; reason: DeliveryCancelReason }) => void
   'delivery:watch': (data: { orderId: string }) => void
   'delivery:unwatch': (data: { orderId: string }) => void
+  'delivery:message': (data: { orderId: string; message: string }) => void
 }
 
 export interface ServerToClientEvents {
@@ -59,7 +66,8 @@ export interface ServerToClientEvents {
   'delivery:offer-accepted': (data: {
     orderId: string; customerUsername: string; customerAvatar: string | null
     customerPhone: string | null; pickupLat: number; pickupLng: number
-    pickupAddress: string; pickupCode: string
+    pickupAddress: string; pickupCode: string; dropoffCode?: string | null
+    deliveryType?: DeliveryType; itemCost?: number | null; itemPaymentMethod?: ItemPaymentMethod | null
   }) => void
   'delivery:offer-rejected': (data: { orderId: string }) => void
   'delivery:status': (data: {
@@ -71,6 +79,11 @@ export interface ServerToClientEvents {
   }) => void
   'delivery:eta': (data: { orderId: string; etaMinutes: number; distanceMeters: number }) => void
   'delivery:unavailable': (data: { orderId: string }) => void
+  'delivery:runner-contact': (data: { runnerPhone: string | null }) => void
+  'delivery:message': (data: {
+    id: string; orderId: string; senderId: string
+    message: string; type: string; createdAt: string
+  }) => void
   'error': (data: { message: string; code: string }) => void
 }
 
@@ -86,6 +99,6 @@ export const URGENCY_MULTIPLIERS: Record<UrgencyLevel, number> = {
 }
 
 export const PLATFORM_COMMISSION_RATE = 0.12
-export const OFFER_TTL_SECONDS = 30
+export const OFFER_TTL_SECONDS = 60
 export const SEARCH_TIMEOUT_SECONDS = 60
 export const PICKUP_CODE_LENGTH = 4

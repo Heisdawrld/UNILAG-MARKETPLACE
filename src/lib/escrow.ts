@@ -41,7 +41,20 @@ export async function initiateDeliveryPayment(
   customerName: string,
   amount: number
 ): Promise<{ paymentLink?: string; txRef: string; isLocked: boolean }> {
-  const { platformFee, runnerPayout } = calculateCommission(amount)
+  // Fetch order to check for item cost + prepaid
+  let itemCostToAdd = 0
+  if (isDatabaseAvailable()) {
+    const order = await db.deliveryOrder.findUnique({
+      where: { id: orderId },
+      select: { itemCost: true, itemPaymentMethod: true },
+    })
+    if (order?.itemCost && order.itemPaymentMethod === 'prepaid') {
+      itemCostToAdd = order.itemCost
+    }
+  }
+
+  const totalAmount = amount + itemCostToAdd
+  const { platformFee, runnerPayout } = calculateCommission(totalAmount)
   const txRef = generateTxRef('delivery')
 
   // Update order with payment reference
@@ -70,10 +83,10 @@ export async function initiateDeliveryPayment(
     return { txRef, isLocked: true }
   }
 
-  // Initiate Flutterwave payment
+  // Initiate Flutterwave payment (includes item cost if prepaid)
   const result = await initializePayment({
     tx_ref: txRef,
-    amount,
+    amount: totalAmount,
     currency: 'NGN',
     customer: { email: customerEmail, name: customerName },
     meta: { userId: customerId, type: 'delivery', orderId },
@@ -155,7 +168,7 @@ export async function releaseEscrow(orderId: string): Promise<boolean> {
 
     const order = await db.deliveryOrder.findUnique({
       where: { id: orderId },
-      select: { finalPrice: true, customerPrice: true, assignedRunnerId: true, platformCommission: true },
+      select: { finalPrice: true, customerPrice: true, assignedRunnerId: true, platformCommission: true, itemCost: true, itemPaymentMethod: true },
     })
 
     if (!order || !order.assignedRunnerId) return false
@@ -163,8 +176,12 @@ export async function releaseEscrow(orderId: string): Promise<boolean> {
     const finalAmount = order.finalPrice || order.customerPrice
     const { runnerPayout } = calculateCommission(finalAmount)
 
+    // If item was prepaid, add item cost reimbursement to runner payout
+    const itemReimbursement = order.itemCost && order.itemPaymentMethod === 'prepaid' ? order.itemCost : 0
+    const totalRunnerPayout = runnerPayout + itemReimbursement
+
     // Move from pending to available balance (atomic)
-    await releaseRunnerBalance(order.assignedRunnerId, runnerPayout, orderId)
+    await releaseRunnerBalance(order.assignedRunnerId, totalRunnerPayout, orderId)
 
     // Log
     await db.orderStatusLog.create({
@@ -172,7 +189,7 @@ export async function releaseEscrow(orderId: string): Promise<boolean> {
         orderId,
         fromStatus: 'escrow_held',
         toStatus: 'escrow_released',
-        metadata: JSON.stringify({ runnerPayout, platformFee: order.platformCommission }),
+        metadata: JSON.stringify({ runnerPayout, itemReimbursement, totalRunnerPayout, platformFee: order.platformCommission }),
       },
     })
 
@@ -184,7 +201,7 @@ export async function releaseEscrow(orderId: string): Promise<boolean> {
       resourceType: 'delivery',
       resourceId: orderId,
       description: `Escrow released for delivery ${orderId}`,
-      metadata: { amount: runnerPayout, platformFee: order.platformCommission },
+      metadata: { amount: totalRunnerPayout, runnerPayout, itemReimbursement, platformFee: order.platformCommission },
     })
 
     return true
