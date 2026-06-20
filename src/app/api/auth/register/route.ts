@@ -50,6 +50,12 @@ export async function POST(request: NextRequest) {
       counter++;
     }
 
+    // UNILAG email domain verification
+    const UNILAG_DOMAINS = ['unilag.edu.ng', 'live.unilag.edu.ng', 'stu.unilag.edu.ng'];
+    const emailDomain = email.split('@')[1]?.toLowerCase();
+    const isUnilagEmail = UNILAG_DOMAINS.includes(emailDomain);
+    const verificationStatus = isUnilagEmail ? 'unilag_verified' : 'email_verified';
+
     // Create new user using the validated session clerkId
     const user = await db.user.create({
       data: {
@@ -57,8 +63,8 @@ export async function POST(request: NextRequest) {
         username: uniqueUsername,
         email,
         avatar: avatar || null,
-        verificationStatus: 'email_verified',
-        trustScore: 0,
+        verificationStatus,
+        trustScore: isUnilagEmail ? 10 : 0,
         ratingAverage: 0,
         totalReviews: 0,
         role: 'user',

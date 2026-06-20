@@ -372,6 +372,10 @@ export default function MarketplaceApp() {
               onStartChat={handleStartChat}
               isSaved={savedIds.has(selectedListingId)}
               onToggleSave={() => handleToggleSave(selectedListingId)}
+              onNavigateToDelivery={(listingId: string) => {
+                setSelectedListingId(null);
+                setActiveTab('delivery');
+              }}
             />
           </Suspense>
         </main>

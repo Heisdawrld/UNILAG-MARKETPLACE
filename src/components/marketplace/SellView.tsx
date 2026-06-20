@@ -230,6 +230,7 @@ function StoreSetupFlow({ user, onStoreCreated }: { user: UserType; onStoreCreat
 export default function SellView({ user, onListingCreated }: { user: UserType; onListingCreated: () => void }) {
   const { toast } = useToast();
   const [store, setStore] = useState<Store | null>(null);
+  const [skipStore, setSkipStore] = useState(false);
   const [loadingStore, setLoadingStore] = useState(true);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -309,31 +310,45 @@ export default function SellView({ user, onListingCreated }: { user: UserType; o
     );
   }
 
-  // No store yet → show store creation flow
-  if (!store) {
-    return <StoreSetupFlow user={user} onStoreCreated={(s) => setStore(s)} />;
+  // No store yet → show store creation flow with option to skip
+  if (!store && !skipStore) {
+    return (
+      <div className="safe-top p-4 space-y-5 max-w-lg mx-auto">
+        <StoreSetupFlow user={user} onStoreCreated={(s) => setStore(s)} />
+        <div className="relative py-4">
+          <div className="absolute inset-0 flex items-center"><div className="w-full border-t" /></div>
+          <div className="relative flex justify-center text-xs"><span className="bg-background px-2 text-muted-foreground">or</span></div>
+        </div>
+        <Button variant="outline" className="w-full h-11" onClick={() => setSkipStore(true)}>
+          List without a store
+        </Button>
+        <p className="text-[11px] text-muted-foreground text-center">You can always create a store later from your profile.</p>
+      </div>
+    );
   }
 
-  // Has store → show listing form with store badge
+  // Show listing form (with or without store)
   return (
     <div className="safe-top p-4 space-y-5 max-w-lg mx-auto">
-      {/* Store header */}
-      <Card className="border-0 shadow-sm bg-gradient-to-r from-primary/5 to-amber-500/5">
-        <CardContent className="p-3 flex items-center gap-3">
-          {store.logo ? (
-            <img src={store.logo} alt={store.name} className="w-10 h-10 rounded-xl object-cover" />
-          ) : (
-            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-              <StoreIcon className="w-5 h-5 text-primary" />
+      {/* Store header — only shown when user has a store */}
+      {store && (
+        <Card className="border-0 shadow-sm bg-gradient-to-r from-primary/5 to-amber-500/5">
+          <CardContent className="p-3 flex items-center gap-3">
+            {store.logo ? (
+              <img src={store.logo} alt={store.name} className="w-10 h-10 rounded-xl object-cover" />
+            ) : (
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                <StoreIcon className="w-5 h-5 text-primary" />
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-sm truncate">{store.name}</p>
+              <p className="text-[10px] text-muted-foreground">Posting to your store</p>
             </div>
-          )}
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-sm truncate">{store.name}</p>
-            <p className="text-[10px] text-muted-foreground">Posting to your store</p>
-          </div>
-          <Badge variant="outline" className="text-[10px]">{store.category}</Badge>
-        </CardContent>
-      </Card>
+            <Badge variant="outline" className="text-[10px]">{store.category}</Badge>
+          </CardContent>
+        </Card>
+      )}
 
       <h2 className="font-bold text-xl">Add New Listing</h2>
 
@@ -392,7 +407,9 @@ export default function SellView({ user, onListingCreated }: { user: UserType; o
             <SelectContent>
               <SelectItem value="brand_new">Brand New</SelectItem>
               <SelectItem value="like_new">Like New</SelectItem>
-              <SelectItem value="fairly_used">Fairly Used</SelectItem>
+              <SelectItem value="good">Good</SelectItem>
+              <SelectItem value="fair">Fair</SelectItem>
+              <SelectItem value="poor">Poor</SelectItem>
             </SelectContent>
           </Select>
         </div>

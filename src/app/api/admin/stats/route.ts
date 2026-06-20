@@ -116,19 +116,43 @@ export async function GET(req: NextRequest) {
       include: { reporter: { select: { username: true } }, listing: { select: { title: true, id: true } } },
     });
 
-    const allUsers = await db.user.findMany({
-      orderBy: { createdAt: 'desc' },
-      select: { id: true, username: true, email: true, avatar: true, role: true, verificationStatus: true, trustScore: true, ratingAverage: true, totalReviews: true, isRunner: true, phone: true, faculty: true, hostel: true, createdAt: true },
-    });
+    // Pagination for allUsers
+    const page = Math.max(1, parseInt(new URL(req.url).searchParams.get('page') || '1'));
+    const userPageSize = 50;
+    const userSkip = (page - 1) * userPageSize;
+
+    const [allUsers, totalUserCount] = await Promise.all([
+      db.user.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: userPageSize,
+        skip: userSkip,
+        select: { id: true, username: true, email: true, avatar: true, role: true, verificationStatus: true, trustScore: true, ratingAverage: true, totalReviews: true, isRunner: true, phone: true, faculty: true, hostel: true, createdAt: true },
+      }),
+      db.user.count(),
+    ]);
 
     const allListings = await db.listing.findMany({
       orderBy: { createdAt: 'desc' }, take: 50,
       include: { seller: { select: { username: true, id: true } } },
     });
 
+    // Recent marketplace orders
+    const recentOrders = await db.marketplaceOrder.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      include: {
+        buyer: { select: { id: true, username: true, avatar: true } },
+        seller: { select: { id: true, username: true, avatar: true } },
+        listing: { select: { id: true, title: true, price: true, images: true } },
+      },
+    }).catch(() => []);
+
     return NextResponse.json({
       stats: { totalUsers, totalListings, activeListings, soldListings, totalReviews, totalReports, pendingReports, totalChats, totalTasks },
-      recentUsers, recentReports, allUsers, allListings,
+      recentUsers, recentReports, allUsers, allListings, recentOrders,
+      usersPage: page,
+      usersTotal: totalUserCount,
+      usersTotalPages: Math.ceil(totalUserCount / userPageSize),
     });
   } catch (err) {
     console.error('[admin stats]', err);

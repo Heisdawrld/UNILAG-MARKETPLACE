@@ -47,7 +47,7 @@ export const ListingCreateSchema = z.object({
   description: text(5000).optional(),
   price: z.number().min(0).max(10000000),
   category: z.string().trim().min(1).max(50),
-  condition: z.enum(['new', 'like_new', 'good', 'fair', 'poor']).optional(),
+  condition: z.enum(['brand_new', 'like_new', 'good', 'fair', 'poor']).optional(),
   images: z.array(z.string().trim().max(2048)).max(10).optional(),
   storeId: z.string().trim().optional(),
   negotiable: z.boolean().optional(),
@@ -59,7 +59,7 @@ export const ListingUpdateSchema = z.object({
   description: text(5000).optional(),
   price: z.number().min(0).max(10000000).optional(),
   category: z.string().trim().min(1).max(50).optional(),
-  condition: z.enum(['new', 'like_new', 'good', 'fair', 'poor']).optional(),
+  condition: z.enum(['brand_new', 'like_new', 'good', 'fair', 'poor']).optional(),
   images: z.array(z.string().trim().max(2048)).max(10).optional(),
   status: z.enum(['available', 'sold', 'reserved', 'draft']).optional(),
   negotiable: z.boolean().optional(),
@@ -111,6 +111,7 @@ export const MessageCreateSchema = z.object({
 
 export const ReviewCreateSchema = z.object({
   sellerId: z.string().trim().min(1),
+  listingId: z.string().trim().optional(),
   rating: z.number().int().min(1).max(5),
   comment: text(1000).optional(),
 })

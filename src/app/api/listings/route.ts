@@ -4,6 +4,7 @@ import { enhanceMarketplaceImages } from '@/lib/image-processing';
 import { validateBody, ListingCreateSchema } from '@/lib/validation';
 import { NextRequest, NextResponse } from 'next/server';
 import { rateLimits } from '@/lib/rate-limit';
+import { checkListingContent } from '@/lib/content-moderation';
 
 async function getAuthUser() {
   const { userId: clerkId } = await auth();
@@ -178,9 +179,9 @@ export async function POST(request: NextRequest) {
     // sellerId is not in the Zod schema (it's determined from auth), so get it from body
     const sellerId = body.sellerId;
 
-    if (!sellerId || !storeId) {
+    if (!sellerId) {
       return NextResponse.json(
-        { error: 'Missing required fields: sellerId, storeId' },
+        { error: 'Missing required field: sellerId' },
         { status: 400 }
       );
     }
@@ -194,9 +195,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Seller not found' }, { status: 404 });
     }
 
-    const store = await db.store.findUnique({ where: { id: storeId } });
-    if (!store || store.ownerId !== sellerId) {
-      return NextResponse.json({ error: 'Only your store can post products or services' }, { status: 403 });
+    // Store is optional — verify ownership only if storeId is provided
+    if (storeId) {
+      const store = await db.store.findUnique({ where: { id: storeId } });
+      if (!store || store.ownerId !== sellerId) {
+        return NextResponse.json({ error: 'Only your store can post products or services' }, { status: 403 });
+      }
+    }
+
+    // Content moderation check
+    const moderation = checkListingContent(
+      String(title).trim(),
+      String(description ?? '').trim()
+    );
+    if (moderation.isBlocked) {
+      return NextResponse.json(
+        { error: 'Listing blocked', reasons: moderation.reasons },
+        { status: 400 }
+      );
     }
 
     const processedImages = await enhanceMarketplaceImages(images, { maxWidth: 1600, maxHeight: 1600, quality: 84 });
@@ -204,12 +220,12 @@ export async function POST(request: NextRequest) {
     const listing = await db.listing.create({
       data: {
         sellerId,
-        storeId,
+        storeId: storeId || null,
         title: String(title).trim(),
         description: String(description ?? '').trim(),
         price,
         category,
-        condition: condition || 'new',
+        condition: condition || 'brand_new',
         negotiable: negotiable !== undefined ? negotiable : true,
         location: typeof location === 'string' && location.trim() ? location.trim() : null,
         images: processedImages.length > 0 ? JSON.stringify(processedImages) : '[]',

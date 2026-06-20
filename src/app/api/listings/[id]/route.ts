@@ -132,6 +132,13 @@ export async function PATCH(
       updateData.images = JSON.stringify(processedImages);
     }
 
+    // Only allow boost fields to be set via /api/boosts (which verifies payment)
+    // Non-admin users cannot directly set boosted or boostedUntil
+    if (authUser.role !== 'admin') {
+      delete (updateData as any).boosted;
+      delete (updateData as any).boostedUntil;
+    }
+
     const updatedListing = await db.listing.update({
       where: { id },
       data: updateData,

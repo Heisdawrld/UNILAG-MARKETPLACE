@@ -31,21 +31,34 @@ export async function POST(request: NextRequest) {
     const { data, error } = validateBody(ReviewCreateSchema, body)
     if (error) return error
 
-    const { sellerId, rating, comment } = data
+    const { sellerId, listingId, rating, comment } = data
 
     if (sellerId === authUser.id) {
       return NextResponse.json({ error: 'Cannot review yourself' }, { status: 400 });
     }
 
-    // 3. Check for duplicate reviews (same reviewer + same seller)
-    const existingReview = await db.review.findFirst({
-      where: {
-        reviewerId: authUser.id,
-        sellerId,
-      },
-    })
-    if (existingReview) {
-      return NextResponse.json({ error: 'You have already reviewed this seller' }, { status: 409 })
+    // 3. Check for duplicate reviews (same reviewer + same listing)
+    if (listingId) {
+      const existingReview = await db.review.findFirst({
+        where: {
+          reviewerId: authUser.id,
+          listingId,
+        },
+      })
+      if (existingReview) {
+        return NextResponse.json({ error: 'You have already reviewed this listing' }, { status: 409 })
+      }
+    } else {
+      // Fallback: check by reviewer + seller if no listingId
+      const existingReview = await db.review.findFirst({
+        where: {
+          reviewerId: authUser.id,
+          sellerId,
+        },
+      })
+      if (existingReview) {
+        return NextResponse.json({ error: 'You have already reviewed this seller' }, { status: 409 })
+      }
     }
 
     // 4. Sanitize comment
@@ -55,6 +68,7 @@ export async function POST(request: NextRequest) {
       data: {
         reviewerId: authUser.id,
         sellerId,
+        listingId: listingId || null,
         rating,
         comment: sanitizedComment,
       },

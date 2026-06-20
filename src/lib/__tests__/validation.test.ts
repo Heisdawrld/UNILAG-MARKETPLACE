@@ -143,7 +143,7 @@ describe('ListingCreateSchema', () => {
   })
 
   it('should accept valid condition values', () => {
-    const conditions = ['new', 'like_new', 'good', 'fair', 'poor']
+    const conditions = ['brand_new', 'like_new', 'good', 'fair', 'poor']
     for (const condition of conditions) {
       const result = ListingCreateSchema.safeParse({
         title: 'Item',

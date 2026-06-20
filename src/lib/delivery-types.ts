@@ -47,6 +47,7 @@ export interface ClientToServerEvents {
   'delivery:watch': (data: { orderId: string }) => void
   'delivery:unwatch': (data: { orderId: string }) => void
   'delivery:message': (data: { orderId: string; message: string }) => void
+  'chat:message': (data: { chatId: string; message?: string; imageUrl?: string }) => void
 }
 
 export interface ServerToClientEvents {
@@ -85,6 +86,7 @@ export interface ServerToClientEvents {
     message: string; type: string; createdAt: string
   }) => void
   'error': (data: { message: string; code: string }) => void
+  'chat:message': (data: { id: string; chatId: string; senderId: string; content: string; imageUrl: string; createdAt: string }) => void
 }
 
 export const DELIVERY_CATEGORY_BASELINES: Record<DeliveryCategory, { min: number; max: number }> = {

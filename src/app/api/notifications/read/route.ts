@@ -41,7 +41,11 @@ export async function PATCH(request: NextRequest) {
         data: { read: true },
       });
 
-      return NextResponse.json({ success: true, message: 'All notifications marked as read' });
+      const unreadCount = await db.notification.count({
+        where: { userId, read: false },
+      });
+
+      return NextResponse.json({ success: true, message: 'All notifications marked as read', unreadCount });
     }
 
     if (chatId) {
@@ -55,7 +59,11 @@ export async function PATCH(request: NextRequest) {
         data: { read: true },
       });
 
-      return NextResponse.json({ success: true, message: 'Chat notifications marked as read' });
+      const unreadCount = await db.notification.count({
+        where: { userId, read: false },
+      });
+
+      return NextResponse.json({ success: true, message: 'Chat notifications marked as read', unreadCount });
     }
 
     if (taskId) {
@@ -69,7 +77,11 @@ export async function PATCH(request: NextRequest) {
         data: { read: true },
       });
 
-      return NextResponse.json({ success: true, message: 'Task notifications marked as read' });
+      const unreadCount = await db.notification.count({
+        where: { userId, read: false },
+      });
+
+      return NextResponse.json({ success: true, message: 'Task notifications marked as read', unreadCount });
     }
 
     if (!notificationIds || !Array.isArray(notificationIds) || notificationIds.length === 0) {
@@ -88,7 +100,11 @@ export async function PATCH(request: NextRequest) {
       data: { read: true },
     });
 
-    return NextResponse.json({ success: true, message: 'Notifications marked as read' });
+    const unreadCount = await db.notification.count({
+      where: { userId, read: false },
+    });
+
+    return NextResponse.json({ success: true, message: 'Notifications marked as read', unreadCount });
   } catch (error) {
     console.error('Error marking notifications as read:', error);
     return NextResponse.json({ error: 'Failed to mark notifications as read' }, { status: 500 });

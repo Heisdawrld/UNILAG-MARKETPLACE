@@ -9,6 +9,7 @@ import { isDatabaseAvailable, db } from './db'
 import { UNILAG_SERVICE_AREA, isInsideUnilagBoundary, estimateCampusTrip } from './runner-dispatch'
 import { verifySocketToken } from './socket-auth'
 import { notifyRunnerAssigned, notifyPackagePickedUp, notifyDeliveryDelivered, notifyDeliveryCancelled, notifyOfferAccepted } from './push-notifications'
+import { checkListingContent } from './content-moderation'
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 interface InterServerEvents {}
@@ -80,6 +81,9 @@ export function initSocketIO(httpServer: HTTPServer): TypedServer {
   io.on('connection', (socket) => {
     const { userId, username, isRunner } = socket.data
     logger.log(`[socket] Connected: ${username} (${userId}) [runner=${isRunner}]`)
+
+    // All users join their customer room for marketplace chat events
+    socket.join(`customer:${userId}`)
 
     if (isRunner) {
       socket.join(`runner:${userId}`)
@@ -410,6 +414,55 @@ export function initSocketIO(httpServer: HTTPServer): TypedServer {
           type: 'text',
           createdAt: msg.createdAt.toISOString(),
         })
+      } catch (err) {
+        socket.emit('error', { message: 'Failed to send message', code: 'MESSAGE_ERROR' })
+      }
+    })
+
+    // ── Marketplace Chat Events ──
+    socket.on('chat:message', async (data) => {
+      if (!checkEventRate(socket.id, 'chat:message', 30)) {
+        socket.emit('error', { message: 'Rate limit: too many messages', code: 'RATE_LIMITED' })
+        return
+      }
+      try {
+        if (!isDatabaseAvailable()) { socket.emit('error', { message: 'Database unavailable', code: 'DB_UNAVAILABLE' }); return }
+
+        const { chatId, message, imageUrl } = data
+        if (!chatId || (!message && !imageUrl)) return
+
+        const sanitizedMessage = message ? String(message).trim().slice(0, 1000) : null
+        if (!sanitizedMessage && !imageUrl) return
+
+        // Verify user is part of this chat
+        const chat = await db.chat.findUnique({
+          where: { id: chatId },
+          select: { buyerId: true, sellerId: true, listingId: true },
+        })
+        if (!chat || (chat.buyerId !== userId && chat.sellerId !== userId)) return
+
+        const msg = await db.message.create({
+          data: {
+            chatId,
+            senderId: userId,
+            message: sanitizedMessage || '',
+            imageUrl: imageUrl || null,
+            seen: false,
+          },
+        })
+
+        // Emit to both parties
+        const otherUserId = chat.buyerId === userId ? chat.sellerId : chat.buyerId
+        const emitData = {
+          id: msg.id,
+          chatId,
+          senderId: userId,
+          content: sanitizedMessage || '',
+          imageUrl: imageUrl || '' as string,
+          createdAt: msg.createdAt.toISOString(),
+        }
+        io!.to(`customer:${userId}`).emit('chat:message', emitData)
+        io!.to(`customer:${otherUserId}`).emit('chat:message', emitData)
       } catch (err) {
         socket.emit('error', { message: 'Failed to send message', code: 'MESSAGE_ERROR' })
       }

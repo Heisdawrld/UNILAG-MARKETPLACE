@@ -431,19 +431,25 @@ export const TASK_STATUS_LABELS: Record<string, string> = {
 export const CONDITIONS = [
   'brand_new',
   'like_new',
-  'fairly_used',
+  'good',
+  'fair',
+  'poor',
 ] as const;
 
 export const CONDITION_LABELS: Record<string, string> = {
   brand_new: 'Brand New',
   like_new: 'Like New',
-  fairly_used: 'Fairly Used',
+  good: 'Good',
+  fair: 'Fair',
+  poor: 'Poor',
 };
 
 export const CONDITION_COLORS: Record<string, string> = {
   brand_new: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
-  like_new: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  fairly_used: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  like_new: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
+  good: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  fair: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  poor: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
 };
 
 export const CATEGORY_PLACEHOLDER_IMAGES: Record<string, string> = {

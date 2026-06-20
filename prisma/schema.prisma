@@ -12,7 +12,7 @@ datasource db {
 // Validation should be enforced at the application/Zod layer.
 // UserRole: user, runner, admin
 // ListingStatus: active, sold, paused, removed
-// ListingCondition: brand_new, like_new, fairly_used, old
+// ListingCondition: brand_new, like_new, good, fair, poor
 // DeliveryOrderStatus: created, searching, runner_assigned, runner_en_route, picked_up, in_transit, delivered, completed, cancelled
 // PaymentStatus: unpaid, escrow, released, refunded
 // TaskStatus: open, matched, in_progress, completed, cancelled
@@ -71,6 +71,9 @@ model User {
   sentDeliveryMessages DeliveryMessage[]
   wallet              RunnerWallet?
   payouts             PayoutRequest[]
+  marketplacePurchases MarketplaceOrder[] @relation("BuyerOrders")
+  marketplaceSales    MarketplaceOrder[] @relation("SellerOrders")
+  offers              Offer[]
 }
 
 model Listing {
@@ -81,7 +84,7 @@ model Listing {
   description String
   price       Float
   category    String
-  condition   String?  // ListingCondition: brand_new, like_new, fairly_used, old
+  condition   String?  // ListingCondition: brand_new, like_new, good, fair, poor
   negotiable  Boolean  @default(true)
   location    String?
   status      String   @default("active") // ListingStatus: active, sold, paused, removed
@@ -99,6 +102,8 @@ model Listing {
   savedBy       SavedListing[]
   listingReports Report[]
   boosts        Boost[]
+  orders        MarketplaceOrder[]
+  offers        Offer[]
 
   @@index([category])
   @@index([status])
@@ -153,6 +158,7 @@ model Review {
   id         String   @id @default(cuid())
   reviewerId String
   sellerId   String
+  listingId  String?
   rating     Int
   comment    String?
   createdAt  DateTime @default(now())
@@ -162,7 +168,8 @@ model Review {
 
   @@index([sellerId])
   @@index([reviewerId])
-  @@index([reviewerId, sellerId])
+  @@index([listingId])
+  @@unique([reviewerId, listingId])
 }
 
 model Report {
@@ -220,6 +227,7 @@ model Store {
   owner     User          @relation(fields: [ownerId], references: [id])
   listings  Listing[]
   followers StoreFollow[]
+  orders    MarketplaceOrder[]
 
   @@index([category])
   @@index([slug])
@@ -584,6 +592,67 @@ model PayoutRequest {
   @@index([runnerId])
   @@index([status])
   @@index([createdAt])
+}
+
+// ════════════════════════════════════════════════════════════════
+// ── Marketplace Orders (Buy Now with Escrow) ──
+// ════════════════════════════════════════════════════════════════
+
+model MarketplaceOrder {
+  id              String   @id @default(cuid())
+  buyerId         String
+  sellerId        String
+  listingId       String
+  storeId         String?
+  amount          Float                    // Total amount paid by buyer
+  deliveryFee     Float   @default(0)      // Delivery fee if applicable
+  platformFee     Float   @default(0)      // Platform commission
+  sellerPayout    Float   @default(0)      // Amount seller receives
+  status          String   @default("pending") // pending, paid, delivered, completed, cancelled, refunded
+  paymentMethod   String?                   // 'flutterwave', 'cash', 'locked'
+  paymentReference String?                  // Flutterwave tx_ref
+  paymentStatus   String   @default("unpaid") // unpaid, escrow, released, refunded
+  meetupLocation  String?                   // For cash meetup orders
+  meetupScheduledAt DateTime?               // When meetup is scheduled
+  completedAt     DateTime?
+  cancelledAt     DateTime?
+  cancelReason    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  buyer           User     @relation("BuyerOrders", fields: [buyerId], references: [id])
+  seller          User     @relation("SellerOrders", fields: [sellerId], references: [id])
+  listing         Listing  @relation(fields: [listingId], references: [id])
+  store           Store?   @relation(fields: [storeId], references: [id])
+
+  @@index([buyerId])
+  @@index([sellerId])
+  @@index([listingId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ════════════════════════════════════════════════════════════════
+// ── Marketplace Offer System ──
+// ════════════════════════════════════════════════════════════════
+
+model Offer {
+  id          String   @id @default(cuid())
+  listingId   String
+  buyerId     String
+  amount      Float
+  message     String?
+  status      String   @default("pending") // pending, accepted, rejected, expired
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+  respondedAt DateTime?
+
+  listing     Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  buyer       User     @relation(fields: [buyerId], references: [id])
+
+  @@index([listingId])
+  @@index([buyerId])
+  @@index([status])
 }
 
 // ════════════════════════════════════════════════════════════════

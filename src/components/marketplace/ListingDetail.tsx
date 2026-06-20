@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Heart, Share2, MapPin, Clock, Eye, Shield, Star, MessageCircle, Phone, ChevronLeft, ChevronRight, CreditCard, Banknote, Lock, AlertTriangle, Flag, MessageSquare, Zap, Loader2 } from 'lucide-react';
+import { ArrowLeft, Heart, Share2, MapPin, Clock, Eye, Shield, Star, MessageCircle, Phone, ChevronLeft, ChevronRight, CreditCard, Banknote, Lock, AlertTriangle, Flag, MessageSquare, Zap, Loader2, Truck, HelpCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
 import { User as UserType, Listing, Review, CONDITION_LABELS, CONDITION_COLORS } from '@/lib/types';
 import { formatPrice, timeAgo, getListingImages, getInitials, getListingDisplayAvatar, getListingDisplayName, isListingDisplayVerified } from '@/lib/marketplace-utils';
+import { useCustomerDeliveryStore } from '@/store/customer-delivery-store';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const REPORT_REASONS = [
@@ -63,13 +64,15 @@ function ReportForm({ listingId, onClose, toast }: { listingId: string; onClose:
 }
 
 export default function ListingDetail({
-  listingId, user, onBack, onStartChat, isSaved, onToggleSave,
+  listingId, user, onBack, onStartChat, isSaved, onToggleSave, onNavigateToDelivery,
 }: {
   listingId: string; user: UserType; onBack: () => void;
   onStartChat: (sellerId: string, listingId: string) => void;
   isSaved: boolean; onToggleSave: () => void;
+  onNavigateToDelivery?: (listingId: string) => void;
 }) {
   const { toast } = useToast();
+  const updateDeliveryForm = useCustomerDeliveryStore((s) => s.updateForm);
   const [listing, setListing] = useState<Listing | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
@@ -179,6 +182,38 @@ export default function ListingDetail({
 
       {/* Content */}
       <div className="p-4 space-y-4">
+        {/* Is this available? Quick Action */}
+        {!isOwner && listing.status === 'active' && (
+          <button
+            onClick={async () => {
+              try {
+                // Create or get existing chat
+                const chatData = await api.post('/api/chats', {
+                  buyerId: user.id,
+                  sellerId: listing.sellerId,
+                  listingId: listing.id,
+                });
+                if (chatData?.id) {
+                  // Send the quick message
+                  await api.post('/api/messages', {
+                    chatId: chatData.id,
+                    senderId: user.id,
+                    message: 'Is this still available?',
+                  });
+                  toast({ title: 'Message sent!', description: '"Is this still available?" sent to the seller.' });
+                  onStartChat(listing.sellerId, listing.id);
+                }
+              } catch (e) {
+                console.error(e);
+                toast({ title: 'Failed to send message', variant: 'destructive' });
+              }
+            }}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 text-sm font-medium hover:bg-emerald-500/20 transition-colors"
+          >
+            <HelpCircle className="w-4 h-4" /> Is this available?
+          </button>
+        )}
+
         {/* Title & Price */}
         <div>
           <div className="flex items-start justify-between gap-2">
@@ -342,10 +377,31 @@ export default function ListingDetail({
               </Button>
             )}
             <Button variant="outline" className="h-11 flex-1" onClick={() => onStartChat(listing.seller.id, listing.id)}>
-              <MessageCircle className="w-4 h-4 mr-2" /> Message Store
+              <MessageCircle className="w-4 h-4 mr-2" /> Message
             </Button>
             <Button className="h-11 flex-1" onClick={() => setShowPayment(true)}>
               <CreditCard className="w-4 h-4 mr-2" /> Buy Now
+            </Button>
+          </div>
+          {/* Get it Delivered row */}
+          <div className="mt-2 max-w-lg mx-auto">
+            <Button
+              variant="outline"
+              className="w-full h-10 border-dashed text-sm"
+              onClick={() => {
+                // Pre-populate delivery form with listing details
+                updateDeliveryForm({
+                  title: listing.title,
+                  description: `Delivery for marketplace item: ${listing.title} (${formatPrice(listing.price)})`,
+                  pickupAddress: listing.location || '',
+                  category: 'packages',
+                });
+                if (onNavigateToDelivery) {
+                  onNavigateToDelivery(listing.id);
+                }
+              }}
+            >
+              <Truck className="w-4 h-4 mr-2" /> Get it Delivered
             </Button>
           </div>
         </div>
@@ -467,11 +523,29 @@ export default function ListingDetail({
                 <Button className="w-full mt-4 bg-primary hover:bg-primary/90" onClick={async () => {
                   try {
                     const durationHours = plan.id === 'basic' ? 6 : plan.id === 'standard' ? 24 : plan.id === 'premium' ? 72 : 168;
-                    const boostedUntil = new Date(Date.now() + durationHours * 60 * 60 * 1000).toISOString();
-                    await api.patch(`/api/listings/${listing.id}`, { boosted: true, boostedUntil });
-                    toast({ title: 'Listing Boosted 🚀', description: `Your listing is boosted for ${plan.duration}!` });
-                    setShowBoost(false);
-                    onBack();
+                    const durationDays = durationHours / 24;
+                    // Initiate payment through the proper payment flow
+                    const result = await api.post('/api/payments/initialize', {
+                      type: 'boost',
+                      listingId: listing.id,
+                      amount: plan.id === 'basic' ? 300 : plan.id === 'standard' ? 700 : plan.id === 'premium' ? 1500 : 3000,
+                    });
+
+                    if (result.link) {
+                      // Redirect to Flutterwave payment page
+                      window.location.href = result.link;
+                    } else if (result.isLocked) {
+                      // Payments locked — use /api/boosts directly (dev/mock mode)
+                      await api.post('/api/boosts', {
+                        listingId: listing.id,
+                        amount: plan.id === 'basic' ? 300 : plan.id === 'standard' ? 700 : plan.id === 'premium' ? 1500 : 3000,
+                        durationDays,
+                        flutterwaveTxRef: result.txRef,
+                      });
+                      toast({ title: 'Listing Boosted 🚀', description: `Your listing is boosted for ${plan.duration}!` });
+                      setShowBoost(false);
+                      onBack();
+                    }
                   } catch {
                     toast({ title: 'Boost Failed', variant: 'destructive' });
                   }
