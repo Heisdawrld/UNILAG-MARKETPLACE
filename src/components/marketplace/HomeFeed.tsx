@@ -139,7 +139,12 @@ export default function HomeFeed({
     }
 
     if (notif.type === 'task_application' || notif.type === 'task_accepted' || data.taskId) {
-      onOpenTasks?.(data.taskId || null);
+      if (onOpenTasks) {
+        onOpenTasks(data.taskId || null);
+      } else {
+        // V1: delivery/runner system not available yet
+        console.info('[homefeed] Task notification ignored — feature disabled in V1');
+      }
       return;
     }
 

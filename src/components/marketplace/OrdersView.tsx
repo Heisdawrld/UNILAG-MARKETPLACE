@@ -56,11 +56,13 @@ export default function OrdersView({ user }: OrdersViewProps) {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<OrderFilter>('all')
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
+  const [cancellingId, setCancellingId] = useState<string | null>(null)
 
   useEffect(() => {
     async function fetchOrders() {
       try {
-        const data = await api.get(`/api/orders?role=${filter === 'selling' ? 'seller' : 'buyer'}&limit=50`)
+        const roleParam = filter === 'all' ? '' : `&role=${filter === 'selling' ? 'seller' : 'buyer'}`
+        const data = await api.get(`/api/orders?limit=50${roleParam}`)
         if (data?.orders) setOrders(data.orders)
       } catch (err) {
         console.error('[orders] Fetch error:', err)
@@ -102,6 +104,7 @@ export default function OrdersView({ user }: OrdersViewProps) {
   }, [toast])
 
   const handleCancel = useCallback(async (orderId: string) => {
+    setCancellingId(orderId)
     try {
       const result = await api.patch(`/api/orders/${orderId}`, { action: 'cancel', reason: 'Cancelled by user' })
       if (result?.success) {
@@ -110,6 +113,8 @@ export default function OrdersView({ user }: OrdersViewProps) {
       }
     } catch (err) {
       toast({ title: 'Failed to cancel', variant: 'destructive' })
+    } finally {
+      setCancellingId(null)
     }
   }, [toast])
 
@@ -242,15 +247,16 @@ export default function OrdersView({ user }: OrdersViewProps) {
                       variant="ghost"
                       size="sm"
                       className="text-xs h-8 text-red-500"
+                      disabled={cancellingId === order.id}
                       onClick={() => handleCancel(order.id)}
                     >
-                      Cancel
+                      {cancellingId === order.id ? 'Cancelling...' : 'Cancel'}
                     </Button>
                   )}
 
                   {/* Completed: Leave review */}
                   {order.status === 'completed' && (
-                    <Button variant="outline" size="sm" className="flex-1 text-xs h-8">
+                    <Button variant="outline" size="sm" className="flex-1 text-xs h-8" onClick={() => toast({ title: 'Reviews coming soon!', description: 'This feature will be available in the next update.' })}>
                       <Star className="w-3 h-3 mr-1" />
                       Leave Review
                     </Button>

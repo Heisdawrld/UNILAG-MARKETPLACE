@@ -12,7 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
 import { User as UserType, Listing, Review, CONDITION_LABELS, CONDITION_COLORS } from '@/lib/types';
 import { formatPrice, timeAgo, getListingImages, getInitials, getListingDisplayAvatar, getListingDisplayName, isListingDisplayVerified } from '@/lib/marketplace-utils';
-import { useCustomerDeliveryStore } from '@/store/customer-delivery-store';
+import { isFeatureEnabled } from '@/lib/features';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const REPORT_REASONS = [
@@ -72,7 +72,7 @@ export default function ListingDetail({
   onNavigateToDelivery?: (listingId: string) => void;
 }) {
   const { toast } = useToast();
-  const updateDeliveryForm = useCustomerDeliveryStore((s) => s.updateForm);
+  const isDeliveryEnabled = isFeatureEnabled('DELIVERY_SYSTEM');
   const [listing, setListing] = useState<Listing | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,7 +115,7 @@ export default function ListingDetail({
 
   const images = getListingImages(listing.images, listing.category);
   const isOwner = listing.sellerId === user.id;
-  const conditionClass = CONDITION_COLORS[listing.condition] || CONDITION_COLORS.fairly_used;
+  const conditionClass = CONDITION_COLORS[listing.condition as keyof typeof CONDITION_COLORS] || CONDITION_COLORS.good;
   const displayName = getListingDisplayName(listing);
   const displayAvatar = getListingDisplayAvatar(listing);
   const isVerifiedDisplay = isListingDisplayVerified(listing);
@@ -383,27 +383,18 @@ export default function ListingDetail({
               <CreditCard className="w-4 h-4 mr-2" /> Buy Now
             </Button>
           </div>
-          {/* Get it Delivered row */}
+          {/* Get it Delivered row — V2 feature */}
+          {isDeliveryEnabled && onNavigateToDelivery && (
           <div className="mt-2 max-w-lg mx-auto">
             <Button
               variant="outline"
               className="w-full h-10 border-dashed text-sm"
-              onClick={() => {
-                // Pre-populate delivery form with listing details
-                updateDeliveryForm({
-                  title: listing.title,
-                  description: `Delivery for marketplace item: ${listing.title} (${formatPrice(listing.price)})`,
-                  pickupAddress: listing.location || '',
-                  category: 'packages',
-                });
-                if (onNavigateToDelivery) {
-                  onNavigateToDelivery(listing.id);
-                }
-              }}
+              onClick={() => onNavigateToDelivery(listing.id)}
             >
               <Truck className="w-4 h-4 mr-2" /> Get it Delivered
             </Button>
           </div>
+          )}
         </div>
       )}
 

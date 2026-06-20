@@ -16,7 +16,7 @@ export function ListingCard({
   listing: Listing; onClick: () => void; isSaved: boolean; onToggleSave: () => void;
 }) {
   const image = getListingFirstImage(listing.images, listing.category);
-  const conditionClass = CONDITION_COLORS[listing.condition] || CONDITION_COLORS.fairly_used;
+  const conditionClass = CONDITION_COLORS[listing.condition as keyof typeof CONDITION_COLORS] || CONDITION_COLORS.good;
   const displayName = getListingDisplayName(listing);
   const displayAvatar = getListingDisplayAvatar(listing);
   const isVerifiedDisplay = isListingDisplayVerified(listing);

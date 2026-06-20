@@ -92,9 +92,15 @@ export default function MarketplaceApp() {
   // Honor deep links from web push notifications, e.g. /?tab=messages&chatId=...
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const tab = params.get('tab') as ViewTab | null;
+    const rawTab = params.get('tab');
     const chatId = params.get('chatId');
     const validTabs: ViewTab[] = ['home', 'search', 'sell', 'orders', 'messages', 'profile'];
+
+    // Redirect V2 tabs to their V1 equivalents
+    let tab: ViewTab | null = rawTab as ViewTab | null;
+    if (rawTab === 'delivery' || rawTab === 'tasks') {
+      tab = 'orders'; // Redirect delivery/tasks to orders in V1
+    }
 
     if (tab && validTabs.includes(tab)) {
       setActiveTab(tab);
