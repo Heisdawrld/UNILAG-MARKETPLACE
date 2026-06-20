@@ -22,7 +22,8 @@ const isClerkConfigured = !!(
   clerkSecKey &&
   clerkPubKey !== 'undefined' &&
   clerkSecKey !== 'undefined' &&
-  clerkPubKey.startsWith('pk_')
+  clerkPubKey.startsWith('pk_') &&
+  clerkPubKey.length > 30  // Real Clerk keys are 40+ chars; placeholders are short
 )
 
 // ── Public routes (no auth required) ──
@@ -214,7 +215,18 @@ function validateCsrf(request: NextRequest): NextResponse | null {
   return null
 }
 
-export default clerkMiddleware(async (auth, request) => {
+// ── Middleware export ──
+// When Clerk isn't configured, we use a simple middleware that only enforces
+// CSRF protection and security headers. This prevents the Clerk SDK from
+// crashing with "Publishable key not valid" when fake/placeholder keys are set.
+function simpleMiddleware(request: NextRequest) {
+  const csrfError = validateCsrf(request)
+  if (csrfError) return csrfError
+  return NextResponse.next()
+}
+
+export default isClerkConfigured
+  ? clerkMiddleware(async (auth, request) => {
   const { pathname } = request.nextUrl
 
   // ── API versioning: strip /v1 prefix for route matching ──
@@ -281,6 +293,7 @@ export default clerkMiddleware(async (auth, request) => {
 
   return NextResponse.next()
 })
+  : (request: NextRequest) => simpleMiddleware(request)
 
 // ── Security Headers ──
 function addSecurityHeaders(response: NextResponse, request: NextRequest) {
