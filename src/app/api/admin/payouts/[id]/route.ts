@@ -3,6 +3,7 @@ import { requireAdminUser } from '@/lib/admin-auth'
 import { rateLimits } from '@/lib/rate-limit'
 import { db, isDatabaseAvailable } from '@/lib/db'
 import { verifyTransfer, initiateTransfer, generateTxRef, isPaymentsEnabled } from '@/lib/flutterwave'
+import { createAuditLog } from '@/lib/audit-log'
 
 export async function PATCH(
   req: NextRequest,
@@ -32,6 +33,15 @@ export async function PATCH(
         where: { id },
         data: { status: 'processing', reviewedBy: adminResult.user.id, reviewedAt: new Date() },
       })
+      await createAuditLog({
+        action: 'admin.payout_approved',
+        actorId: adminResult.user.id,
+        actorRole: 'admin',
+        resourceType: 'payout',
+        resourceId: id,
+        description: `Admin approved payout ${id} (₦${payout.amount.toLocaleString()})`,
+        metadata: { payoutId: id, amount: payout.amount, runnerId: payout.runnerId },
+      })
       return NextResponse.json({ success: true, status: 'processing' })
     }
 
@@ -39,6 +49,15 @@ export async function PATCH(
       await db.payoutRequest.update({
         where: { id },
         data: { status: 'completed', processedAt: new Date(), reviewedBy: adminResult.user.id },
+      })
+      await createAuditLog({
+        action: 'payout.completed',
+        actorId: adminResult.user.id,
+        actorRole: 'admin',
+        resourceType: 'payout',
+        resourceId: id,
+        description: `Admin marked payout ${id} as completed (₦${payout.amount.toLocaleString()})`,
+        metadata: { payoutId: id, amount: payout.amount, runnerId: payout.runnerId },
       })
       return NextResponse.json({ success: true, status: 'completed' })
     }
@@ -68,6 +87,15 @@ export async function PATCH(
       await db.payoutRequest.update({
         where: { id },
         data: { status: 'failed', failedReason: failedReason || 'Rejected by admin', reviewedBy: adminResult.user.id, reviewedAt: new Date() },
+      })
+      await createAuditLog({
+        action: 'admin.payout_rejected',
+        actorId: adminResult.user.id,
+        actorRole: 'admin',
+        resourceType: 'payout',
+        resourceId: id,
+        description: `Admin rejected payout ${id} (₦${payout.amount.toLocaleString()}): ${failedReason || 'No reason provided'}`,
+        metadata: { payoutId: id, amount: payout.amount, runnerId: payout.runnerId, failedReason },
       })
       return NextResponse.json({ success: true, status: 'failed' })
     }

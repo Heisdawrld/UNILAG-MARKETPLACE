@@ -25,7 +25,7 @@ const isClerkConfigured = Boolean(
 
 export async function GET(req: Request) {
   try {
-    // 1. Clerk auth check — with graceful fallback
+    // 1. Clerk auth check — REQUIRED, no fallbacks
     let clerkId: string | null = null
 
     if (isClerkConfigured) {
@@ -35,29 +35,6 @@ export async function GET(req: Request) {
         clerkId = authResult.userId || null
       } catch (clerkErr) {
         console.error('[socket-token] Clerk auth() threw an error:', clerkErr)
-        // Clerk failed — try to extract userId from request headers as fallback
-        // Clerk sets cookies that we can't decode without the secret,
-        // so we fall back to letting the client provide its identity
-      }
-    } else {
-      console.warn('[socket-token] Clerk not configured — using header-based fallback')
-    }
-
-    // If Clerk didn't give us a userId, try the x-socket-user-id header
-    // (sent by the client from Clerk's useUser() hook)
-    if (!clerkId) {
-      const headerUserId = req.headers.get('x-socket-user-id')
-      if (headerUserId) {
-        clerkId = headerUserId
-      }
-    }
-
-    // If still no userId, check for a fallback query param
-    if (!clerkId) {
-      const url = new URL(req.url)
-      const fallbackId = url.searchParams.get('fallbackId')
-      if (fallbackId) {
-        clerkId = `fallback_${fallbackId}`
       }
     }
 
@@ -68,14 +45,17 @@ export async function GET(req: Request) {
       )
     }
 
-    // 2. Rate limit (prevent token spam) — with safe fallback
+    // 2. Rate limit (prevent token spam) — deny on failure
     try {
       const { rateLimits } = await import('@/lib/rate-limit')
       const rl = await rateLimits.auth(req as any)
       if (!rl.success && rl.response) return rl.response!
     } catch (rateLimitErr) {
-      // Rate limiter failed (e.g., Redis down, type error) — skip it
-      console.warn('[socket-token] Rate limit check failed, skipping:', rateLimitErr)
+      console.error('[socket-token] Rate limit check failed, denying request:', rateLimitErr)
+      return NextResponse.json(
+        { error: 'Rate limit service unavailable', code: 'RATE_LIMIT_ERROR' },
+        { status: 503 }
+      )
     }
 
     // 3. Try to get full user from DB

@@ -119,7 +119,7 @@ export const ReviewCreateSchema = z.object({
 
 export const ReportCreateSchema = z.object({
   listingId: z.string().trim().min(1),
-  reason: z.enum(['spam', 'inappropriate', 'scam', 'duplicate', 'wrong_category', 'other']),
+  reason: z.enum(['scam', 'fake_listing', 'harassment', 'spam', 'illegal_item']),
   description: text(1000).optional(),
 })
 

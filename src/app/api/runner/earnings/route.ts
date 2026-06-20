@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'You can only view your own earnings' }, { status: 403 })
     }
 
-    if (!isDatabaseAvailable()) return NextResponse.json({ today: 4200, week: 18700, month: 52300, totalDeliveries: 12, avgRating: 4.7, pendingPayout: 3200 })
+    if (!isDatabaseAvailable()) return NextResponse.json({ error: 'Service unavailable — database not configured' }, { status: 503 })
     const now = new Date()
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - now.getDay()); startOfWeek.setHours(0, 0, 0, 0)

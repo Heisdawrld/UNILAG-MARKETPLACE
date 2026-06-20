@@ -9,6 +9,7 @@ import { UNILAG_SERVICE_AREA, isInsideUnilagBoundary, estimateCampusTrip } from 
 import { verifySocketToken } from './socket-auth'
 import { notifyRunnerAssigned, notifyPackagePickedUp, notifyDeliveryDelivered, notifyDeliveryCancelled, notifyOfferAccepted } from './push-notifications'
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 interface InterServerEvents {}
 interface SocketData { userId: string; username: string; role: string; isRunner: boolean; connectedAt: number }
 type TypedServer = SocketIOServer<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>
@@ -53,105 +54,26 @@ export function initSocketIO(httpServer: HTTPServer): TypedServer {
     pingInterval: 10000, pingTimeout: 5000, connectTimeout: 10000, maxHttpBufferSize: 1e6, transports: ['websocket', 'polling'],
   })
 
-  // ── AUTH MIDDLEWARE: Verify signed token instead of raw userId ──
+  // ── AUTH MIDDLEWARE: Verify signed token (ONLY) ──
   io.use(async (socket, next) => {
-    // Try token-based auth first (SECURE)
     const token = socket.handshake.auth.token as string | undefined
-    if (token) {
-      const result = verifySocketToken(token)
-      if (result.valid && result.payload) {
-        socket.data = {
-          userId: result.payload.userId,
-          username: result.payload.username,
-          role: result.payload.role,
-          isRunner: result.payload.isRunner,
-          connectedAt: Date.now(),
-        }
-        return next()
-      }
-      // Token was provided but invalid — reject immediately
-      return next(new Error('Authentication failed: invalid or expired token. Fetch a new token from /api/auth/socket-token'))
+    if (!token) {
+      return next(new Error('Authentication required: provide a signed token from /api/auth/socket-token'))
     }
 
-    // ── FALLBACK: Legacy userId auth (for demo mode and fallback connections) ──
-    const userId = socket.handshake.auth.userId as string | undefined
-    if (!userId) {
-      return next(new Error('Authentication required: provide token (preferred) or userId (fallback)'))
-    }
-
-    // Clerk fallback users (clerk_fallback_*) — connected when token endpoint failed
-    // Also handle fallback_* from server-side route when Clerk auth() throws
-    if (userId.startsWith('clerk_fallback_') || userId.startsWith('fallback_') || userId === 'demo-user') {
-      // For stable fallback IDs (clerk_fallback_<clerkId>), try to look up user in DB
-      const stableId = userId.replace('clerk_fallback_', '').replace('fallback_', '')
-      let username = userId === 'demo-user' ? 'demo-user' : `user_${stableId.slice(-6)}`
-      let isRunner = false
-      let role = 'user'
-      let actualUserId = userId
-
-      // If we have a DB, try to resolve the stable ID to a real user
-      if (isDatabaseAvailable() && userId !== 'demo-user' && !userId.endsWith(`${Date.now()}`)) {
-        try {
-          const { db } = await import('./db')
-          // Try by clerkId first
-          const user = await db.user.findUnique({
-            where: { clerkId: stableId },
-            select: { id: true, username: true, isRunner: true, role: true },
-          })
-          if (user) {
-            actualUserId = user.id
-            username = user.username
-            isRunner = user.isRunner
-            role = user.role
-          } else {
-            // Try by user id
-            const userById = await db.user.findUnique({
-              where: { id: stableId },
-              select: { id: true, username: true, isRunner: true, role: true },
-            })
-            if (userById) {
-              actualUserId = userById.id
-              username = userById.username
-              isRunner = userById.isRunner
-              role = userById.role
-            }
-          }
-        } catch {}
+    const result = verifySocketToken(token)
+    if (result.valid && result.payload) {
+      socket.data = {
+        userId: result.payload.userId,
+        username: result.payload.username,
+        role: result.payload.role,
+        isRunner: result.payload.isRunner,
+        connectedAt: Date.now(),
       }
-
-      socket.data = { userId: actualUserId, username, role, isRunner, connectedAt: Date.now() }
-      console.log(`[socket] FALLBACK auth: ${username} (${actualUserId}) [runner=${isRunner}]`)
       return next()
     }
 
-    // Try to verify user exists in DB
-    if (!isDatabaseAvailable()) {
-      // No DB — allow with limited privileges
-      socket.data = { userId, username: userId, role: 'user', isRunner: false, connectedAt: Date.now() }
-      console.warn(`[socket] LEGACY auth (no DB): ${userId}`)
-      return next()
-    }
-
-    try {
-      const user = await db.user.findUnique({
-        where: { id: userId },
-        select: { username: true, role: true, isRunner: true },
-      })
-      if (!user) {
-        // User not found in DB — allow with limited privileges (they may not be synced yet)
-        socket.data = { userId, username: `user_${userId.slice(-6)}`, role: 'user', isRunner: false, connectedAt: Date.now() }
-        console.warn(`[socket] LEGACY auth (not in DB): ${userId}`)
-        return next()
-      }
-      socket.data = { userId, username: user.username, role: user.role, isRunner: user.isRunner, connectedAt: Date.now() }
-      console.warn(`[socket] LEGACY auth (userId): ${user.username} (${userId}) — switch to token auth!`)
-      next()
-    } catch (err) {
-      // DB query failed — don't block the connection
-      console.error('[socket] DB lookup failed for legacy auth:', err)
-      socket.data = { userId, username: `user_${userId.slice(-6)}`, role: 'user', isRunner: false, connectedAt: Date.now() }
-      next()
-    }
+    return next(new Error('Authentication failed: invalid or expired token. Fetch a new token from /api/auth/socket-token'))
   })
 
   io.on('connection', (socket) => {
@@ -326,7 +248,7 @@ export function initSocketIO(httpServer: HTTPServer): TypedServer {
         io!.to(`runner:${offer.runnerId}`).emit('delivery:offer-accepted', { orderId: data.orderId, customerUsername: socket.data.username, customerAvatar: null, customerPhone: null, pickupLat: order?.pickupLat ?? 0, pickupLng: order?.pickupLng ?? 0, pickupAddress: order?.pickupAddress ?? '', pickupCode: order?.pickupCode ?? '' })
         io!.to(`delivery:${data.orderId}`).emit('delivery:status', { orderId: data.orderId, status: 'runner_assigned', timestamp: now.toISOString(), metadata: { runnerId: offer.runnerId } })
         // Push notifications
-        notifyRunnerAssigned(userId, socket.data.username, data.orderId).catch(() => {})
+        notifyRunnerAssigned(offer.runnerId, socket.data.username, data.orderId).catch(() => {})
         notifyOfferAccepted(offer.runnerId, data.orderId).catch(() => {})
       } catch (err) { socket.emit('error', { message: 'Failed to accept offer', code: 'ACCEPT_ERROR' }) }
     })
@@ -345,14 +267,16 @@ export function initSocketIO(httpServer: HTTPServer): TypedServer {
         const rating = data.rating ? Math.min(5, Math.max(1, Math.round(data.rating))) : null
         const review = data.review ? String(data.review).trim().slice(0, 1000) : null
         const now = new Date()
-        await db.deliveryOrder.update({ where: { id: data.orderId }, data: { status: 'completed', completedAt: now, customerRating: rating, customerReview: review } })
+        // Atomic status guard: only update if still 'delivered' (prevents double-confirm)
+        const confirmResult = await db.deliveryOrder.updateMany({ where: { id: data.orderId, status: 'delivered' }, data: { status: 'completed', completedAt: now, customerRating: rating, customerReview: review } })
+        if (confirmResult.count === 0) { socket.emit('error', { message: 'Already confirmed', code: 'ALREADY_CONFIRMED' }); return }
         await db.orderStatusLog.create({ data: { orderId: data.orderId, fromStatus: 'delivered', toStatus: 'completed', metadata: JSON.stringify({ rating }) } })
         if (order.assignedRunnerId) {
           const runner = await db.user.findUnique({ where: { id: order.assignedRunnerId }, select: { tasksCompleted: true, runnerRating: true, totalReviews: true } })
           if (runner && rating) { const n = runner.totalReviews + 1; await db.user.update({ where: { id: order.assignedRunnerId }, data: { tasksCompleted: runner.tasksCompleted + 1, runnerRating: Math.round(((runner.runnerRating * runner.totalReviews + rating) / n) * 10) / 10, totalReviews: n } }) }
           await setRunnerStatus(order.assignedRunnerId, 'available')
         }
-        // Release escrow payment to runner
+        // Release escrow payment to runner (releaseEscrow has its own atomic guard)
         if (order.paymentStatus === 'escrow') {
           const { releaseEscrow } = await import('./escrow')
           releaseEscrow(data.orderId).catch(err => console.error('[socket] Escrow release failed:', err))
@@ -370,10 +294,12 @@ export function initSocketIO(httpServer: HTTPServer): TypedServer {
         if (order.status === 'completed' || order.status === 'cancelled') { socket.emit('error', { message: 'Already done', code: 'INVALID_STATUS' }); return }
         const reason = data.reason ? String(data.reason).trim().slice(0, 500) : null
         const now = new Date()
-        await db.deliveryOrder.update({ where: { id: data.orderId }, data: { status: 'cancelled', cancelledAt: now, cancelReason: reason, cancelledBy: userId } })
+        // Atomic status guard: only update if not already completed/cancelled (prevents double-cancel)
+        const cancelResult = await db.deliveryOrder.updateMany({ where: { id: data.orderId, status: { notIn: ['completed', 'cancelled'] } }, data: { status: 'cancelled', cancelledAt: now, cancelReason: reason, cancelledBy: userId } })
+        if (cancelResult.count === 0) { socket.emit('error', { message: 'Already completed or cancelled', code: 'ALREADY_DONE' }); return }
         await db.orderStatusLog.create({ data: { orderId: data.orderId, fromStatus: order.status as DeliveryOrderStatus, toStatus: 'cancelled', metadata: JSON.stringify({ reason, cancelledBy: userId }) } })
         if (order.assignedRunnerId) await setRunnerStatus(order.assignedRunnerId, 'available')
-        // Refund escrow if payment was held
+        // Refund escrow if payment was held (refundEscrow has its own atomic guard)
         if (order.paymentStatus === 'escrow') {
           const { refundEscrow } = await import('./escrow')
           refundEscrow(data.orderId, reason || 'Cancelled by user').catch(err => console.error('[socket] Escrow refund failed:', err))
@@ -388,7 +314,13 @@ export function initSocketIO(httpServer: HTTPServer): TypedServer {
     socket.on('delivery:watch', async (data) => { socket.join(`delivery:${data.orderId}`); await addDeliveryWatcher(data.orderId, socket.id) })
     socket.on('delivery:unwatch', async (data) => { socket.leave(`delivery:${data.orderId}`); await removeDeliveryWatcher(data.orderId, socket.id) })
 
-    socket.on('disconnect', async () => { if (isRunner) await removeRunnerLocation(userId) })
+    socket.on('disconnect', async () => {
+      if (isRunner) await removeRunnerLocation(userId)
+      // Clean up rate limit entries for this socket
+      for (const key of eventRateLimits.keys()) {
+        if (key.startsWith(`${socket.id}:`)) eventRateLimits.delete(key)
+      }
+    })
   })
 
   logger.log('[socket] Socket.io server initialized (token-based auth enabled)')

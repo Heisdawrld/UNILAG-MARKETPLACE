@@ -1,8 +1,13 @@
 import { auth } from '@clerk/nextjs/server';
 import { db, isDatabaseAvailable } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
+import { rateLimits } from '@/lib/rate-limit';
 
 export async function POST(request: NextRequest) {
+  // Rate limit
+  const rl = await rateLimits.write(request)
+  if (!rl.success) return rl.response!
+
   if (!isDatabaseAvailable()) {
     return NextResponse.json(
       { error: 'Database not configured. Please set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN environment variables.' },
@@ -59,6 +64,19 @@ export async function POST(request: NextRequest) {
       const existingBoost = await db.boost.findFirst({ where: { flutterwaveTxRef } });
       if (existingBoost) {
         return NextResponse.json(existingBoost);
+      }
+    }
+
+    // If a txRef is provided without paymentReference, verify the payment exists and is successful
+    if (flutterwaveTxRef && !paymentReference) {
+      const existingPayment = await db.payment.findFirst({
+        where: { flutterwaveTxRef, status: 'successful' },
+      });
+      if (!existingPayment) {
+        return NextResponse.json(
+          { error: 'Payment verification required. No successful payment found for this reference.' },
+          { status: 400 }
+        );
       }
     }
 

@@ -1,6 +1,7 @@
 import { db, isDatabaseAvailable } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
+import { rateLimits } from '@/lib/rate-limit';
 
 export async function GET(request: NextRequest) {
   if (!isDatabaseAvailable()) {
@@ -29,47 +30,64 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden — not your chats' }, { status: 403 });
     }
 
+    // Pagination
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
+    const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '20')), 50);
+    const skip = (page - 1) * limit;
+
     // Get chats where user is buyer or seller — only load last message, not all messages
-    const chats = await db.chat.findMany({
-      where: {
-        OR: [
-          { buyerId: userId },
-          { sellerId: userId },
-        ],
-      },
-      include: {
-        listing: {
-          select: {
-            id: true,
-            title: true,
-            price: true,
-            images: true,
-            status: true,
-            store: {
-              select: {
-                id: true,
-                name: true,
-                logo: true,
-                slug: true,
-                isVerified: true,
+    const [chats, total] = await Promise.all([
+      db.chat.findMany({
+        where: {
+          OR: [
+            { buyerId: userId },
+            { sellerId: userId },
+          ],
+        },
+        include: {
+          listing: {
+            select: {
+              id: true,
+              title: true,
+              price: true,
+              images: true,
+              status: true,
+              store: {
+                select: {
+                  id: true,
+                  name: true,
+                  logo: true,
+                  slug: true,
+                  isVerified: true,
+                },
               },
             },
           },
+          buyer: {
+            select: { id: true, username: true, avatar: true },
+          },
+          seller: {
+            select: { id: true, username: true, avatar: true },
+          },
+          messages: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: { id: true, message: true, senderId: true, seen: true, createdAt: true },
+          },
         },
-        buyer: {
-          select: { id: true, username: true, avatar: true },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      db.chat.count({
+        where: {
+          OR: [
+            { buyerId: userId },
+            { sellerId: userId },
+          ],
         },
-        seller: {
-          select: { id: true, username: true, avatar: true },
-        },
-        messages: {
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-          select: { id: true, message: true, senderId: true, seen: true, createdAt: true },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+      }),
+    ]);
 
     // Batch count unread messages per chat in a single query
     const chatIds = chats.map(c => c.id);
@@ -98,7 +116,13 @@ export async function GET(request: NextRequest) {
       messages: undefined,
     }));
 
-    return NextResponse.json(result, {
+    return NextResponse.json({
+      chats: result,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    }, {
       headers: { 'Cache-Control': 'private, max-age=5' },
     });
   } catch (error) {
@@ -108,6 +132,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Rate limit
+  const rl = await rateLimits.write(request)
+  if (!rl.success) return rl.response!
+
   if (!isDatabaseAvailable()) {
     return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
   }

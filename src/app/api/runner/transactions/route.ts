@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   const rl = await rateLimits.standard(req)
   if (!rl.success) return rl.response!
 
-  if (!isDatabaseAvailable()) return NextResponse.json({ transactions: [] })
+  if (!isDatabaseAvailable()) return NextResponse.json({ error: 'Service unavailable — database not configured' }, { status: 503 })
 
   const { searchParams } = new URL(req.url)
   const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100)

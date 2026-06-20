@@ -18,11 +18,24 @@ export type RunnerOfferStatus = 'open' | 'accepted' | 'rejected' | 'expired' | '
 export const UNILAG_SERVICE_AREA = {
   id: 'unilag',
   name: 'UNILAG Campus',
-  // Initial safe campus bounding box. Can be refined to polygon later.
-  minLat: 6.496,
-  maxLat: 6.535,
-  minLng: 3.372,
-  maxLng: 3.417,
+  // Bounding box for UNILAG Akoka campus.
+  //
+  // TRADE-OFF: A simple rectangle is used instead of a precise polygon for
+  // computational simplicity. This means some off-campus areas near the
+  // boundary may be accepted (false positives) and some on-campus corners
+  // near the edges may be rejected (false negatives).
+  //
+  // Mitigation: The rectangle is intentionally tight to minimise false
+  // positives. A production deployment should migrate to a polygon boundary
+  // (e.g. via Turf.js `booleanPointInPolygon`) for campus-edge accuracy.
+  //
+  // Coordinates are based on the UNILAG main campus perimeter:
+  //   NW ≈ (6.527, 3.384)   NE ≈ (6.527, 3.400)
+  //   SW ≈ (6.502, 3.384)   SE ≈ (6.502, 3.400)
+  minLat: 6.502,
+  maxLat: 6.527,
+  minLng: 3.384,
+  maxLng: 3.400,
   centerLat: 6.5154,
   centerLng: 3.3915,
 } as const;
@@ -79,15 +92,23 @@ export function validateCampusRoute(
   return { ok: true as const };
 }
 
+// Paths on campus are ~40% longer than straight-line distance due to
+// buildings, walkways, and indirect routes.
+const ROUTE_FACTOR = 1.4;
+
+// Average runner speed on campus (km/h). Walking ≈5, biking ≈15, mixed ≈12.
+const DEFAULT_CAMPUS_SPEED_KMH = 12;
+
 export function estimateCampusTrip(
   pickup: RunnerCoordinate,
   dropoff: RunnerCoordinate,
+  speedKmh: number = DEFAULT_CAMPUS_SPEED_KMH,
 ) {
   const latDiffKm = (dropoff.lat - pickup.lat) * 111;
   const lngDiffKm = (dropoff.lng - pickup.lng) * 111 * Math.cos(((pickup.lat + dropoff.lat) / 2) * Math.PI / 180);
-  const distanceKm = Math.sqrt((latDiffKm ** 2) + (lngDiffKm ** 2));
-  const estimatedDistanceMeters = Math.round(distanceKm * 1000);
-  const estimatedDurationMinutes = Math.max(3, Math.round((distanceKm / 12) * 60));
+  const straightLineKm = Math.sqrt((latDiffKm ** 2) + (lngDiffKm ** 2));
+  const estimatedDistanceMeters = Math.round(straightLineKm * 1000 * ROUTE_FACTOR);
+  const estimatedDurationMinutes = Math.max(5, Math.round((estimatedDistanceMeters / 1000) / speedKmh * 60));
 
   return {
     estimatedDistanceMeters,

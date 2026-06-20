@@ -97,13 +97,29 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'sellerId is required' }, { status: 400 });
     }
 
-    const reviews = await db.review.findMany({
-      where: { sellerId },
-      include: { reviewer: { select: { username: true, avatar: true } } },
-      orderBy: { createdAt: 'desc' },
-    });
+    // Pagination
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
+    const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '20')), 50);
+    const skip = (page - 1) * limit;
 
-    return NextResponse.json(reviews);
+    const [reviews, total] = await Promise.all([
+      db.review.findMany({
+        where: { sellerId },
+        include: { reviewer: { select: { username: true, avatar: true } } },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      db.review.count({ where: { sellerId } }),
+    ]);
+
+    return NextResponse.json({
+      reviews,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    });
   } catch (error) {
     console.error('Error fetching reviews:', error);
     return NextResponse.json({ error: 'Failed to fetch reviews' }, { status: 500 });

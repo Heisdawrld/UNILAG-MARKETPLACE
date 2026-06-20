@@ -9,11 +9,16 @@
  *
  * Commission: 12% of finalPrice goes to platform
  * Runner receives: finalPrice - platformCommission (88%)
+ *
+ * Race-condition safeguards:
+ * - All wallet operations use atomic Prisma increment/decrement
+ * - releaseEscrow / refundEscrow use updateMany with status guard to prevent double-release/refund
  */
 
 import { db, isDatabaseAvailable } from './db'
 import { isPaymentsEnabled, getPaymentMode, generateTxRef, initializePayment, initiateRefund, initiateTransfer } from './flutterwave'
 import { logger } from './utils'
+import { createAuditLog } from './audit-log'
 
 const PLATFORM_COMMISSION_RATE = 0.12
 const MIN_DELIVERY_PRICE = 100
@@ -128,32 +133,37 @@ export async function confirmEscrowPayment(orderId: string, txRef: string): Prom
 }
 
 // ── Release escrow to runner (called when delivery is completed) ──
+// Uses atomic status guard to prevent double-release
 
 export async function releaseEscrow(orderId: string): Promise<boolean> {
   if (!isDatabaseAvailable()) return false
 
   try {
-    const order = await db.deliveryOrder.findUnique({
-      where: { id: orderId },
-      select: { id: true, paymentStatus: true, finalPrice: true, customerPrice: true, assignedRunnerId: true, platformCommission: true },
-    })
-
-    if (!order || order.paymentStatus !== 'escrow') return false
-    if (!order.assignedRunnerId) return false
-
-    const finalAmount = order.finalPrice || order.customerPrice
-    const { runnerPayout } = calculateCommission(finalAmount)
-
-    // Update order
-    await db.deliveryOrder.update({
-      where: { id: orderId },
+    // Use atomic status guard to prevent double-release
+    const updated = await db.deliveryOrder.updateMany({
+      where: { id: orderId, paymentStatus: 'escrow' },
       data: {
         paymentStatus: 'released',
         escrowReleasedAt: new Date(),
       },
     })
 
-    // Move from pending to available balance
+    if (updated.count === 0) {
+      logger.log(`[escrow] Release skipped for order ${orderId} (already released or not in escrow)`)
+      return false
+    }
+
+    const order = await db.deliveryOrder.findUnique({
+      where: { id: orderId },
+      select: { finalPrice: true, customerPrice: true, assignedRunnerId: true, platformCommission: true },
+    })
+
+    if (!order || !order.assignedRunnerId) return false
+
+    const finalAmount = order.finalPrice || order.customerPrice
+    const { runnerPayout } = calculateCommission(finalAmount)
+
+    // Move from pending to available balance (atomic)
     await releaseRunnerBalance(order.assignedRunnerId, runnerPayout, orderId)
 
     // Log
@@ -166,6 +176,17 @@ export async function releaseEscrow(orderId: string): Promise<boolean> {
       },
     })
 
+    // Audit log
+    await createAuditLog({
+      action: 'escrow.released',
+      actorId: order.assignedRunnerId || 'system',
+      actorRole: 'system',
+      resourceType: 'delivery',
+      resourceId: orderId,
+      description: `Escrow released for delivery ${orderId}`,
+      metadata: { amount: runnerPayout, platformFee: order.platformCommission },
+    })
+
     return true
   } catch (error) {
     console.error('[escrow] Release error:', error)
@@ -174,24 +195,15 @@ export async function releaseEscrow(orderId: string): Promise<boolean> {
 }
 
 // ── Refund escrow (called when delivery is cancelled before pickup) ──
+// Uses atomic status guard to prevent double-refund
 
 export async function refundEscrow(orderId: string, reason: string): Promise<boolean> {
   if (!isDatabaseAvailable()) return false
 
   try {
-    const order = await db.deliveryOrder.findUnique({
-      where: { id: orderId },
-      select: { id: true, paymentStatus: true, finalPrice: true, customerPrice: true, assignedRunnerId: true, paymentReference: true, paymentMethod: true },
-    })
-
-    if (!order || order.paymentStatus !== 'escrow') return false
-
-    const finalAmount = order.finalPrice || order.customerPrice
-    const { runnerPayout } = calculateCommission(finalAmount)
-
-    // Update order
-    await db.deliveryOrder.update({
-      where: { id: orderId },
+    // Use atomic status guard to prevent double-refund
+    const updated = await db.deliveryOrder.updateMany({
+      where: { id: orderId, paymentStatus: 'escrow' },
       data: {
         paymentStatus: 'refunded',
         refundReason: reason,
@@ -199,7 +211,22 @@ export async function refundEscrow(orderId: string, reason: string): Promise<boo
       },
     })
 
-    // Remove from runner's pending balance
+    if (updated.count === 0) {
+      logger.log(`[escrow] Refund skipped for order ${orderId} (already refunded or not in escrow)`)
+      return false
+    }
+
+    const order = await db.deliveryOrder.findUnique({
+      where: { id: orderId },
+      select: { finalPrice: true, customerPrice: true, assignedRunnerId: true, paymentReference: true, paymentMethod: true, flutterwaveTransactionId: true },
+    })
+
+    if (!order) return false
+
+    const finalAmount = order.finalPrice || order.customerPrice
+    const { runnerPayout } = calculateCommission(finalAmount)
+
+    // Remove from runner's pending balance (atomic)
     if (order.assignedRunnerId) {
       await debitRunnerPendingBalance(order.assignedRunnerId, runnerPayout, orderId, reason)
     }
@@ -215,12 +242,11 @@ export async function refundEscrow(orderId: string, reason: string): Promise<boo
     })
 
     // ── Attempt Flutterwave refund (non-blocking) ──
-    // The DB is already updated; if the Flutterwave call fails we log it
-    // but don't block the refund. The refund can be retried later.
     try {
-      if (order.paymentReference && order.paymentMethod === 'flutterwave') {
+      if ((order.paymentReference || order.flutterwaveTransactionId) && order.paymentMethod === 'flutterwave') {
+        // Use Flutterwave's numeric transaction ID for refunds (not tx_ref)
         const refundResult = await initiateRefund({
-          transactionId: order.paymentReference,
+          transactionId: order.flutterwaveTransactionId || order.paymentReference!,
           txRef: `REFUND_${orderId}`,
         })
 
@@ -240,6 +266,17 @@ export async function refundEscrow(orderId: string, reason: string): Promise<boo
       // Never let Flutterwave errors crash the refund flow
       console.error('[escrow] Flutterwave refund exception (DB refund still applied):', fwError)
     }
+
+    // Audit log
+    await createAuditLog({
+      action: 'escrow.refunded',
+      actorId: 'system',
+      actorRole: 'system',
+      resourceType: 'delivery',
+      resourceId: orderId,
+      description: `Escrow refunded for delivery ${orderId}: ${reason}`,
+      metadata: { reason, refundAmount: finalAmount },
+    })
 
     return true
   } catch (error) {
@@ -266,12 +303,13 @@ async function creditRunnerPendingBalance(userId: string, amount: number, orderI
   const wallet = await getOrCreateWallet(userId)
   if (!wallet) return
 
-  const newPending = wallet.pendingBalance + amount
-  const newTotalHeld = wallet.totalHeld + (amount * PLATFORM_COMMISSION_RATE / (1 - PLATFORM_COMMISSION_RATE))
-
-  await db.runnerWallet.update({
+  // Atomic increment to prevent race conditions
+  const updated = await db.runnerWallet.update({
     where: { id: wallet.id },
-    data: { pendingBalance: newPending, totalHeld: Math.round(newTotalHeld) },
+    data: {
+      pendingBalance: { increment: amount },
+      totalHeld: { increment: Math.round(amount * PLATFORM_COMMISSION_RATE / (1 - PLATFORM_COMMISSION_RATE)) },
+    },
   })
 
   await db.walletTransaction.create({
@@ -279,7 +317,7 @@ async function creditRunnerPendingBalance(userId: string, amount: number, orderI
       walletId: wallet.id,
       type: 'escrow_hold',
       amount,
-      balance: wallet.balance,
+      balance: updated.balance,
       reference: orderId,
       description: `Escrow hold for delivery ${orderId}`,
       metadata: JSON.stringify({ orderId }),
@@ -291,16 +329,13 @@ async function releaseRunnerBalance(userId: string, amount: number, orderId: str
   const wallet = await getOrCreateWallet(userId)
   if (!wallet) return
 
-  const newBalance = wallet.balance + amount
-  const newPending = Math.max(0, wallet.pendingBalance - amount)
-  const newTotalEarned = wallet.totalEarned + amount
-
-  await db.runnerWallet.update({
+  // Atomic increment/decrement to prevent race conditions
+  const updated = await db.runnerWallet.update({
     where: { id: wallet.id },
     data: {
-      balance: Math.round(newBalance),
-      pendingBalance: Math.round(newPending),
-      totalEarned: Math.round(newTotalEarned),
+      balance: { increment: amount },
+      pendingBalance: { decrement: amount },
+      totalEarned: { increment: amount },
     },
   })
 
@@ -309,7 +344,7 @@ async function releaseRunnerBalance(userId: string, amount: number, orderId: str
       walletId: wallet.id,
       type: 'escrow_release',
       amount,
-      balance: Math.round(newBalance),
+      balance: updated.balance,
       reference: orderId,
       description: `Payment received for delivery ${orderId}`,
       metadata: JSON.stringify({ orderId, runnerPayout: amount }),
@@ -321,11 +356,15 @@ async function debitRunnerPendingBalance(userId: string, amount: number, orderId
   const wallet = await getOrCreateWallet(userId)
   if (!wallet) return
 
-  const newPending = Math.max(0, wallet.pendingBalance - amount)
+  // Atomic decrement with floor at 0
+  const currentPending = wallet.pendingBalance
+  const decrementAmount = Math.min(amount, currentPending)
 
-  await db.runnerWallet.update({
+  const updated = await db.runnerWallet.update({
     where: { id: wallet.id },
-    data: { pendingBalance: Math.round(newPending) },
+    data: {
+      pendingBalance: { decrement: decrementAmount },
+    },
   })
 
   await db.walletTransaction.create({
@@ -333,7 +372,7 @@ async function debitRunnerPendingBalance(userId: string, amount: number, orderId
       walletId: wallet.id,
       type: 'refund',
       amount: -amount,
-      balance: wallet.balance,
+      balance: updated.balance,
       reference: orderId,
       description: `Refund: ${reason}`,
       metadata: JSON.stringify({ orderId, reason }),
@@ -402,12 +441,12 @@ export async function requestPayout(
     },
   })
 
-  // Deduct from wallet balance
-  await db.runnerWallet.update({
+  // Deduct from wallet balance atomically
+  const updated = await db.runnerWallet.update({
     where: { id: wallet.id },
     data: {
-      balance: Math.round(wallet.balance - amount),
-      totalWithdrawn: Math.round(wallet.totalWithdrawn + amount),
+      balance: { decrement: amount },
+      totalWithdrawn: { increment: amount },
     },
   })
 
@@ -417,7 +456,7 @@ export async function requestPayout(
       walletId: wallet.id,
       type: 'payout',
       amount: -amount,
-      balance: Math.round(wallet.balance - amount),
+      balance: updated.balance,
       reference: payout.id,
       description: `Payout request to ${bankName} ****${accountNumber.slice(-4)}`,
       metadata: JSON.stringify({ payoutId: payout.id, bankName, accountNumber: accountNumber.slice(-4), netAmount, transferRef }),
@@ -478,6 +517,17 @@ export async function requestPayout(
     // Never let Flutterwave errors crash the payout flow
     console.error('[escrow] Flutterwave transfer exception (payout stays pending):', fwError)
   }
+
+  // Audit log
+  await createAuditLog({
+    action: 'payout.requested',
+    actorId: runnerId,
+    actorRole: 'runner',
+    resourceType: 'payout',
+    resourceId: payout.id,
+    description: `Payout request of ₦${amount.toLocaleString()} to ${bankName} ****${accountNumber.slice(-4)}`,
+    metadata: { amount, netAmount, bankName, accountNumber: accountNumber.slice(-4), payoutId: payout.id },
+  })
 
   return { success: true, payoutId: payout.id }
 }

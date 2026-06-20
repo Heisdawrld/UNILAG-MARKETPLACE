@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'You can only view your own deliveries' }, { status: 403 })
     }
 
-    if (!isDatabaseAvailable()) return NextResponse.json({ items: [{ id: 'hist-1', title: 'Food Delivery', category: 'food', finalPrice: 1500, status: 'completed', completedAt: new Date().toISOString(), customerRating: 5, customerReview: null, estimatedDistanceMeters: 800 }], nextCursor: null, total: 1 })
+    if (!isDatabaseAvailable()) return NextResponse.json({ error: 'Service unavailable — database not configured' }, { status: 503 })
     const where: any = { assignedRunnerId: runnerId, status: { in: status ? [status] : ['completed', 'cancelled'] } }
     if (cursor) where.id = { lt: cursor }
     const deliveries = await db.deliveryOrder.findMany({ where, select: { id: true, title: true, category: true, finalPrice: true, status: true, completedAt: true, cancelledAt: true, customerRating: true, customerReview: true, estimatedDistanceMeters: true }, orderBy: { createdAt: 'desc' }, take: limit + 1 })

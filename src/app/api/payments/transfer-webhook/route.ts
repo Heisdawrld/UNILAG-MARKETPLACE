@@ -51,6 +51,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ received: true })
     }
 
+    // Race condition guard: skip if already completed
+    if (payout.status === 'completed') {
+      return NextResponse.json({ received: true })
+    }
+
+    // Only process if status is 'pending' or 'processing'
+    if (payout.status !== 'pending' && payout.status !== 'processing') {
+      return NextResponse.json({ received: true })
+    }
+
     // Handle completed transfer
     if (event === 'transfer.completed' || transferData.status === 'SUCCESSFUL') {
       await db.payoutRequest.update({

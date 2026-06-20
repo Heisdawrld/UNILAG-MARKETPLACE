@@ -8,6 +8,16 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ── Enum Definitions (kept as String due to Turso/libSQL driver adapter) ──
+// Validation should be enforced at the application/Zod layer.
+// UserRole: user, runner, admin
+// ListingStatus: active, sold, paused, removed
+// ListingCondition: brand_new, like_new, fairly_used, old
+// DeliveryOrderStatus: created, searching, runner_assigned, runner_en_route, picked_up, in_transit, delivered, completed, cancelled
+// PaymentStatus: unpaid, escrow, released, refunded
+// TaskStatus: open, matched, in_progress, completed, cancelled
+// ReportReason: scam, fake_listing, harassment, spam, illegal_item
+
 model User {
   id                 String   @id @default(cuid())
   username           String   @unique
@@ -24,7 +34,7 @@ model User {
   trustScore         Int      @default(0)
   ratingAverage      Float    @default(0)
   totalReviews       Int      @default(0)
-  role               String   @default("user") // user, seller, vendor, admin
+  role               String   @default("user") // UserRole: user, runner, admin
   isRunner           Boolean  @default(false)
   runnerRating       Float    @default(0)
   tasksCompleted     Int      @default(0)
@@ -70,10 +80,10 @@ model Listing {
   description String
   price       Float
   category    String
-  condition   String   // brand_new, like_new, fairly_used, old
+  condition   String?  // ListingCondition: brand_new, like_new, fairly_used, old
   negotiable  Boolean  @default(true)
   location    String?
-  status      String   @default("active") // active, sold, paused, removed
+  status      String   @default("active") // ListingStatus: active, sold, paused, removed
   views       Int      @default(0)
   likesCount  Int      @default(0)
   boosted     Boolean  @default(false)
@@ -87,6 +97,7 @@ model Listing {
   chatListings  Chat[]
   savedBy       SavedListing[]
   listingReports Report[]
+  boosts        Boost[]
 
   @@index([category])
   @@index([status])
@@ -122,6 +133,7 @@ model Message {
   sender User @relation(fields: [senderId], references: [id])
 
   @@index([chatId])
+  @@index([senderId])
 }
 
 model SavedListing {
@@ -141,25 +153,29 @@ model Review {
   reviewerId String
   sellerId   String
   rating     Int
-  comment    String
+  comment    String?
   createdAt  DateTime @default(now())
 
   reviewer User @relation("ReviewAuthor", fields: [reviewerId], references: [id])
   seller   User @relation("ReviewTarget", fields: [sellerId], references: [id])
 
   @@index([sellerId])
+  @@index([reviewerId])
+  @@index([reviewerId, sellerId])
 }
 
 model Report {
   id         String   @id @default(cuid())
   reporterId String
   listingId  String?
-  reason     String   // scam, fake_listing, harassment, spam, illegal_item
+  reason     String   // ReportReason: scam, fake_listing, harassment, spam, illegal_item
   status     String   @default("pending") // pending, reviewed, resolved, dismissed
   createdAt  DateTime @default(now())
 
   reporter User    @relation("ReportAuthor", fields: [reporterId], references: [id])
   listing  Listing? @relation(fields: [listingId], references: [id])
+
+  @@index([reporterId])
 }
 
 model Notification {
@@ -244,6 +260,8 @@ model Boost {
   expiresAt        DateTime
   createdAt        DateTime @default(now())
 
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
   @@index([listingId])
 }
 
@@ -263,6 +281,7 @@ model Payment {
 
   @@index([userId])
   @@index([status])
+  @@index([listingId])
 }
 
 model Task {
@@ -284,7 +303,7 @@ model Task {
   serviceArea      String?  @default("unilag")
   negotiationStatus String @default("open") // open, negotiating, matched, closed
   urgency          String   @default("medium") // low, medium, high, urgent
-  status           String   @default("open") // open, assigned, in_progress, completed, cancelled
+  status           String   @default("open") // TaskStatus: open, matched, in_progress, completed, cancelled
   deadline         DateTime?
   images           String   @default("[]")
   estimatedDistanceMeters Int?
@@ -379,7 +398,7 @@ model DeliveryOrder {
   id               String   @id @default(cuid())
   customerId       String
   assignedRunnerId String?
-  status           String   @default("created")
+  status           String   @default("created") // DeliveryOrderStatus: created, searching, runner_assigned, runner_en_route, picked_up, in_transit, delivered, completed, cancelled
   pickupLat        Float
   pickupLng        Float
   pickupAddress    String
@@ -407,9 +426,10 @@ model DeliveryOrder {
   customerReview    String?
   runnerReview      String?
   // ── Escrow Payment Fields ──
-  paymentStatus     String   @default("unpaid") // unpaid, escrow, released, refunded
+  paymentStatus     String   @default("unpaid") // PaymentStatus: unpaid, escrow, released, refunded
   paymentMethod     String?  // flutterwave, wallet
   paymentReference  String?  // Flutterwave tx_ref or internal ref
+  flutterwaveTransactionId  String?    // Flutterwave's numeric transaction ID for refunds
   customerPaidAt    DateTime?
   escrowReleasedAt  DateTime?
   refundReason      String?
@@ -538,5 +558,29 @@ model PayoutRequest {
 
   @@index([runnerId])
   @@index([status])
+  @@index([createdAt])
+}
+
+// ════════════════════════════════════════════════════════════════
+// ── Enterprise Audit Logging ──
+// ════════════════════════════════════════════════════════════════
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  action       String   // The action performed (e.g., 'payment.initiated')
+  actorId      String   // User who performed the action
+  actorRole    String   // Role at time of action
+  resourceType String   // Type of resource (e.g., 'delivery', 'payment', 'user')
+  resourceId   String   // ID of the affected resource
+  description  String   // Human-readable description
+  metadata     String?  // JSON with additional context
+  ipAddress    String?  // Client IP address
+  userAgent    String?  // Client user agent
+  createdAt    DateTime @default(now())
+
+  // Indexes for common queries
+  @@index([actorId])
+  @@index([resourceType, resourceId])
+  @@index([action])
   @@index([createdAt])
 }

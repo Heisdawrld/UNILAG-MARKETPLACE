@@ -1,5 +1,6 @@
 import { auth } from '@clerk/nextjs/server';
 import { db, isDatabaseAvailable } from '@/lib/db';
+import { validateBody, AuthProfileUpdateSchema } from '@/lib/validation';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function PATCH(request: NextRequest) {
@@ -21,11 +22,12 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { userId, username, avatar, faculty, department, level, bio, phone, whatsapp, hostel } = body;
 
-    if (userId && userId !== authUser.id) {
-      return NextResponse.json({ error: 'Forbidden — cannot edit another user\'s profile' }, { status: 403 });
-    }
+    // Validate request body with Zod schema
+    const { data, error: validationError } = validateBody(AuthProfileUpdateSchema, body);
+    if (validationError) return validationError;
+
+    const { username, avatar, faculty, department, level, bio, phone, whatsapp, hostel } = data;
 
     if (username && username !== authUser.username) {
       const usernameTaken = await db.user.findUnique({ where: { username } });

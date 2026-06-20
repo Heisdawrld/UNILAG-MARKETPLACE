@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/auth-guard'
 import { rateLimits } from '@/lib/rate-limit'
 import { validateBody, DeliveryUpdateSchema } from '@/lib/validation'
 import { sanitizeText } from '@/lib/sanitize'
+import { createAuditLog } from '@/lib/audit-log'
 
 // GET /api/deliveries/[id] — Get a single delivery order
 export async function GET(
@@ -126,6 +127,16 @@ export async function PATCH(
       await db.orderStatusLog.create({
         data: { orderId: id, fromStatus: 'delivered', toStatus: 'completed', metadata: JSON.stringify({ rating }) },
       })
+      // Audit log
+      await createAuditLog({
+        action: 'delivery.confirmed',
+        actorId: userId!,
+        actorRole: 'customer',
+        resourceType: 'delivery',
+        resourceId: id,
+        description: `Customer confirmed delivery ${id} with rating ${rating || 'N/A'}`,
+        metadata: { rating, review: sanitizedReview },
+      })
       // Update runner stats
       if (order.assignedRunnerId) {
         const runner = await db.user.findUnique({
@@ -163,6 +174,16 @@ export async function PATCH(
       })
       await db.orderStatusLog.create({
         data: { orderId: id, fromStatus: order.status, toStatus: 'cancelled', metadata: JSON.stringify({ reason: sanitizedReason, cancelledBy }) },
+      })
+      // Audit log
+      await createAuditLog({
+        action: 'delivery.cancelled',
+        actorId: userId!,
+        actorRole: isCustomer ? 'customer' : 'runner',
+        resourceType: 'delivery',
+        resourceId: id,
+        description: `Delivery ${id} cancelled by ${isCustomer ? 'customer' : 'runner'}: ${sanitizedReason || 'No reason provided'}`,
+        metadata: { reason: sanitizedReason, cancelledBy, previousStatus: order.status },
       })
       return NextResponse.json({ success: true, status: 'cancelled' })
     }

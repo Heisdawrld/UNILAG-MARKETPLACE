@@ -4,6 +4,8 @@ import { requireAuth } from '@/lib/auth-guard'
 import { rateLimits } from '@/lib/rate-limit'
 import { validateBody, DeliveryCreateSchema } from '@/lib/validation'
 import { sanitizeText, sanitizeDescription } from '@/lib/sanitize'
+import { estimateCampusTrip } from '@/lib/runner-dispatch'
+import { createAuditLog } from '@/lib/audit-log'
 
 // GET /api/deliveries — List deliveries for a customer
 export async function GET(req: NextRequest) {
@@ -98,17 +100,11 @@ export async function POST(req: NextRequest) {
     const sanitizedPickupAddr = sanitizeText(data.pickupAddress, 300)
     const sanitizedDropoffAddr = sanitizeText(data.dropoffAddress, 300)
 
-    const lat = data.pickupLat
-    const lng = data.pickupLng
-    const dLat = data.dropoffLat
-    const dLng = data.dropoffLng
-
-    // Calculate trip estimates
-    const latDiffKm = (dLat - lat) * 111
-    const lngDiffKm = (dLng - lng) * 111 * Math.cos(((lat + dLat) / 2) * Math.PI / 180)
-    const distanceKm = Math.sqrt(latDiffKm ** 2 + lngDiffKm ** 2)
-    const estimatedDistanceMeters = Math.round(distanceKm * 1000)
-    const estimatedDurationMinutes = Math.max(3, Math.round((distanceKm / 12) * 60))
+    // Calculate trip estimates (uses 1.4× route factor for campus paths)
+    const { estimatedDistanceMeters, estimatedDurationMinutes } = estimateCampusTrip(
+      { lat: data.pickupLat, lng: data.pickupLng },
+      { lat: data.dropoffLat, lng: data.dropoffLng },
+    )
 
     // Generate pickup code
     const pickupCode = String(Math.floor(1000 + Math.random() * 9000))
@@ -117,11 +113,11 @@ export async function POST(req: NextRequest) {
       data: {
         customerId,
         status: 'searching',
-        pickupLat: lat,
-        pickupLng: lng,
+        pickupLat: data.pickupLat,
+        pickupLng: data.pickupLng,
         pickupAddress: sanitizedPickupAddr,
-        dropoffLat: dLat,
-        dropoffLng: dLng,
+        dropoffLat: data.dropoffLat,
+        dropoffLng: data.dropoffLng,
         dropoffAddress: sanitizedDropoffAddr,
         serviceArea: 'unilag',
         estimatedDistanceMeters,
@@ -149,6 +145,17 @@ export async function POST(req: NextRequest) {
         toStatus: 'searching',
         metadata: JSON.stringify({ customerId }),
       },
+    })
+
+    // Audit log
+    await createAuditLog({
+      action: 'delivery.created',
+      actorId: customerId,
+      actorRole: 'customer',
+      resourceType: 'delivery',
+      resourceId: order.id,
+      description: `Delivery created: ${sanitizedTitle} (₦${data.customerPrice.toLocaleString()})`,
+      metadata: { category: data.category, urgency: data.urgency, customerPrice: data.customerPrice, estimatedDistanceMeters, estimatedDurationMinutes },
     })
 
     return NextResponse.json({ order }, { status: 201 })

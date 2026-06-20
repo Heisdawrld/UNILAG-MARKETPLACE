@@ -608,9 +608,16 @@ export function verifyWebhookSignature(
   payload: string,
   signature: string
 ): boolean {
-  // In sandbox mode, accept all webhooks for testing
+  // In sandbox mode without hash configured, require at least a signature presence check
   if (isSandboxMode() && !process.env.FLUTTERWAVE_WEBHOOK_HASH) {
-    console.warn('[flutterwave] Sandbox mode: accepting webhook without signature verification')
+    console.error('[flutterwave] CRITICAL: FLUTTERWAVE_WEBHOOK_HASH not set in sandbox mode. Webhook verification is DISABLED. Set the webhook hash immediately.')
+    // In sandbox without hash, require at least a basic signature check
+    if (!signature) {
+      console.error('[flutterwave] No webhook signature provided — rejecting')
+      return false
+    }
+    // Allow in sandbox if any signature is present (better than nothing)
+    console.warn('[flutterwave] Accepting sandbox webhook with unverified signature — SET FLUTTERWAVE_WEBHOOK_HASH!')
     return true
   }
 

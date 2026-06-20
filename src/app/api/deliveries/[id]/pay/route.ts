@@ -4,6 +4,7 @@ import { rateLimits } from '@/lib/rate-limit'
 import { initiateDeliveryPayment } from '@/lib/escrow'
 import { isPaymentsEnabled } from '@/lib/flutterwave'
 import { db } from '@/lib/db'
+import { createAuditLog } from '@/lib/audit-log'
 
 export async function POST(
   req: NextRequest,
@@ -36,6 +37,17 @@ export async function POST(
     user!.username,
     amount
   )
+
+  // Audit log for payment initiation
+  await createAuditLog({
+    action: 'payment.initiated',
+    actorId: userId!,
+    actorRole: user!.role,
+    resourceType: 'delivery',
+    resourceId: id,
+    description: `Payment initiated for delivery ${id}: ₦${amount.toLocaleString()}`,
+    metadata: { amount, txRef: result.txRef, isLocked: result.isLocked },
+  })
 
   return NextResponse.json({
     paymentLink: result.paymentLink || null,

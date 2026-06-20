@@ -1,8 +1,21 @@
 /**
  * redis-location.ts — Runner Location Helpers
+ *
+ * NOTE on Redis GEO cleanup:
+ * When runner location keys expire (TTL-based), the associated GEO entries
+ * in the `runners:geo` sorted set are NOT automatically removed by Redis.
+ * Over time this causes stale entries to accumulate, making georadius queries
+ * return runners whose location data has already expired.
+ *
+ * TODO: Implement a periodic cleanup job (e.g. a cron every 60s) that:
+ *   1. ZSCANs the `runners:geo` sorted set
+ *   2. For each member, checks if `runner:<id>:location` still exists
+ *   3. If missing, removes the member from `runners:geo` via ZREM
+ * This will keep the GEO index in sync with the TTL-expired location data.
  */
 
 import { redis, isRedisAvailable } from './redis'
+import { db, isDatabaseAvailable } from './db'
 import { UNILAG_SERVICE_AREA } from './runner-dispatch'
 
 export interface RunnerLocation {
@@ -22,6 +35,26 @@ const STATUS_TTL_SECONDS = 60
 const DEFAULT_SEARCH_RADIUS_METERS = 1000
 const MAX_SEARCH_RADIUS_METERS = 3000
 const SEARCH_RADIUS_STEP_METERS = 500
+
+/**
+ * Safely extract a value from a pipeline response item.
+ *
+ * Upstash Redis pipeline.exec() returns direct values, while ioredis returns
+ * [error, result] tuples. This helper handles both formats defensively.
+ */
+function extractPipelineResult<T>(raw: unknown): T | null {
+  if (raw == null) return null
+
+  // ioredis-style tuple: [error, result]
+  if (Array.isArray(raw) && raw.length === 2) {
+    const [err, data] = raw as [unknown, unknown]
+    if (err != null) return null
+    return (data as T) ?? null
+  }
+
+  // Direct value (Upstash style)
+  return raw as T
+}
 
 export async function setRunnerLocation(runnerId: string, lat: number, lng: number, heading?: number | null, speed?: number | null): Promise<void> {
   if (!isRedisAvailable()) return
@@ -59,12 +92,50 @@ export async function getRunnerLocations(runnerIds: string[]): Promise<Map<strin
   if (!isRedisAvailable() || runnerIds.length === 0) return result
   const pipeline = redis.pipeline()
   for (const id of runnerIds) pipeline.get(`runner:${id}:location`)
-  const responses = await pipeline.exec() as (string | null)[]
+  const responses = await pipeline.exec()
+  if (!responses) return result
+
   for (let i = 0; i < runnerIds.length; i++) {
-    const data = responses[i]
-    if (data) { try { result.set(runnerIds[i], JSON.parse(data) as RunnerLocation) } catch {} }
+    const data = extractPipelineResult<string>(responses[i])
+    if (data) {
+      try { result.set(runnerIds[i], JSON.parse(data) as RunnerLocation) } catch { /* skip malformed */ }
+    }
   }
   return result
+}
+
+/**
+ * Batch-query the database for runner stats (rating, tasksCompleted, transportMode).
+ * Returns a Map keyed by runner ID.
+ */
+async function batchQueryRunnerStats(runnerIds: string[]): Promise<Map<string, { rating: number; tasksCompleted: number; transportMode: string }>> {
+  const statsMap = new Map<string, { rating: number; tasksCompleted: number; transportMode: string }>()
+  if (!isDatabaseAvailable() || runnerIds.length === 0) return statsMap
+
+  try {
+    const runners = await db.user.findMany({
+      where: { id: { in: runnerIds } },
+      select: {
+        id: true,
+        runnerRating: true,
+        tasksCompleted: true,
+        runnerProfile: { select: { transportMode: true } },
+      },
+    })
+
+    for (const runner of runners) {
+      statsMap.set(runner.id, {
+        rating: runner.runnerRating || 0,
+        tasksCompleted: runner.tasksCompleted || 0,
+        transportMode: runner.runnerProfile?.transportMode || 'walking',
+      })
+    }
+  } catch (error) {
+    // If DB query fails, we still return the map (empty stats will be used as fallback)
+    console.error('[redis-location] Failed to batch-query runner stats:', error)
+  }
+
+  return statsMap
 }
 
 export async function findNearbyRunners(lat: number, lng: number, maxResults: number = 10): Promise<RunnerSearchResult> {
@@ -78,14 +149,46 @@ export async function findNearbyRunners(lat: number, lng: number, maxResults: nu
       const candidateIds = geoResults.map(([id]) => id)
       const statusPipeline = redis.pipeline()
       for (const id of candidateIds) statusPipeline.get(`runner:${id}:status`)
-      const statuses = await statusPipeline.exec() as (string | null)[]
+      const statusResponses = await statusPipeline.exec()
       const locations = await getRunnerLocations(candidateIds)
+
+      // Extract statuses using safe pipeline parsing
+      const statuses: (string | null)[] = []
+      if (statusResponses) {
+        for (const raw of statusResponses) {
+          statuses.push(extractPipelineResult<string>(raw))
+        }
+      }
+
+      // Collect available runner IDs for DB stats batch query
+      const availableRunnerIds: string[] = []
       for (let i = 0; i < candidateIds.length; i++) {
         const id = candidateIds[i]
         const status = statuses[i]
         const loc = locations.get(id)
         if (status === 'available' && loc) {
-          runners.push({ runnerId: id, distance: parseFloat(geoResults[i][1]), lat: loc.lat, lng: loc.lng, heading: loc.heading, speed: loc.speed, updatedAt: loc.updatedAt, rating: 0, tasksCompleted: 0, transportMode: 'walking' })
+          availableRunnerIds.push(id)
+        }
+      }
+
+      // Batch-query DB for real runner stats instead of hardcoded 0s
+      const runnerStats = await batchQueryRunnerStats(availableRunnerIds)
+
+      for (let i = 0; i < candidateIds.length; i++) {
+        const id = candidateIds[i]
+        const status = statuses[i]
+        const loc = locations.get(id)
+        if (status === 'available' && loc) {
+          const stats = runnerStats.get(id) || { rating: 0, tasksCompleted: 0, transportMode: 'walking' }
+          runners.push({
+            runnerId: id,
+            distance: parseFloat(geoResults[i][1]),
+            lat: loc.lat, lng: loc.lng,
+            heading: loc.heading, speed: loc.speed, updatedAt: loc.updatedAt,
+            rating: stats.rating,
+            tasksCompleted: stats.tasksCompleted,
+            transportMode: stats.transportMode,
+          })
         }
         if (runners.length >= maxResults) break
       }
@@ -155,8 +258,14 @@ export async function getRunnerStats(): Promise<{ totalOnline: number; available
   if (onlineIds.length > 0) {
     const pipeline = redis.pipeline()
     for (const id of onlineIds) pipeline.get(`runner:${id}:status`)
-    const statuses = await pipeline.exec() as (string | null)[]
-    for (const status of statuses) { if (status === 'available') available++; else if (status === 'busy') busy++ }
+    const statusResponses = await pipeline.exec()
+    if (statusResponses) {
+      for (const raw of statusResponses) {
+        const status = extractPipelineResult<string>(raw)
+        if (status === 'available') available++
+        else if (status === 'busy') busy++
+      }
+    }
   }
   return { totalOnline, available, busy }
 }

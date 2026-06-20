@@ -53,8 +53,8 @@ const isProtectedApiRoute = createRouteMatcher([
   '/api/auth/profile(.*)',
   '/api/auth/register(.*)',
   '/api/auth/clerk-me(.*)',
-  // socket-token moved to optional auth — the route handler has its own
-  // auth logic with fallbacks (header-based userId, fallbackId param)
+  '/api/auth/socket-token(.*)',  // Requires Clerk auth (no more fallbacks)
+  '/api/runner-locations(.*)',   // Moved from optional — requires auth
   '/api/chats(.*)',
   '/api/messages(.*)',
   '/api/reports(.*)',
@@ -85,8 +85,8 @@ const isOptionalAuthApiRoute = createRouteMatcher([
   '/api/listings(.*)',
   '/api/stores(.*)',
   '/api/reviews(.*)',
-  '/api/runner-locations(.*)',
-  '/api/auth/socket-token(.*)',  // Has internal auth with header fallbacks
+  // runner-locations moved to protected — requires auth
+  // socket-token moved to protected — requires auth (no more header fallbacks)
 ])
 
 // ── Webhook / external-service routes excluded from CSRF checks ──
@@ -155,13 +155,24 @@ function validateCsrf(request: NextRequest): NextResponse | null {
   let originMatches = false
 
   if (origin) {
-    // Origin is the most reliable header for CSRF checks
-    originMatches = origin === appUrl || origin.includes('localhost')
+    // Origin is the most reliable header for CSRF checks — strict hostname matching
+    try {
+      const originUrl = new URL(origin)
+      const appUrlObj = new URL(appUrl)
+      originMatches = originUrl.origin === appUrlObj.origin ||
+        originUrl.hostname === 'localhost' ||
+        originUrl.hostname === '127.0.0.1'
+    } catch {
+      originMatches = false
+    }
   } else if (referer) {
-    // Fall back to Referer header if Origin is missing
+    // Fall back to Referer header if Origin is missing — strict hostname matching
     try {
       const refererUrl = new URL(referer)
-      originMatches = refererUrl.origin === appUrl || refererUrl.origin.includes('localhost')
+      const appUrlObj = new URL(appUrl)
+      originMatches = refererUrl.origin === appUrlObj.origin ||
+        refererUrl.hostname === 'localhost' ||
+        refererUrl.hostname === '127.0.0.1'
     } catch {
       // Malformed referer — reject
       originMatches = false
@@ -277,8 +288,6 @@ function addSecurityHeaders(response: NextResponse, request: NextRequest) {
   response.headers.set('X-Content-Type-Options', 'nosniff')
   // Prevent embedding in iframes
   response.headers.set('X-Frame-Options', 'DENY')
-  // XSS protection
-  response.headers.set('X-XSS-Protection', '1; mode=block')
   // Referrer policy
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
   // Permission policy
@@ -287,14 +296,43 @@ function addSecurityHeaders(response: NextResponse, request: NextRequest) {
     'camera=(), microphone=(), geolocation=(self)'
   )
 
-  // CORS for API routes (same-origin only in production)
+  // CORS for API routes (same-origin only in production) — strict hostname matching
   const origin = request.headers.get('origin')
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-  if (origin && (origin === appUrl || origin.includes('localhost'))) {
-    response.headers.set('Access-Control-Allow-Origin', origin)
-    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS')
-    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
-    response.headers.set('Access-Control-Max-Age', '86400')
+  if (origin) {
+    try {
+      const originUrl = new URL(origin)
+      const appUrlObj = new URL(appUrl)
+      if (originUrl.origin === appUrlObj.origin || originUrl.hostname === 'localhost' || originUrl.hostname === '127.0.0.1') {
+        response.headers.set('Access-Control-Allow-Origin', origin)
+        response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS')
+        response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
+        response.headers.set('Access-Control-Max-Age', '86400')
+      }
+    } catch {
+      // Malformed origin — skip CORS headers
+    }
+  }
+
+  // Content Security Policy
+  const isProduction = process.env.NODE_ENV === 'production'
+  const csp = [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-eval' 'unsafe-inline'", // Next.js needs unsafe-eval/inline in dev
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: https: blob:",
+    "font-src 'self' data:",
+    "connect-src 'self' https://api.flutterwave.com https://*.clerk.accounts.dev https://*.clerk.com wss: ws:",
+    "frame-src https://*.clerk.accounts.dev https://*.clerk.com",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+    isProduction ? "upgrade-insecure-requests" : "",
+  ].filter(Boolean).join('; ')
+  response.headers.set('Content-Security-Policy', csp)
+
+  // HSTS (production only)
+  if (isProduction) {
+    response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload')
   }
 }
 

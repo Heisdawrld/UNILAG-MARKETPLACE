@@ -1,8 +1,14 @@
 import { auth } from '@clerk/nextjs/server';
 import { db, isDatabaseAvailable } from '@/lib/db';
+import { validateBody, ReportCreateSchema } from '@/lib/validation';
 import { NextRequest, NextResponse } from 'next/server';
+import { rateLimits } from '@/lib/rate-limit';
 
 export async function POST(request: NextRequest) {
+  // Rate limit
+  const rl = await rateLimits.write(request)
+  if (!rl.success) return rl.response!
+
   if (!isDatabaseAvailable()) {
     return NextResponse.json(
       { error: 'Database not configured. Please set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN environment variables.' },
@@ -22,22 +28,12 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { listingId, reason } = body;
 
-    if (!reason) {
-      return NextResponse.json(
-        { error: 'reason is required' },
-        { status: 400 }
-      );
-    }
+    // Validate request body with Zod schema
+    const { data, error: validationError } = validateBody(ReportCreateSchema, body);
+    if (validationError) return validationError;
 
-    const validReasons = ['scam', 'fake_listing', 'harassment', 'spam', 'illegal_item'];
-    if (!validReasons.includes(reason)) {
-      return NextResponse.json(
-        { error: `Invalid reason. Must be one of: ${validReasons.join(', ')}` },
-        { status: 400 }
-      );
-    }
+    const { listingId, reason } = data;
 
     if (listingId) {
       const listing = await db.listing.findUnique({ where: { id: listingId } });

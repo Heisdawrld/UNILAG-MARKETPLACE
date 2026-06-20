@@ -1,7 +1,8 @@
 import { auth } from '@clerk/nextjs/server';
 import { db, isDatabaseAvailable } from '@/lib/db';
-import { NextRequest, NextResponse } from 'next/server';
+import { validateBody, AuthProfileUpdateSchema } from '@/lib/validation';
 import { findUserProfileById } from '@/lib/user-profile';
+import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(request: NextRequest) {
   if (!isDatabaseAvailable()) {
@@ -48,14 +49,18 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { userId, username, avatar, bio, phone, whatsapp, faculty, department, level, hostel } = body;
 
-    if (userId && userId !== authUser.id) {
-      return NextResponse.json({ error: 'Forbidden — cannot edit another user\'s profile' }, { status: 403 });
-    }
+    // Validate request body with Zod schema
+    const { data, error: validationError } = validateBody(AuthProfileUpdateSchema, body);
+    if (validationError) return validationError;
 
-    if (typeof bio === 'string' && bio.length > 500) {
-      return NextResponse.json({ error: 'Bio must be 500 characters or fewer' }, { status: 400 });
+    const { username, avatar, bio, phone, whatsapp, faculty, department, level, hostel } = data;
+
+    if (username && username !== authUser.username) {
+      const usernameTaken = await db.user.findUnique({ where: { username } });
+      if (usernameTaken && usernameTaken.id !== authUser.id) {
+        return NextResponse.json({ error: 'Username already taken' }, { status: 409 });
+      }
     }
 
     const updateData: Record<string, unknown> = {};

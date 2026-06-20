@@ -4,6 +4,7 @@ import { auth } from '@clerk/nextjs/server';
 import { attachRunnerPricingGuide } from '@/lib/runner-pricing';
 import { estimateCampusTrip, normalizeCoordinate, validateCampusRoute } from '@/lib/runner-dispatch';
 import { notifyUsers } from '@/lib/push';
+import { rateLimits } from '@/lib/rate-limit';
 
 // GET /api/tasks — list tasks with filters
 export async function GET(req: NextRequest) {
@@ -100,6 +101,10 @@ export async function GET(req: NextRequest) {
 
 // POST /api/tasks — create a task
 export async function POST(req: NextRequest) {
+  // Rate limit
+  const rl = await rateLimits.write(req)
+  if (!rl.success) return rl.response!
+
   if (!isDatabaseAvailable()) {
     return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });
   }

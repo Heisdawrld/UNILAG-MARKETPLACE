@@ -1,7 +1,9 @@
 import { auth } from '@clerk/nextjs/server';
 import { db, isDatabaseAvailable } from '@/lib/db';
 import { enhanceMarketplaceImages } from '@/lib/image-processing';
+import { validateBody, ListingCreateSchema } from '@/lib/validation';
 import { NextRequest, NextResponse } from 'next/server';
+import { rateLimits } from '@/lib/rate-limit';
 
 async function getAuthUser() {
   const { userId: clerkId } = await auth();
@@ -135,6 +137,10 @@ export async function GET(request: NextRequest) {
 
 // POST /api/listings
 export async function POST(request: NextRequest) {
+  // Rate limit
+  const rl = await rateLimits.write(request)
+  if (!rl.success) return rl.response!
+
   if (!isDatabaseAvailable()) {
     return NextResponse.json(
       { error: 'Database not configured. Please set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN environment variables.' },
@@ -152,8 +158,12 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
+
+    // Validate request body with Zod schema
+    const { data, error: validationError } = validateBody(ListingCreateSchema, body);
+    if (validationError) return validationError;
+
     const {
-      sellerId,
       storeId,
       title,
       description,
@@ -163,11 +173,14 @@ export async function POST(request: NextRequest) {
       negotiable,
       location,
       images,
-    } = body;
+    } = data;
 
-    if (!sellerId || !storeId || !title || !description || !price || !category || !condition) {
+    // sellerId is not in the Zod schema (it's determined from auth), so get it from body
+    const sellerId = body.sellerId;
+
+    if (!sellerId || !storeId) {
       return NextResponse.json(
-        { error: 'Missing required fields: sellerId, storeId, title, description, price, category, condition' },
+        { error: 'Missing required fields: sellerId, storeId' },
         { status: 400 }
       );
     }
@@ -186,21 +199,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Only your store can post products or services' }, { status: 403 });
     }
 
-    const parsedPrice = parseFloat(price);
-    if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
-      return NextResponse.json({ error: 'Price must be greater than zero' }, { status: 400 });
-    }
-    if (parsedPrice > 10_000_000) {
-      return NextResponse.json({ error: 'Price cannot exceed ₦10,000,000' }, { status: 400 });
-    }
-
-    if (typeof title === 'string' && title.length > 200) {
-      return NextResponse.json({ error: 'Title must be 200 characters or fewer' }, { status: 400 });
-    }
-    if (typeof description === 'string' && description.length > 5000) {
-      return NextResponse.json({ error: 'Description must be 5000 characters or fewer' }, { status: 400 });
-    }
-
     const processedImages = await enhanceMarketplaceImages(images, { maxWidth: 1600, maxHeight: 1600, quality: 84 });
 
     const listing = await db.listing.create({
@@ -208,10 +206,10 @@ export async function POST(request: NextRequest) {
         sellerId,
         storeId,
         title: String(title).trim(),
-        description: String(description).trim(),
-        price: parsedPrice,
+        description: String(description ?? '').trim(),
+        price,
         category,
-        condition,
+        condition: condition || 'new',
         negotiable: negotiable !== undefined ? negotiable : true,
         location: typeof location === 'string' && location.trim() ? location.trim() : null,
         images: processedImages.length > 0 ? JSON.stringify(processedImages) : '[]',

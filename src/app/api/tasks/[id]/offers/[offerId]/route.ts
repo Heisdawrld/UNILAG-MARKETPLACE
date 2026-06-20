@@ -127,12 +127,25 @@ export async function PATCH(
       return NextResponse.json({ error: 'This offer is no longer valid because the runner is unavailable' }, { status: 400 });
     }
 
-    if (task.assignedRunnerId && task.assignedRunnerId !== offer.runnerId) {
-      return NextResponse.json({ error: 'A runner is already assigned to this request' }, { status: 409 });
-    }
-
+    // Use atomic conditional update to prevent double-assignment
     const lifecycle = getTaskLifecycleTimestamps('matched');
 
+    const assignmentResult = await db.task.updateMany({
+      where: { id: taskId, assignedRunnerId: null },
+      data: {
+        reward: offer.amount,
+        assignedRunnerId: offer.runnerId,
+        status: 'matched',
+        negotiationStatus: 'matched',
+        ...lifecycle,
+      },
+    });
+
+    if (assignmentResult.count === 0) {
+      return NextResponse.json({ error: 'Task already assigned' }, { status: 409 });
+    }
+
+    // Assignment succeeded — update related records
     await Promise.all([
       db.taskOffer.update({
         where: { id: offerId },
@@ -150,16 +163,6 @@ export async function PATCH(
         where: { taskId, runnerId: { not: offer.runnerId } },
         data: { status: 'rejected' },
       }).catch(() => ({ count: 0 })),
-      db.task.update({
-        where: { id: taskId },
-        data: {
-          reward: offer.amount,
-          assignedRunnerId: offer.runnerId,
-          status: 'matched',
-          negotiationStatus: 'matched',
-          ...lifecycle,
-        },
-      }),
       db.user.update({
         where: { id: offer.runnerId },
         data: { runnerAvailabilityStatus: 'busy' },
