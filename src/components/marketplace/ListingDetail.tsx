@@ -74,6 +74,7 @@ export default function ListingDetail({
 }) {
   const { toast } = useToast();
   const isDeliveryEnabled = isFeatureEnabled('DELIVERY_SYSTEM');
+  const isBoostEnabled = isFeatureEnabled('BOOST_SYSTEM');
   const [listing, setListing] = useState<Listing | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
@@ -228,20 +229,22 @@ export default function ListingDetail({
             <p className="text-2xl font-bold text-primary">{formatPrice(listing.price)}</p>
             {listing.negotiable && <Badge variant="secondary" className="text-xs">Negotiable</Badge>}
           </div>
-          {/* Boost Status Indicator (owner only) */}
-          {isOwner && listing.boosted && listing.boostTier && listing.boostedUntil && (
+          {/* Boost Status Indicator (owner only, when boost system enabled) */}
+          {isOwner && isBoostEnabled && listing.boosted && (
             <div className="mt-2 flex items-center gap-2 p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
               <Zap className="w-4 h-4 text-amber-500 fill-amber-500" />
               <div className="flex-1">
                 <span className="text-xs font-semibold text-amber-700 dark:text-amber-400">
-                  {BOOST_TIER_CONFIG[listing.boostTier]?.label || 'Basic'} Boost Active
+                  {listing.boostTier ? (BOOST_TIER_CONFIG[listing.boostTier]?.label || 'Basic') : 'Basic'} Boost Active
                 </span>
-                <span className="text-[10px] text-amber-600 dark:text-amber-500 ml-1.5">
-                  {new Date(listing.boostedUntil) > new Date()
-                    ? `Expires ${timeAgo(listing.boostedUntil).replace('ago', '').trim()} left`
-                    : 'Expired'
-                  }
-                </span>
+                {listing.boostedUntil && (
+                  <span className="text-[10px] text-amber-600 dark:text-amber-500 ml-1.5">
+                    {new Date(listing.boostedUntil) > new Date()
+                      ? `Expires ${timeAgo(listing.boostedUntil).replace('ago', '').trim()} left`
+                      : 'Expired'
+                    }
+                  </span>
+                )}
               </div>
               <button
                 onClick={() => setShowBoost(true)}
@@ -353,7 +356,7 @@ export default function ListingDetail({
       {isOwner ? (
         <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t px-4 py-3 safe-bottom z-50 relative">
           <div className="flex gap-2 max-w-lg mx-auto">
-            {listing.status === 'active' && (
+            {isBoostEnabled && listing.status === 'active' && (
               <Button onClick={() => setShowBoost(true)} className="h-11 flex-1 bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-md shadow-amber-500/20">
                 <Zap className="w-4 h-4 mr-1.5 fill-current" /> Boost Listing
               </Button>

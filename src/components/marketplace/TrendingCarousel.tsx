@@ -27,10 +27,12 @@ export default function TrendingCarousel({
   onToggleSave,
 }: TrendingCarouselProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [isPaused, setIsPaused] = useState(false);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(true);
+  const isPausedRef = useRef(false);
+  const [showLeftArrow, setShowLeftArrow] = useState(false);
+  const [showRightArrow, setShowRightArrow] = useState(true);
   const animationRef = useRef<number | null>(null);
+  const resumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastArrowUpdateRef = useRef(0);
   const speedRef = useRef(0.5); // pixels per frame (~30px/s at 60fps)
 
   // Sort listings by tier: Elite → Premium → Basic → popular (by views)
@@ -48,42 +50,72 @@ export default function TrendingCarousel({
   // Triple the listings for seamless looping
   const displayListings = [...sortedListings, ...sortedListings, ...sortedListings];
 
-  // Auto-scroll animation
+  // Auto-scroll animation — uses refs only, no setState in the hot path
   const animate = useCallback(() => {
     const el = scrollRef.current;
-    if (!el || isPaused) {
+    if (!el) {
       animationRef.current = requestAnimationFrame(animate);
       return;
     }
 
-    el.scrollLeft += speedRef.current;
+    if (!isPausedRef.current) {
+      el.scrollLeft += speedRef.current;
 
-    // When we've scrolled past the first set, reset to beginning seamlessly
-    const singleSetWidth = el.scrollWidth / 3;
-    if (el.scrollLeft >= singleSetWidth * 2) {
-      el.scrollLeft -= singleSetWidth;
+      // When we've scrolled past the second set, jump back to first set seamlessly
+      const singleSetWidth = el.scrollWidth / 3;
+      if (el.scrollLeft >= singleSetWidth * 2) {
+        el.scrollLeft -= singleSetWidth;
+      }
     }
 
-    // Update arrow visibility
-    setCanScrollLeft(el.scrollLeft > singleSetWidth * 0.1);
-    setCanScrollRight(el.scrollLeft < singleSetWidth * 2.5);
+    // Throttle arrow visibility updates to ~4 times/second (every 250ms)
+    const now = Date.now();
+    if (now - lastArrowUpdateRef.current > 250) {
+      lastArrowUpdateRef.current = now;
+      const singleSetWidth = el.scrollWidth / 3;
+      setShowLeftArrow(el.scrollLeft > singleSetWidth * 0.1);
+      setShowRightArrow(el.scrollLeft < singleSetWidth * 2.5);
+    }
 
     animationRef.current = requestAnimationFrame(animate);
-  }, [isPaused]);
+  }, []);
 
   useEffect(() => {
     // Start in the middle set so we can scroll both directions
     const el = scrollRef.current;
     if (el && listings.length > 0) {
-      const singleSetWidth = el.scrollWidth / 3;
-      el.scrollLeft = singleSetWidth;
+      // Defer to next frame so layout has settled
+      requestAnimationFrame(() => {
+        const singleSetWidth = el.scrollWidth / 3;
+        if (singleSetWidth > 0) {
+          el.scrollLeft = singleSetWidth;
+        }
+      });
     }
 
     animationRef.current = requestAnimationFrame(animate);
     return () => {
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
     };
   }, [animate, listings.length]);
+
+  const pause = useCallback(() => {
+    isPausedRef.current = true;
+  }, []);
+
+  const resume = useCallback(() => {
+    isPausedRef.current = false;
+  }, []);
+
+  const resumeAfterDelay = useCallback(() => {
+    // Clear any existing timer
+    if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
+    resumeTimerRef.current = setTimeout(() => {
+      isPausedRef.current = false;
+      resumeTimerRef.current = null;
+    }, 3000);
+  }, []);
 
   const scrollByCards = (direction: 'left' | 'right') => {
     const el = scrollRef.current;
@@ -97,7 +129,7 @@ export default function TrendingCarousel({
   return (
     <section className="relative -mx-4 px-4">
       {/* Navigation arrows (desktop only) */}
-      {canScrollLeft && (
+      {showLeftArrow && (
         <button
           onClick={() => scrollByCards('left')}
           className="hidden md:flex absolute left-2 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-white/90 dark:bg-black/70 shadow-md items-center justify-center hover:bg-white dark:hover:bg-black/90 transition-colors"
@@ -106,7 +138,7 @@ export default function TrendingCarousel({
           <ChevronLeft className="w-4 h-4" />
         </button>
       )}
-      {canScrollRight && (
+      {showRightArrow && (
         <button
           onClick={() => scrollByCards('right')}
           className="hidden md:flex absolute right-2 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-white/90 dark:bg-black/70 shadow-md items-center justify-center hover:bg-white dark:hover:bg-black/90 transition-colors"
@@ -125,13 +157,10 @@ export default function TrendingCarousel({
         ref={scrollRef}
         className="flex gap-3 overflow-x-auto scrollbar-none pb-2"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-        onMouseEnter={() => setIsPaused(true)}
-        onMouseLeave={() => setIsPaused(false)}
-        onTouchStart={() => setIsPaused(true)}
-        onTouchEnd={() => {
-          // Resume after a short delay so the user can see where they stopped
-          setTimeout(() => setIsPaused(false), 3000);
-        }}
+        onMouseEnter={pause}
+        onMouseLeave={resume}
+        onTouchStart={pause}
+        onTouchEnd={resumeAfterDelay}
       >
         {displayListings.map((listing, i) => (
           <div key={`${listing.id}-${i}`} className="flex-shrink-0 w-44">
