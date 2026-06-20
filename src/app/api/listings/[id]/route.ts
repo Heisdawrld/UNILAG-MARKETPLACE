@@ -133,10 +133,11 @@ export async function PATCH(
     }
 
     // Only allow boost fields to be set via /api/boosts (which verifies payment)
-    // Non-admin users cannot directly set boosted or boostedUntil
+    // Non-admin users cannot directly set boosted, boostedUntil, or boostTier
     if (authUser.role !== 'admin') {
       delete (updateData as any).boosted;
       delete (updateData as any).boostedUntil;
+      delete (updateData as any).boostTier;
     }
 
     const updatedListing = await db.listing.update({

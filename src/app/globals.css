@@ -156,3 +156,12 @@ nav, button { -webkit-tap-highlight-color: transparent; }
 .animate-marquee:active {
   animation-play-state: paused;
 }
+
+/* Hide scrollbar for carousel */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}

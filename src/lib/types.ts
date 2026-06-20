@@ -54,6 +54,38 @@ export interface ListingStore {
   whatsapp?: string | null;
 }
 
+export type BoostTier = 'basic' | 'premium' | 'elite';
+
+export const BOOST_TIER_CONFIG: Record<BoostTier, {
+  label: string;
+  badge: string;
+  badgeClass: string;
+  ringClass: string;
+  priority: number;
+}> = {
+  basic: {
+    label: 'Basic',
+    badge: '⚡ Boosted',
+    badgeClass: 'bg-gradient-to-r from-amber-500 to-yellow-500 text-white',
+    ringClass: 'ring-1 ring-amber-400/40',
+    priority: 1,
+  },
+  premium: {
+    label: 'Premium',
+    badge: '🔥 Hot',
+    badgeClass: 'bg-gradient-to-r from-orange-500 to-red-500 text-white',
+    ringClass: 'ring-2 ring-orange-400/50',
+    priority: 2,
+  },
+  elite: {
+    label: 'Elite',
+    badge: '👑 Elite',
+    badgeClass: 'bg-gradient-to-r from-purple-500 to-pink-500 text-white',
+    ringClass: 'ring-2 ring-purple-400/60 shadow-lg shadow-purple-500/20',
+    priority: 3,
+  },
+};
+
 export interface Listing {
   id: string;
   sellerId: string;
@@ -69,6 +101,8 @@ export interface Listing {
   views: number;
   likesCount: number;
   boosted: boolean;
+  boostTier?: BoostTier | null;
+  boostedUntil?: string | null;
   images: string;
   createdAt: string;
   updatedAt: string;

@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { listingId, paymentReference, flutterwaveTxRef, amount, durationDays = 7 } = body;
+    const { listingId, paymentReference, flutterwaveTxRef, amount, durationDays = 7, planId } = body;
 
     if (!listingId || !amount) {
       return NextResponse.json(
@@ -35,6 +35,10 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Validate planId if provided
+    const validPlanIds = ['basic', 'premium', 'elite'];
+    const boostTier = planId && validPlanIds.includes(planId) ? planId : 'basic';
 
     const listing = await db.listing.findUnique({
       where: { id: listingId },
@@ -89,13 +93,14 @@ export async function POST(request: NextRequest) {
         paymentReference: paymentReference || null,
         flutterwaveTxRef: flutterwaveTxRef || null,
         amount,
+        planId: boostTier,
         expiresAt,
       },
     });
 
     await db.listing.update({
       where: { id: listingId },
-      data: { boosted: true, boostedUntil: expiresAt },
+      data: { boosted: true, boostedUntil: expiresAt, boostTier },
     });
 
     await db.notification.create({

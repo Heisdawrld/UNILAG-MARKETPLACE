@@ -10,9 +10,10 @@ import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
-import { User as UserType, Listing, Review, CONDITION_LABELS, CONDITION_COLORS } from '@/lib/types';
+import { User as UserType, Listing, Review, CONDITION_LABELS, CONDITION_COLORS, BOOST_TIER_CONFIG, BoostTier } from '@/lib/types';
 import { formatPrice, timeAgo, getListingImages, getInitials, getListingDisplayAvatar, getListingDisplayName, isListingDisplayVerified } from '@/lib/marketplace-utils';
 import { isFeatureEnabled } from '@/lib/features';
+import { BOOST_PRICING } from '@/lib/flutterwave';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const REPORT_REASONS = [
@@ -80,6 +81,7 @@ export default function ListingDetail({
   const [showPayment, setShowPayment] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [showBoost, setShowBoost] = useState(false);
+  const [boostingPlan, setBoostingPlan] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
@@ -222,8 +224,33 @@ export default function ListingDetail({
               {CONDITION_LABELS[listing.condition] || listing.condition}
             </Badge>
           </div>
-          <p className="text-2xl font-bold text-primary mt-1">{formatPrice(listing.price)}</p>
-          {listing.negotiable && <Badge variant="secondary" className="mt-1.5 text-xs">Negotiable</Badge>}
+          <div className="flex items-center gap-2 mt-1">
+            <p className="text-2xl font-bold text-primary">{formatPrice(listing.price)}</p>
+            {listing.negotiable && <Badge variant="secondary" className="text-xs">Negotiable</Badge>}
+          </div>
+          {/* Boost Status Indicator (owner only) */}
+          {isOwner && listing.boosted && listing.boostTier && listing.boostedUntil && (
+            <div className="mt-2 flex items-center gap-2 p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+              <Zap className="w-4 h-4 text-amber-500 fill-amber-500" />
+              <div className="flex-1">
+                <span className="text-xs font-semibold text-amber-700 dark:text-amber-400">
+                  {BOOST_TIER_CONFIG[listing.boostTier]?.label || 'Basic'} Boost Active
+                </span>
+                <span className="text-[10px] text-amber-600 dark:text-amber-500 ml-1.5">
+                  {new Date(listing.boostedUntil) > new Date()
+                    ? `Expires ${timeAgo(listing.boostedUntil).replace('ago', '').trim()} left`
+                    : 'Expired'
+                  }
+                </span>
+              </div>
+              <button
+                onClick={() => setShowBoost(true)}
+                className="text-[10px] font-bold text-amber-600 dark:text-amber-400 hover:underline"
+              >
+                Extend
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Meta */}
@@ -471,7 +498,7 @@ export default function ListingDetail({
         </DialogContent>
       </Dialog>
 
-      {/* Boost Modal */}
+      {/* Boost Modal — V1 Pricing (Basic / Premium / Elite) */}
       <Dialog open={showBoost} onOpenChange={setShowBoost}>
         <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
@@ -479,19 +506,57 @@ export default function ListingDetail({
               <Zap className="w-5 h-5 text-amber-500 fill-amber-500" /> Boost Listing
             </DialogTitle>
             <DialogDescription>
-              Get more visibility and sell faster by boosting your listing to the top.
+              Get more visibility and sell faster. Boosted listings appear in the Trending section and rank higher in search.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 pt-2">
-            {[
-              { id: 'basic', name: 'BASIC BOOST', price: '₦300', duration: '6 hours', desc: 'Slight feed priority • Boosted section • Increased visibility' },
-              { id: 'standard', name: 'STANDARD BOOST', price: '₦700', duration: '24 hours', desc: 'Homepage priority • Category priority • More impressions', popular: true },
-              { id: 'premium', name: 'PREMIUM BOOST', price: '₦1,500', duration: '3 days', desc: 'Top search visibility • Homepage placement • Featured badge' },
-              { id: 'ultra', name: 'ULTRA BOOST', price: '₦3,000', duration: '7 days', desc: 'Aggressive feed distribution • Top ranking • Premium visibility' },
-            ].map(plan => (
-              <div key={plan.id} className={`relative p-4 rounded-xl border-2 transition-all cursor-pointer ${plan.popular ? 'border-amber-500 bg-amber-500/5' : 'border-muted hover:border-amber-500/50'}`}>
+
+          {/* Current boost status */}
+          {listing.boosted && listing.boostTier && (
+            <div className="flex items-center gap-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+              <Zap className="w-4 h-4 text-amber-500 fill-amber-500 flex-shrink-0" />
+              <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                Currently on {BOOST_TIER_CONFIG[listing.boostTier]?.label || 'Basic'} Boost
+                {listing.boostedUntil && new Date(listing.boostedUntil) > new Date() && (
+                  <> — expires {timeAgo(listing.boostedUntil)}</>
+                )}
+              </span>
+            </div>
+          )}
+
+          <div className="space-y-3 pt-1">
+            {([
+              {
+                id: 'basic' as BoostTier,
+                name: 'BASIC BOOST',
+                price: BOOST_PRICING.basic.price,
+                priceLabel: `₦${BOOST_PRICING.basic.price.toLocaleString()}`,
+                duration: '3 days',
+                tier: BOOST_TIER_CONFIG.basic,
+                benefits: ['Trending section placement', 'Boost badge on listing', 'Higher search ranking'],
+              },
+              {
+                id: 'premium' as BoostTier,
+                name: 'PREMIUM BOOST',
+                price: BOOST_PRICING.premium.price,
+                priceLabel: `₦${BOOST_PRICING.premium.price.toLocaleString()}`,
+                duration: '7 days',
+                tier: BOOST_TIER_CONFIG.premium,
+                popular: true,
+                benefits: ['Trending section priority', 'Hot badge on listing', 'Top search ranking', 'Category page priority'],
+              },
+              {
+                id: 'elite' as BoostTier,
+                name: 'ELITE BOOST',
+                price: BOOST_PRICING.elite.price,
+                priceLabel: `₦${BOOST_PRICING.elite.price.toLocaleString()}`,
+                duration: '14 days',
+                tier: BOOST_TIER_CONFIG.elite,
+                benefits: ['Trending section top spot', 'Elite crown badge', 'Highest search priority', 'Category page top spot', 'Maximum visibility'],
+              },
+            ]).map(plan => (
+              <div key={plan.id} className={`relative p-4 rounded-xl border-2 transition-all ${plan.popular ? 'border-orange-500 bg-orange-500/5' : 'border-muted hover:border-amber-500/50'}`}>
                 {plan.popular && (
-                  <span className="absolute -top-3 right-4 px-2 py-0.5 bg-amber-500 text-white text-[10px] font-bold rounded-full uppercase tracking-wider">
+                  <span className="absolute -top-3 right-4 px-2 py-0.5 bg-orange-500 text-white text-[10px] font-bold rounded-full uppercase tracking-wider">
                     Most Popular
                   </span>
                 )}
@@ -501,47 +566,62 @@ export default function ListingDetail({
                     <p className="text-xs text-muted-foreground font-medium">{plan.duration}</p>
                   </div>
                   <div className="text-right">
-                    <span className="font-black text-lg text-primary">{plan.price}</span>
+                    <span className="font-black text-lg text-primary">{plan.priceLabel}</span>
                   </div>
                 </div>
                 <div className="space-y-1 mt-3">
-                  {plan.desc.split(' • ').map((benefit, i) => (
+                  {plan.benefits.map((benefit, i) => (
                     <div key={i} className="flex items-center gap-1.5 text-xs text-muted-foreground">
                       <Zap className="w-3 h-3 text-amber-500" /> {benefit}
                     </div>
                   ))}
                 </div>
-                <Button className="w-full mt-4 bg-primary hover:bg-primary/90" onClick={async () => {
-                  try {
-                    const durationHours = plan.id === 'basic' ? 6 : plan.id === 'standard' ? 24 : plan.id === 'premium' ? 72 : 168;
-                    const durationDays = durationHours / 24;
-                    // Initiate payment through the proper payment flow
-                    const result = await api.post('/api/payments/initialize', {
-                      type: 'boost',
-                      listingId: listing.id,
-                      amount: plan.id === 'basic' ? 300 : plan.id === 'standard' ? 700 : plan.id === 'premium' ? 1500 : 3000,
-                    });
+                <Button
+                  className="w-full mt-4 bg-primary hover:bg-primary/90"
+                  disabled={boostingPlan === plan.id}
+                  onClick={async () => {
+                    setBoostingPlan(plan.id);
+                    try {
+                      const durationHours = BOOST_PRICING[plan.id].durationHours;
+                      const durationDays = durationHours / 24;
 
-                    if (result.link) {
-                      // Redirect to Flutterwave payment page
-                      window.location.href = result.link;
-                    } else if (result.isLocked) {
-                      // Payments locked — use /api/boosts directly (dev/mock mode)
-                      await api.post('/api/boosts', {
+                      // Initiate payment through the proper payment flow
+                      const result = await api.post('/api/payments/initialize', {
+                        type: 'boost',
                         listingId: listing.id,
-                        amount: plan.id === 'basic' ? 300 : plan.id === 'standard' ? 700 : plan.id === 'premium' ? 1500 : 3000,
-                        durationDays,
-                        flutterwaveTxRef: result.txRef,
+                        amount: plan.price,
                       });
-                      toast({ title: 'Listing Boosted 🚀', description: `Your listing is boosted for ${plan.duration}!` });
-                      setShowBoost(false);
-                      onBack();
+
+                      if (result.link) {
+                        // Redirect to Flutterwave payment page
+                        window.location.href = result.link;
+                      } else if (result.isLocked) {
+                        // Payments locked — use /api/boosts directly (dev/mock mode)
+                        await api.post('/api/boosts', {
+                          listingId: listing.id,
+                          amount: plan.price,
+                          durationDays,
+                          flutterwaveTxRef: result.txRef,
+                          planId: plan.id,
+                        });
+                        toast({ title: 'Listing Boosted!', description: `Your listing is now ${plan.name} for ${plan.duration}!` });
+                        setShowBoost(false);
+                        // Reload listing to reflect boost status
+                        const updated = await api.get(`/api/listings/${listingId}`);
+                        setListing(updated);
+                      }
+                    } catch {
+                      toast({ title: 'Boost Failed', variant: 'destructive' });
+                    } finally {
+                      setBoostingPlan(null);
                     }
-                  } catch {
-                    toast({ title: 'Boost Failed', variant: 'destructive' });
-                  }
-                }}>
-                  Pay {plan.price}
+                  }}
+                >
+                  {boostingPlan === plan.id ? (
+                    <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Processing...</>
+                  ) : (
+                    <>Pay {plan.priceLabel}</>
+                  )}
                 </Button>
               </div>
             ))}

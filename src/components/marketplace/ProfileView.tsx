@@ -18,6 +18,7 @@ import {
   Trash2,
   Users,
   PlusCircle,
+  Zap,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -30,8 +31,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
-import { Listing, SavedListing, Store, STORE_CATEGORIES, User as UserType } from '@/lib/types';
-import { getInitials } from '@/lib/marketplace-utils';
+import { Listing, SavedListing, Store, STORE_CATEGORIES, User as UserType, BOOST_TIER_CONFIG } from '@/lib/types';
+import { getInitials, formatPrice, timeAgo } from '@/lib/marketplace-utils';
 import { ListingCard } from './ListingCard';
 
 const FACULTIES = [
@@ -498,7 +499,30 @@ export default function ProfileView({
             ) : (
               <div className="grid grid-cols-2 gap-3">
                 {myListings.map((listing) => (
-                  <ListingCard key={listing.id} listing={listing} onClick={() => onSelectListing(listing.id)} isSaved={savedIds.has(listing.id)} onToggleSave={() => onToggleSave(listing.id)} />
+                  <div key={listing.id} className="relative group">
+                    <ListingCard listing={listing} onClick={() => onSelectListing(listing.id)} isSaved={savedIds.has(listing.id)} onToggleSave={() => onToggleSave(listing.id)} />
+                    {/* Boost CTA for active, non-boosted listings */}
+                    {listing.status === 'active' && !listing.boosted && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onSelectListing(listing.id); }}
+                        className="absolute top-2 right-2 z-10 p-1 rounded-full bg-amber-500 text-white shadow-md hover:bg-amber-600 transition-colors"
+                        aria-label="Boost listing"
+                      >
+                        <Zap className="w-3.5 h-3.5 fill-current" />
+                      </button>
+                    )}
+                    {/* Boost status for already-boosted listings */}
+                    {listing.boosted && listing.boostTier && (
+                      <div className="absolute top-2 right-2 z-10 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-black/70 text-white text-[8px] font-bold">
+                        <Zap className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
+                        {BOOST_TIER_CONFIG[listing.boostTier]?.label || 'Boosted'}
+                      </div>
+                    )}
+                    {/* Sold overlay label */}
+                    {listing.status === 'sold' && (
+                      <div className="absolute top-2 left-2 z-10 px-1.5 py-0.5 rounded-full bg-black/80 text-white text-[8px] font-bold">SOLD</div>
+                    )}
+                  </div>
                 ))}
               </div>
             )

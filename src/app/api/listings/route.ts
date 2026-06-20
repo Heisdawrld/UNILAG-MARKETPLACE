@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
         boosted: true,
         boostedUntil: { lt: new Date() },
       },
-      data: { boosted: false, boostedUntil: null },
+      data: { boosted: false, boostedUntil: null, boostTier: null },
     });
 
     const [listings, total] = await Promise.all([
@@ -113,6 +113,8 @@ export async function GET(request: NextRequest) {
               logo: true,
               slug: true,
               isVerified: true,
+              phone: true,
+              whatsapp: true,
             },
           },
         },

@@ -5,18 +5,22 @@ import { TrendingUp, Clock, Eye, Award, RefreshCw, Star, Bell, Smartphone, Lapto
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/api';
-import { User as UserType, Listing, Notification as AppNotification } from '@/lib/types';
+import { User as UserType, Listing, Notification as AppNotification, BOOST_TIER_CONFIG, BoostTier } from '@/lib/types';
 import { getInitials, getListingDisplayAvatar, getListingDisplayName, isListingDisplayVerified } from '@/lib/marketplace-utils';
 import { ListingCard, ListingCardSkeleton } from './ListingCard';
+import TrendingCarousel from './TrendingCarousel';
 
 const CATEGORY_ICONS: Record<string, typeof Smartphone> = {
   'Electronics': Smartphone,
+  'Phones': Smartphone,
   'Phones & Tablets': Smartphone,
   'Laptops': Laptop,
+  'Books': BookOpen,
   'Textbooks': BookOpen,
   'Fashion': ShoppingBag,
   'Services': Wrench,
   'Hostel Essentials': HomeIcon,
+  'Food': Utensils,
   'Food & Drinks': Utensils,
   'Sports': Dumbbell,
   'Others': LayoutGrid,
@@ -80,7 +84,29 @@ export default function HomeFeed({
   useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
 
   const unreadCount = useMemo(() => (notifications || []).filter(n => !n.read).length, [notifications]);
-  const boosted = useMemo(() => listings.filter(l => l.boosted), [listings]);
+
+  // Trending: boosted listings (tier-ordered) + popular by views (non-boosted)
+  const trending = useMemo(() => {
+    const boosted = listings.filter(l => l.boosted);
+    const nonBoostedPopular = listings
+      .filter(l => !l.boosted)
+      .sort((a, b) => b.views - a.views)
+      .slice(0, 6);
+
+    // Sort boosted by tier priority: Elite → Premium → Basic
+    const sortedBoosted = boosted.sort((a, b) => {
+      const aTier = a.boostTier && BOOST_TIER_CONFIG[a.boostTier as BoostTier]
+        ? BOOST_TIER_CONFIG[a.boostTier as BoostTier].priority
+        : 0;
+      const bTier = b.boostTier && BOOST_TIER_CONFIG[b.boostTier as BoostTier]
+        ? BOOST_TIER_CONFIG[b.boostTier as BoostTier].priority
+        : 0;
+      return bTier - aTier;
+    });
+
+    return [...sortedBoosted, ...nonBoostedPopular];
+  }, [listings]);
+
   const recent = useMemo(() => listings.slice(0, 10), [listings]);
   const popular = useMemo(() => [...listings].sort((a, b) => b.views - a.views).slice(0, 6), [listings]);
 
@@ -253,27 +279,24 @@ export default function HomeFeed({
           </div>
         </section>
 
-        {/* Trending */}
-        {boosted.length > 0 && (
-          <section className="relative -mx-4 px-4">
+        {/* Trending — Auto-scrolling Carousel */}
+        {trending.length > 0 && (
+          <section>
             <div className="flex items-center gap-2 mb-3">
               <TrendingUp className="w-5 h-5 text-amber-500" />
-              <h2 className="font-bold text-lg">Trending 🔥</h2>
+              <h2 className="font-bold text-lg">Trending</h2>
+              {trending.some(l => l.boosted) && (
+                <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 text-[9px] px-1.5 py-0">
+                  Sponsored
+                </Badge>
+              )}
             </div>
-            {/* Fade edges — hidden on mobile since we use scroll */}
-            <div className="hidden md:block absolute left-0 top-10 bottom-0 w-8 bg-gradient-to-r from-background to-transparent z-10" />
-            <div className="hidden md:block absolute right-0 top-10 bottom-0 w-8 bg-gradient-to-l from-background to-transparent z-10" />
-            
-            {/* Mobile: scrollable horizontal list; Desktop: marquee animation */}
-            <div className="md:overflow-hidden pb-2">
-              <div className="flex gap-3 overflow-x-auto md:overflow-hidden md:animate-marquee md:hover:[animation-play-state:paused]">
-                {[...boosted, ...boosted, ...boosted].map((listing, i) => (
-                  <div key={`${listing.id}-${i}`} className="flex-shrink-0 w-44">
-                    <ListingCard listing={listing} onClick={() => onSelectListing(listing.id)} isSaved={savedIds.has(listing.id)} onToggleSave={() => onToggleSave(listing.id)} />
-                  </div>
-                ))}
-              </div>
-            </div>
+            <TrendingCarousel
+              listings={trending}
+              onSelectListing={onSelectListing}
+              savedIds={savedIds}
+              onToggleSave={onToggleSave}
+            />
           </section>
         )}
 
@@ -313,7 +336,7 @@ export default function HomeFeed({
             <Award className="w-5 h-5 text-emerald-500" />
             <h2 className="font-bold text-lg">Top Sellers</h2>
           </div>
-          <div className="flex gap-3 overflow-x-auto hide-scrollbar pb-2">
+          <div className="flex gap-3 overflow-x-auto scrollbar-none pb-2">
             {Array.from(
               new Map(
                 listings

@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Listing, CONDITION_LABELS, CONDITION_COLORS } from '@/lib/types';
+import { Listing, CONDITION_LABELS, CONDITION_COLORS, BOOST_TIER_CONFIG, BoostTier } from '@/lib/types';
 import { formatPrice, getInitials, getListingDisplayAvatar, getListingDisplayName, getListingFirstImage, isListingDisplayVerified } from '@/lib/marketplace-utils';
 
 export function ListingCard({
@@ -21,12 +21,26 @@ export function ListingCard({
   const displayAvatar = getListingDisplayAvatar(listing);
   const isVerifiedDisplay = isListingDisplayVerified(listing);
 
+  // Determine boost tier config
+  const tierConfig = listing.boosted && listing.boostTier
+    ? BOOST_TIER_CONFIG[listing.boostTier]
+    : listing.boosted
+      ? BOOST_TIER_CONFIG.basic  // Fallback: boosted but no tier = basic
+      : null;
+
+  const ringClass = tierConfig ? tierConfig.ringClass : '';
+
   return (
     <motion.div whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} className="cursor-pointer" onClick={onClick}>
-      <Card className={`overflow-hidden border-0 shadow-sm hover:shadow-md transition-shadow h-full ${listing.boosted ? 'ring-1 ring-amber-400/40' : ''}`}>
+      <Card className={`overflow-hidden border-0 shadow-sm hover:shadow-md transition-shadow h-full ${ringClass}`}>
         <div className="relative aspect-[4/3] bg-muted">
           <img src={image} alt={listing.title} className="w-full h-full object-cover" loading="lazy" />
-          {listing.boosted && (
+          {tierConfig && (
+            <Badge className={`absolute top-2 left-2 text-[10px] px-1.5 py-0.5 shadow-sm ${tierConfig.badgeClass}`}>
+              {tierConfig.badge}
+            </Badge>
+          )}
+          {!tierConfig && listing.boosted && (
             <Badge className="absolute top-2 left-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] px-1.5 py-0.5 shadow-sm">
               <Zap className="w-2.5 h-2.5 mr-0.5 fill-current" /> Featured
             </Badge>
