@@ -27,12 +27,12 @@ export default function SearchingOverlay({ onCancel }: SearchingOverlayProps) {
     return () => clearInterval(interval)
   }, [searchStartTime])
 
-  // Auto-timeout after 60s
+  // Auto-timeout after 60s — onCancel from parent already handles server-side cancellation
   useEffect(() => {
     if (elapsedSeconds >= 60 && offers.length === 0) {
       onCancel()
     }
-  }, [elapsedSeconds, offers.length, onCancel])
+  }, [elapsedSeconds, offers.length, onCancel]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!isSearching) return null
 

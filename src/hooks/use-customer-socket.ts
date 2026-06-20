@@ -2,17 +2,13 @@
 
 import { useEffect, useCallback, useRef } from 'react'
 import { useSocket } from './use-socket'
-import { useCustomerDeliveryStore, type DeliveryOfferFromRunner, type CustomerActiveDelivery } from '@/store/customer-delivery-store'
+import { useCustomerDeliveryStore, type DeliveryOfferFromRunner } from '@/store/customer-delivery-store'
 import type { DeliveryCategory, DeliveryOrderStatus, TransportMode, UrgencyLevel } from '@/lib/delivery-types'
 
-interface UseCustomerSocketOptions { userId?: string | null }
-
-export function useCustomerSocket({ userId: _userId }: UseCustomerSocketOptions) {
-  // Socket auth now uses Clerk-based tokens — userId is no longer needed
+export function useCustomerSocket() {
   const { socket, isConnected, connectionError, retry } = useSocket({ autoConnect: true })
   const setSocketConnected = useCustomerDeliveryStore((s) => s.setSocketConnected)
   const addOffer = useCustomerDeliveryStore((s) => s.addOffer)
-  const removeOffer = useCustomerDeliveryStore((s) => s.removeOffer)
   const clearOffers = useCustomerDeliveryStore((s) => s.clearOffers)
   const setActiveDelivery = useCustomerDeliveryStore((s) => s.setActiveDelivery)
   const updateActiveDeliveryStatus = useCustomerDeliveryStore((s) => s.updateActiveDeliveryStatus)
@@ -22,9 +18,9 @@ export function useCustomerSocket({ userId: _userId }: UseCustomerSocketOptions)
   const setShowRatingModal = useCustomerDeliveryStore((s) => s.setShowRatingModal)
   const mountedRef = useRef(true)
 
+  // Sync socket connection state to store + re-subscribe on reconnect
   useEffect(() => {
     setSocketConnected(isConnected)
-    // Re-subscribe to active delivery room on reconnect (PWA background/foreground)
     if (isConnected && socket) {
       const { activeDelivery } = useCustomerDeliveryStore.getState()
       if (activeDelivery?.orderId) {
@@ -47,10 +43,8 @@ export function useCustomerSocket({ userId: _userId }: UseCustomerSocketOptions)
         message: data.message, expiresAt: data.expiresAt, receivedAt: Date.now(),
       }
       addOffer(offer)
-      // Auto-switch to offers view if we're still searching
       const currentView = useCustomerDeliveryStore.getState().currentView
       if (currentView === 'searching') setCurrentView('offers')
-      // Vibrate feedback
       try { if (navigator.vibrate) navigator.vibrate([100, 50, 100]) } catch {}
     }
 
@@ -58,7 +52,7 @@ export function useCustomerSocket({ userId: _userId }: UseCustomerSocketOptions)
       if (!mountedRef.current) return
       const status = data.status as DeliveryOrderStatus
 
-      // Capture orderId for searching status (Bug #1 fix — searchOrderId was never set)
+      // Capture orderId for searching status
       if (data.orderId) {
         const store = useCustomerDeliveryStore.getState()
         if (status === 'searching' && !store.searchOrderId) {
@@ -69,7 +63,6 @@ export function useCustomerSocket({ userId: _userId }: UseCustomerSocketOptions)
       updateActiveDeliveryStatus(status)
 
       if (status === 'runner_assigned') {
-        // Will be handled by the status update + we need to load full delivery details
         setIsSearching(false)
         clearOffers()
         setCurrentView('tracking')
@@ -82,6 +75,7 @@ export function useCustomerSocket({ userId: _userId }: UseCustomerSocketOptions)
         setIsSearching(false)
         clearOffers()
         setActiveDelivery(null)
+        useCustomerDeliveryStore.getState().setSearchOrderId(null)
         setCurrentView('form')
       }
     }
@@ -91,13 +85,14 @@ export function useCustomerSocket({ userId: _userId }: UseCustomerSocketOptions)
       updateRunnerLocation(data.lat, data.lng, data.heading, data.speed)
     }
 
-    const handleDeliveryEta = (data: any) => {
+    const handleDeliveryEta = (_data: any) => {
       // Future: update ETA in store
     }
 
-    const handleDeliveryUnavailable = (data: any) => {
+    const handleDeliveryUnavailable = (_data: any) => {
       if (!mountedRef.current) return
       setIsSearching(false)
+      useCustomerDeliveryStore.getState().setSearchOrderId(null)
       setCurrentView('form')
     }
 
@@ -120,7 +115,7 @@ export function useCustomerSocket({ userId: _userId }: UseCustomerSocketOptions)
       socket.off('delivery:unavailable', handleDeliveryUnavailable)
       socket.off('error', handleError)
     }
-  }, [socket, addOffer, removeOffer, clearOffers, setActiveDelivery, updateActiveDeliveryStatus, updateRunnerLocation, setCurrentView, setIsSearching, setShowRatingModal])
+  }, [socket, addOffer, clearOffers, setActiveDelivery, updateActiveDeliveryStatus, updateRunnerLocation, setCurrentView, setIsSearching, setShowRatingModal])
 
   useEffect(() => { return () => { mountedRef.current = false } }, [])
 
@@ -146,8 +141,9 @@ export function useCustomerSocket({ userId: _userId }: UseCustomerSocketOptions)
   const rejectOffer = useCallback((orderId: string, offerId: string) => {
     if (!socket?.connected) return
     socket.emit('delivery:reject-offer', { orderId, offerId })
-    removeOffer(offerId)
-  }, [socket, removeOffer])
+    // Remove offer from local store (use getState to avoid needing removeOffer in deps)
+    useCustomerDeliveryStore.getState().removeOffer(offerId)
+  }, [socket])
 
   const confirmDelivery = useCallback((orderId: string, rating: number, review?: string) => {
     if (!socket?.connected) return

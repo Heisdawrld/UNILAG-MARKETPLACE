@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Truck, MapPin, Package, Clock, ArrowLeft, Send, History } from 'lucide-react'
-import { useUser } from '@clerk/nextjs'
+
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useCustomerDeliveryStore, type CustomerDeliveryView, type CustomerActiveDelivery } from '@/store/customer-delivery-store'
@@ -36,41 +36,18 @@ export default function DeliveryPage() {
   const form = useCustomerDeliveryStore((s) => s.form)
   const resetForm = useCustomerDeliveryStore((s) => s.resetForm)
 
+  const searchOrderId = useCustomerDeliveryStore((s) => s.searchOrderId)
+  const setSearchOrderId = useCustomerDeliveryStore((s) => s.setSearchOrderId)
+
   const {
     isConnected, connectionError, retry, createDelivery, acceptOffer, rejectOffer,
     confirmDelivery, cancelDelivery, watchDelivery, unwatchDelivery,
-  } = useCustomerSocket({ userId: null }) // Uses Clerk auth token automatically
+  } = useCustomerSocket()
 
   const [mapExpanded, setMapExpanded] = useState(false)
 
-  // Seed mock history on first load
-  useEffect(() => {
-    const store = useCustomerDeliveryStore.getState()
-    if (store.deliveryHistory.length === 0) {
-      store.setDeliveryHistory([
-        {
-          id: 'chist-1', title: 'Food from Jaja Cafeteria', category: 'food',
-          finalPrice: 1200, status: 'completed',
-          completedAt: new Date(Date.now() - 86400000).toISOString(),
-          runnerRating: 5, runnerReview: 'Fast delivery!',
-          estimatedDistanceMeters: 800, runnerUsername: 'Tunde',
-        },
-        {
-          id: 'chist-2', title: 'Assignment Printout', category: 'documents',
-          finalPrice: 600, status: 'completed',
-          completedAt: new Date(Date.now() - 172800000).toISOString(),
-          runnerRating: 4, runnerReview: null,
-          estimatedDistanceMeters: 500, runnerUsername: 'Chioma',
-        },
-        {
-          id: 'chist-3', title: 'Groceries from Shoprite', category: 'groceries',
-          finalPrice: 1800, status: 'cancelled',
-          completedAt: null, runnerRating: null, runnerReview: null,
-          estimatedDistanceMeters: 1500, runnerUsername: null,
-        },
-      ])
-    }
-  }, [])
+  // Delivery history will be fetched from server API in the future
+  // Mock data removed to prevent stale data issues
 
   // Handle delivery creation
   const handleCreateDelivery = useCallback((data: any) => {
@@ -79,11 +56,17 @@ export default function DeliveryPage() {
 
   // Handle offer acceptance
   const handleAcceptOffer = useCallback((orderId: string, offerId: string) => {
-    acceptOffer(orderId, offerId)
+    // Use searchOrderId as the primary orderId source
+    const effectiveOrderId = orderId || searchOrderId || ''
+    if (!effectiveOrderId) {
+      console.error('[delivery] No orderId for accept offer')
+      return
+    }
+    acceptOffer(effectiveOrderId, offerId)
     const offer = offers.find(o => o.offerId === offerId)
     if (offer) {
       setActiveDelivery({
-        orderId,
+        orderId: effectiveOrderId,
         status: 'runner_assigned',
         pickupLat: form.pickupLat ?? 0,
         pickupLng: form.pickupLng ?? 0,
@@ -91,7 +74,7 @@ export default function DeliveryPage() {
         dropoffLat: form.dropoffLat ?? 0,
         dropoffLng: form.dropoffLng ?? 0,
         dropoffAddress: form.dropoffAddress,
-        pickupCode: '',
+        pickupCode: '', // Will be updated by socket event
         customerPrice: form.customerPrice,
         finalPrice: offer.runnerPrice,
         runnerId: offer.runnerId,
@@ -104,9 +87,9 @@ export default function DeliveryPage() {
         createdAt: new Date().toISOString(),
         assignedAt: new Date().toISOString(),
       })
-      watchDelivery(orderId)
+      watchDelivery(effectiveOrderId)
     }
-  }, [acceptOffer, offers, setActiveDelivery, watchDelivery, form])
+  }, [acceptOffer, offers, setActiveDelivery, watchDelivery, form, searchOrderId])
 
   // Handle offer rejection
   const handleRejectOffer = useCallback((orderId: string, offerId: string) => {
@@ -117,10 +100,11 @@ export default function DeliveryPage() {
   const handleConfirmDelivery = useCallback((orderId: string, rating: number, review?: string) => {
     confirmDelivery(orderId, rating, review)
     setActiveDelivery(null)
+    setSearchOrderId(null)
     resetForm()
     setCurrentView('form')
     unwatchDelivery(orderId)
-  }, [confirmDelivery, setActiveDelivery, resetForm, setCurrentView, unwatchDelivery])
+  }, [confirmDelivery, setActiveDelivery, resetForm, setCurrentView, unwatchDelivery, setSearchOrderId])
 
   // Handle cancellation
   const handleCancelDelivery = useCallback((orderId: string, reason: string) => {
@@ -134,13 +118,15 @@ export default function DeliveryPage() {
 
   // Cancel search
   const handleCancelSearch = useCallback(() => {
-    if (activeDelivery?.orderId) {
-      cancelDelivery(activeDelivery.orderId, 'customer_cancelled')
+    const orderId = searchOrderId ?? activeDelivery?.orderId
+    if (orderId) {
+      cancelDelivery(orderId, 'customer_cancelled')
     }
     setIsSearching(false)
     setActiveDelivery(null)
+    setSearchOrderId(null)
     setCurrentView('form')
-  }, [cancelDelivery, setIsSearching, setActiveDelivery, setCurrentView, activeDelivery])
+  }, [cancelDelivery, setIsSearching, setActiveDelivery, setCurrentView, searchOrderId, activeDelivery, setSearchOrderId])
 
   // Auto-switch views
   useEffect(() => {

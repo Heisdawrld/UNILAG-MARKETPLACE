@@ -7,36 +7,60 @@ import type { ClientToServerEvents, ServerToClientEvents } from '@/lib/delivery-
 
 type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>
 
+// ── Connection state machine ──
+type ConnectionState = 'idle' | 'fetching_token' | 'connecting' | 'connected' | 'error'
+
+// Module-level shared socket — but with reference counting to avoid race conditions
 let socketInstance: TypedSocket | null = null
+let refCount = 0
 
 export function useSocket({ autoConnect = true }: { autoConnect?: boolean } = {}) {
   const [isConnected, setIsConnected] = useState(false)
   const [connectionError, setConnectionError] = useState<string | null>(null)
+  const [socketState, setSocketState] = useState<TypedSocket | null>(null)
   const socketRef = useRef<TypedSocket | null>(null)
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const retryCountRef = useRef(0)
-  const isConnectingRef = useRef(false)
+  const connectionStateRef = useRef<ConnectionState>('idle')
+  const watchdogTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const MAX_RETRIES = 5
+  const CONNECTION_TIMEOUT_MS = 20000 // 20s watchdog
 
   const { isSignedIn, isLoaded } = useAuth()
 
+  // Use refs for callbacks to avoid stale closures in setTimeout
+  const connectRef = useRef<() => void>(() => {})
   const cleanupSocket = useCallback(() => {
+    if (watchdogTimerRef.current) { clearTimeout(watchdogTimerRef.current); watchdogTimerRef.current = null }
     if (socketInstance) {
       socketInstance.removeAllListeners()
       socketInstance.disconnect()
       socketInstance = null
     }
     socketRef.current = null
+    setSocketState(null)
     setIsConnected(false)
-    isConnectingRef.current = false
+    connectionStateRef.current = 'idle'
+  }, [])
+
+  const clearTimers = useCallback(() => {
+    if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null }
+    if (watchdogTimerRef.current) { clearTimeout(watchdogTimerRef.current); watchdogTimerRef.current = null }
   }, [])
 
   const connectSocket = useCallback((socketUrl: string, token: string) => {
-    cleanupSocket()
+    // Clean up any existing socket
+    if (socketInstance) {
+      socketInstance.removeAllListeners()
+      socketInstance.disconnect()
+      socketInstance = null
+    }
+
+    connectionStateRef.current = 'connecting'
 
     socketInstance = io(socketUrl, {
       transports: ['websocket', 'polling'],
-      auth: { token },  // ONLY signed token — no userId fallback
+      auth: { token },
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 2000,
@@ -47,29 +71,33 @@ export function useSocket({ autoConnect = true }: { autoConnect?: boolean } = {}
     socketInstance.on('connect', () => {
       setIsConnected(true)
       setConnectionError(null)
+      setSocketState(socketInstance)
       retryCountRef.current = 0
-      isConnectingRef.current = false
+      connectionStateRef.current = 'connected'
+      if (watchdogTimerRef.current) { clearTimeout(watchdogTimerRef.current); watchdogTimerRef.current = null }
     })
 
     socketInstance.on('disconnect', (reason) => {
       setIsConnected(false)
+      setSocketState(null)
+      connectionStateRef.current = 'error'
       if (reason === 'io server disconnect') {
         setConnectionError('Session expired — reconnecting...')
-        // Force reconnect with fresh token
-        setTimeout(() => connect(), 2000)
+        setTimeout(() => connectRef.current(), 2000)
       }
     })
 
     socketInstance.on('connect_error', (err) => {
       console.warn('[socket] Connection error:', err.message)
       setIsConnected(false)
-      isConnectingRef.current = false
+      setSocketState(null)
+      connectionStateRef.current = 'error'
+      if (watchdogTimerRef.current) { clearTimeout(watchdogTimerRef.current); watchdogTimerRef.current = null }
 
       const msg = err.message || ''
       if (msg.includes('Authentication failed') || msg.includes('expired token')) {
         setConnectionError('Session expired — reconnecting...')
-        // Get a fresh token and retry
-        setTimeout(() => connect(), 3000)
+        setTimeout(() => connectRef.current(), 3000)
       } else if (msg.includes('Authentication required')) {
         setConnectionError('Sign in required')
       } else {
@@ -81,15 +109,29 @@ export function useSocket({ autoConnect = true }: { autoConnect?: boolean } = {}
       console.error('[socket] Error:', data?.message, data?.code)
       if (data?.code === 'AUTH_EXPIRED' || data?.message?.includes('expired')) {
         cleanupSocket()
-        setTimeout(() => connect(), 2000)
+        setTimeout(() => connectRef.current(), 2000)
       }
     })
 
     socketRef.current = socketInstance
+
+    // ── Connection watchdog: if we're still "connecting" after timeout, force reset ──
+    watchdogTimerRef.current = setTimeout(() => {
+      if (connectionStateRef.current === 'connecting' || connectionStateRef.current === 'fetching_token') {
+        console.warn('[socket] Connection watchdog triggered — forcing reset')
+        connectionStateRef.current = 'error'
+        setConnectionError('Connection timed out — tap Retry')
+        setIsConnected(false)
+        setSocketState(null)
+        // Don't destroy the socket — let socket.io's own reconnection logic work
+        // Just update the UI state
+      }
+    }, CONNECTION_TIMEOUT_MS)
   }, [cleanupSocket])
 
   const connect = useCallback(async () => {
-    if (isConnectingRef.current) return // Prevent double-connect
+    // Prevent double-connect using state machine
+    if (connectionStateRef.current === 'connecting' || connectionStateRef.current === 'fetching_token') return
     if (socketInstance?.connected) return
 
     if (!isSignedIn) {
@@ -102,14 +144,13 @@ export function useSocket({ autoConnect = true }: { autoConnect?: boolean } = {}
       return
     }
 
-    isConnectingRef.current = true
+    connectionStateRef.current = 'fetching_token'
     setConnectionError('Connecting...')
     retryCountRef.current++
 
     try {
       const socketUrl = typeof window !== 'undefined' ? window.location.origin : ''
 
-      // Fetch signed token from our API — NO fallback headers
       const tokenRes = await fetch('/api/auth/socket-token')
 
       if (!tokenRes.ok) {
@@ -122,68 +163,80 @@ export function useSocket({ autoConnect = true }: { autoConnect?: boolean } = {}
               : 'Connection failed'
 
         setConnectionError(errorMsg)
-        isConnectingRef.current = false
+        connectionStateRef.current = 'error'
 
-        // Exponential backoff
         const delay = Math.min(2000 * Math.pow(2, retryCountRef.current - 1), 30000)
         if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current)
-        reconnectTimerRef.current = setTimeout(() => connect(), delay)
+        reconnectTimerRef.current = setTimeout(() => connectRef.current(), delay)
         return
       }
 
       const { token } = await tokenRes.json()
       if (!token) {
         setConnectionError('Authentication failed')
-        isConnectingRef.current = false
+        connectionStateRef.current = 'error'
         return
       }
 
+      // Reset retry count on successful token fetch
+      retryCountRef.current = 0
       connectSocket(socketUrl, token)
     } catch (err) {
       console.error('[socket] Connection failed:', err)
       setConnectionError('Network error — tap Retry')
-      isConnectingRef.current = false
+      connectionStateRef.current = 'error'
 
       const delay = Math.min(2000 * Math.pow(2, retryCountRef.current - 1), 30000)
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current)
-      reconnectTimerRef.current = setTimeout(() => connect(), delay)
+      reconnectTimerRef.current = setTimeout(() => connectRef.current(), delay)
     }
   }, [isSignedIn, connectSocket])
 
+  // Keep ref updated
+  connectRef.current = connect
+
   const disconnect = useCallback(() => {
-    if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null }
+    clearTimers()
     cleanupSocket()
     retryCountRef.current = 0
-  }, [cleanupSocket])
+  }, [cleanupSocket, clearTimers])
 
   const retry = useCallback(() => {
     retryCountRef.current = 0
+    connectionStateRef.current = 'idle'
     disconnect()
-    connect()
-  }, [disconnect, connect])
+    // Use setTimeout to ensure disconnect completes before reconnecting
+    setTimeout(() => connectRef.current(), 100)
+  }, [disconnect])
 
+  // Auto-connect when signed in
   useEffect(() => {
-    if (autoConnect && isLoaded && isSignedIn) connect()
+    if (autoConnect && isLoaded && isSignedIn) {
+      connectRef.current()
+    }
     return () => {
-      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current)
+      clearTimers()
     }
   }, [autoConnect, isLoaded, isSignedIn]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Disconnect when signed out
   useEffect(() => {
     if (!isSignedIn && isLoaded) disconnect()
   }, [isSignedIn, isLoaded, disconnect])
 
-  // Use state for socket to avoid stale ref during render
-  const [socketState, setSocketState] = useState<TypedSocket | null>(null)
+  // Reference counting for cleanup
   useEffect(() => {
-    setSocketState(socketRef.current)
-    const interval = setInterval(() => {
-      if (socketRef.current !== socketState) {
-        setSocketState(socketRef.current)
+    refCount++
+    return () => {
+      refCount--
+      // Only destroy the shared socket when ALL consumers unmount
+      if (refCount <= 0 && socketInstance) {
+        socketInstance.removeAllListeners()
+        socketInstance.disconnect()
+        socketInstance = null
       }
-    }, 1000)
-    return () => clearInterval(interval)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    }
+  }, [])
 
   return { socket: socketState, isConnected, connectionError, connect, disconnect, retry }
 }

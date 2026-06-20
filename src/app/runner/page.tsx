@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Truck, TrendingUp, History, MapPin, Package } from 'lucide-react'
-import { useUser } from '@clerk/nextjs'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useRunnerStore, type RunnerView } from '@/store/runner-store'
@@ -32,8 +31,8 @@ export default function RunnerPage() {
   const incomingRequests = useRunnerStore((s) => s.incomingRequests)
   const isSocketConnected = useRunnerStore((s) => s.isSocketConnected)
 
-  const { isConnected, connectionError, retry, goOnline, goOffline, acceptRequest, counterOffer, declineRequest, confirmPickup, confirmDropoff, cancelDelivery, startNavigation, startTransit } = useRunnerSocket({ userId: null, isRunner: true }) // Uses Clerk auth token automatically
-  const { isSimulated } = useRunnerGps({ enabled: isOnline, simulate: true, updateInterval: 3000, heartbeatInterval: 15000 })
+  const { socket: runnerSocket, isConnected, connectionError, retry, goOnline, goOffline, acceptRequest, counterOffer, declineRequest, confirmPickup, confirmDropoff, cancelDelivery, startNavigation, startTransit } = useRunnerSocket({ isRunner: true })
+  const { isSimulated } = useRunnerGps({ socket: runnerSocket, isSocketConnected: isConnected, enabled: isOnline, simulate: true, updateInterval: 3000, heartbeatInterval: 15000 })
   const [mapExpanded, setMapExpanded] = useState(false)
 
   const handleToggleOnline = useCallback((online: boolean) => { if (online) goOnline(); else goOffline() }, [goOnline, goOffline])

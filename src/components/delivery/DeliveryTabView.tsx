@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Truck, Package, MapPin, Clock, Star, ChevronRight, Zap, ArrowRight, ArrowLeft } from 'lucide-react'
@@ -47,12 +47,41 @@ export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
   const isSearching = useCustomerDeliveryStore((s) => s.isSearching)
   const isSocketConnected = useCustomerDeliveryStore((s) => s.isSocketConnected)
   const resetForm = useCustomerDeliveryStore((s) => s.resetForm)
+  const currentView = useCustomerDeliveryStore((s) => s.currentView)
 
-  const { isConnected, connectionError, retry, createDelivery, acceptOffer, rejectOffer, confirmDelivery, cancelDelivery } = useCustomerSocket({ userId: user.id })
+  const { isConnected, connectionError, retry, createDelivery, acceptOffer, rejectOffer, confirmDelivery, cancelDelivery } = useCustomerSocket()
 
-  const [step, setStep] = useState<'quick' | 'form' | 'searching' | 'offers' | 'tracking'>(activeDelivery ? 'tracking' : 'quick')
+  const [step, setStep] = useState<'quick' | 'form' | 'searching' | 'offers' | 'tracking'>(
+    activeDelivery ? 'tracking' : 'quick'
+  )
 
-  const suggestedPrice = Math.round(((DELIVERY_CATEGORY_BASELINES[form.category].min + DELIVERY_CATEGORY_BASELINES[form.category].max) / 2) * URGENCY_MULTIPLIERS[form.urgency])
+  // Sync step with activeDelivery and currentView from store
+  useEffect(() => {
+    if (activeDelivery) {
+      setStep('tracking')
+    } else if (currentView === 'offers' && offers.length > 0) {
+      setStep('offers')
+    } else if (currentView === 'searching' || isSearching) {
+      setStep('searching')
+    } else if (step === 'tracking' && !activeDelivery) {
+      setStep('quick')
+    }
+  }, [activeDelivery, currentView, isSearching, offers.length]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const suggestedPrice = Math.round(
+    ((DELIVERY_CATEGORY_BASELINES[form.category].min + DELIVERY_CATEGORY_BASELINES[form.category].max) / 2) * URGENCY_MULTIPLIERS[form.urgency]
+  )
+
+  // Sync suggestedPrice with form.customerPrice when category/urgency changes
+  useEffect(() => {
+    const newPrice = Math.round(
+      ((DELIVERY_CATEGORY_BASELINES[form.category].min + DELIVERY_CATEGORY_BASELINES[form.category].max) / 2) * URGENCY_MULTIPLIERS[form.urgency]
+    )
+    // Only auto-update if the user hasn't manually changed the price from the default
+    if (form.customerPrice === 1000 || form.customerPrice === 0) {
+      updateForm({ customerPrice: newPrice })
+    }
+  }, [form.category, form.urgency]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const isFormValid = form.pickupLat && form.pickupLng && form.dropoffLat && form.dropoffLng
     && form.pickupAddress && form.dropoffAddress && form.title && form.customerPrice > 0
@@ -78,10 +107,16 @@ export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
   }, [isFormValid, isSocketConnected, createDelivery, form])
 
   const handleAcceptOffer = useCallback((offerId: string) => {
-    const orderId = activeDelivery?.orderId ?? ''
+    // Use searchOrderId (which is set when delivery:create response comes back)
+    // Falls back to activeDelivery?.orderId for edge cases
+    const orderId = searchOrderId ?? activeDelivery?.orderId ?? ''
+    if (!orderId) {
+      toast({ title: 'Error', description: 'Could not find order — please try again', variant: 'destructive' })
+      return
+    }
     acceptOffer(orderId, offerId)
     setStep('tracking')
-  }, [acceptOffer, activeDelivery])
+  }, [acceptOffer, searchOrderId, activeDelivery, toast])
 
   // If there's an active delivery, show tracking
   if (activeDelivery) {
@@ -217,7 +252,10 @@ export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
                   </div>
                 </div>
                 <div className="flex gap-2 mt-3">
-                  <Button variant="outline" size="sm" className="flex-1 text-xs h-8" onClick={() => rejectOffer(searchOrderId ?? '', offer.offerId)}>Decline</Button>
+                  <Button variant="outline" size="sm" className="flex-1 text-xs h-8" onClick={() => {
+                    const orderId = searchOrderId ?? activeDelivery?.orderId ?? ''
+                    if (orderId) rejectOffer(orderId, offer.offerId)
+                  }}>Decline</Button>
                   <Button size="sm" className="flex-1 text-xs h-8 bg-emerald-500 hover:bg-emerald-600" onClick={() => handleAcceptOffer(offer.offerId)}>Accept</Button>
                 </div>
               </CardContent>
@@ -250,7 +288,13 @@ export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
             </Button>
           )}
           <Button variant="ghost" className="text-xs text-red-500 block mx-auto" onClick={() => {
+            // Cancel on server if we have an orderId
+            const orderId = searchOrderId ?? activeDelivery?.orderId
+            if (orderId && isSocketConnected) {
+              cancelDelivery(orderId, 'customer_cancelled')
+            }
             useCustomerDeliveryStore.getState().setIsSearching(false)
+            useCustomerDeliveryStore.getState().setSearchOrderId(null)
             setStep('quick')
           }}>
             Cancel
@@ -376,7 +420,7 @@ export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
             </div>
             <Input
               type="number"
-              value={form.customerPrice}
+              value={form.customerPrice || ''}
               onChange={(e) => updateForm({ customerPrice: parseInt(e.target.value) || 0 })}
               className="h-9 text-sm"
               placeholder="Custom price"
@@ -435,7 +479,7 @@ export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
             <div className="flex-1">
               <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">Delivery service connecting</p>
               <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">
-                We're connecting you to nearby runners. You can still browse while we reconnect.
+                We&apos;re connecting you to nearby runners. You can still browse while we reconnect.
               </p>
               <button
                 onClick={retry}
