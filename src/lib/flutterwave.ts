@@ -61,10 +61,9 @@ function getAppUrl(): string {
 // Boost Pricing Constants
 // ──────────────────────────────────────────────
 export const BOOST_PRICING = {
-  basic:    { name: 'BASIC BOOST',    price: 300,  durationHours: 6   },
-  standard: { name: 'STANDARD BOOST', price: 700,  durationHours: 24  },
-  premium:  { name: 'PREMIUM BOOST',  price: 1500, durationHours: 72  },
-  ultra:    { name: 'ULTRA BOOST',    price: 3000, durationHours: 168 },
+  basic:    { name: 'BASIC BOOST',    price: 500,   durationHours: 72  },   // 3 days
+  premium:  { name: 'PREMIUM BOOST', price: 1000,  durationHours: 168 },   // 7 days
+  elite:    { name: 'ELITE BOOST',    price: 2000,  durationHours: 336 },   // 14 days
 } as const;
 
 export type BoostDuration = keyof typeof BOOST_PRICING;
@@ -73,9 +72,8 @@ export type BoostDuration = keyof typeof BOOST_PRICING;
 // Vendor Subscription Pricing Constants
 // ──────────────────────────────────────────────
 export const VENDOR_SUBSCRIPTION_PRICING = {
-  monthly: 2000,    // Monthly: ₦2,000
-  quarterly: 5000,  // Quarterly: ₦5,000
-  annually: 15000,  // Annually: ₦15,000
+  verified: 2500,    // Monthly: ₦2,500 (Verified badge + unlimited listings + analytics)
+  premium:  5000,    // Monthly: ₦5,000 (Everything in Verified + homepage promotion + priority support)
 } as const;
 
 export type VendorSubscriptionPlan = keyof typeof VENDOR_SUBSCRIPTION_PRICING;

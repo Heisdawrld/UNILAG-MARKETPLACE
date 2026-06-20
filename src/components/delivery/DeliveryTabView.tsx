@@ -109,14 +109,14 @@ export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
   const handleAcceptOffer = useCallback((offerId: string) => {
     // Use searchOrderId (which is set when delivery:create response comes back)
     // Falls back to activeDelivery?.orderId for edge cases
-    const orderId = searchOrderId ?? activeDelivery?.orderId ?? ''
+    const orderId = searchOrderId ?? ''
     if (!orderId) {
       toast({ title: 'Error', description: 'Could not find order — please try again', variant: 'destructive' })
       return
     }
     acceptOffer(orderId, offerId)
     setStep('tracking')
-  }, [acceptOffer, searchOrderId, activeDelivery, toast])
+  }, [acceptOffer, searchOrderId, toast])
 
   // If there's an active delivery, show tracking
   if (activeDelivery) {
@@ -253,7 +253,7 @@ export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
                 </div>
                 <div className="flex gap-2 mt-3">
                   <Button variant="outline" size="sm" className="flex-1 text-xs h-8" onClick={() => {
-                    const orderId = searchOrderId ?? activeDelivery?.orderId ?? ''
+                    const orderId = searchOrderId ?? ''
                     if (orderId) rejectOffer(orderId, offer.offerId)
                   }}>Decline</Button>
                   <Button size="sm" className="flex-1 text-xs h-8 bg-emerald-500 hover:bg-emerald-600" onClick={() => handleAcceptOffer(offer.offerId)}>Accept</Button>
@@ -289,7 +289,7 @@ export default function DeliveryTabView({ user }: DeliveryTabViewProps) {
           )}
           <Button variant="ghost" className="text-xs text-red-500 block mx-auto" onClick={() => {
             // Cancel on server if we have an orderId
-            const orderId = searchOrderId ?? activeDelivery?.orderId
+            const orderId = searchOrderId
             if (orderId && isSocketConnected) {
               cancelDelivery(orderId, 'customer_cancelled')
             }

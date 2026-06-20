@@ -372,18 +372,23 @@ export interface AdminStats {
   completedTasks: number;
 }
 
-export type ViewTab = 'home' | 'search' | 'sell' | 'delivery' | 'tasks' | 'messages' | 'profile';
+export type ViewTab = 'home' | 'search' | 'sell' | 'orders' | 'messages' | 'profile';
+
+// V2 tabs (disabled for V1, kept for type compatibility)
+export type V2ViewTab = 'delivery' | 'tasks';
 
 export const CATEGORIES = [
   'Electronics',
-  'Phones & Tablets',
-  'Laptops',
-  'Textbooks',
   'Fashion',
-  'Services',
+  'Shoes',
+  'Books',
   'Hostel Essentials',
-  'Food & Drinks',
-  'Sports',
+  'Food',
+  'Beauty',
+  'Accessories',
+  'Phones',
+  'Gaming',
+  'Services',
   'Others',
 ] as const;
 

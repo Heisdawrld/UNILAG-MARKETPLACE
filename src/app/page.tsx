@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useUser, SignInButton } from '@clerk/nextjs';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Home, Search, PlusCircle, Route, MessageCircle, User, Bell, Truck } from 'lucide-react';
+import { Home, Search, PlusCircle, Package, MessageCircle, User, Bell } from 'lucide-react';
 import { api } from '@/lib/api';
 import { User as UserType, ViewTab, SavedListing } from '@/lib/types';
 import { usePushNotifications } from '@/hooks/use-push';
@@ -13,8 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 const HomeFeed = lazy(() => import('@/components/marketplace/HomeFeed'));
 const SearchView = lazy(() => import('@/components/marketplace/SearchView'));
 const SellView = lazy(() => import('@/components/marketplace/SellView'));
-const RunnerView = lazy(() => import('@/components/tasks/TasksView'));
-const DeliveryView = lazy(() => import('@/components/delivery/DeliveryTabView'));
+const OrdersView = lazy(() => import('@/components/marketplace/OrdersView'));
 const MessagesView = lazy(() => import('@/components/marketplace/MessagesView'));
 const ProfileView = lazy(() => import('@/components/marketplace/ProfileView'));
 const ListingDetail = lazy(() => import('@/components/marketplace/ListingDetail'));
@@ -30,7 +29,7 @@ function BottomNav({ activeTab, onTabChange }: { activeTab: ViewTab; onTabChange
     { id: 'search', icon: Search, label: 'Explore' },
   ];
   const rightTabs: { id: ViewTab; icon: typeof Home; label: string }[] = [
-    { id: 'delivery', icon: Truck, label: 'Delivery' },
+    { id: 'orders', icon: Package, label: 'Orders' },
     { id: 'messages', icon: MessageCircle, label: 'Chat' },
     { id: 'profile', icon: User, label: 'Me' },
   ];
@@ -81,7 +80,7 @@ export default function MarketplaceApp() {
   const [activeTab, setActiveTab] = useState<ViewTab>('home');
   const [selectedListingId, setSelectedListingId] = useState<string | null>(null);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -95,8 +94,7 @@ export default function MarketplaceApp() {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab') as ViewTab | null;
     const chatId = params.get('chatId');
-    const taskId = params.get('taskId');
-    const validTabs: ViewTab[] = ['home', 'search', 'sell', 'delivery', 'tasks', 'messages', 'profile'];
+    const validTabs: ViewTab[] = ['home', 'search', 'sell', 'orders', 'messages', 'profile'];
 
     if (tab && validTabs.includes(tab)) {
       setActiveTab(tab);
@@ -104,10 +102,7 @@ export default function MarketplaceApp() {
     if (tab === 'messages' && chatId) {
       setSelectedChatId(chatId);
     }
-    if (tab === 'tasks' && taskId) {
-      setSelectedTaskId(taskId);
-    }
-    if (params.has('tab') || params.has('chatId') || params.has('taskId')) {
+    if (params.has('tab') || params.has('chatId')) {
       window.history.replaceState(null, '', window.location.pathname + window.location.hash);
     }
   }, []);
@@ -231,7 +226,6 @@ export default function MarketplaceApp() {
     setActiveTab(tab);
     setSelectedListingId(null);
     setSelectedChatId(null);
-    setSelectedTaskId(null);
     setSelectedCategory('');
   }, []);
 
@@ -242,7 +236,6 @@ export default function MarketplaceApp() {
     } else {
       setSelectedListingId(id);
       setSelectedChatId(null);
-      setSelectedTaskId(null);
       setSelectedCategory('');
     }
   }, []);
@@ -258,34 +251,20 @@ export default function MarketplaceApp() {
 
   const handleOpenMessagesChat = useCallback((chatId?: string | null) => {
     setSelectedListingId(null);
-    setSelectedTaskId(null);
     setSelectedCategory('');
     setSelectedChatId(chatId || null);
     setActiveTab('messages');
   }, []);
 
-  const handleOpenTasks = useCallback((taskId?: string | null) => {
-    setSelectedListingId(null);
-    setSelectedChatId(null);
-    setSelectedCategory('');
-    setSelectedTaskId(taskId || null);
-    setActiveTab('tasks');
-  }, []);
-
   const handleOpenSell = useCallback(() => {
     setSelectedListingId(null);
     setSelectedChatId(null);
-    setSelectedTaskId(null);
     setSelectedCategory('');
     setActiveTab('sell');
   }, []);
 
   const handleInitialChatOpened = useCallback(() => {
     setSelectedChatId(null);
-  }, []);
-
-  const handleInitialTaskOpened = useCallback(() => {
-    setSelectedTaskId(null);
   }, []);
 
   // Loading screen
@@ -374,7 +353,7 @@ export default function MarketplaceApp() {
               onToggleSave={() => handleToggleSave(selectedListingId)}
               onNavigateToDelivery={(listingId: string) => {
                 setSelectedListingId(null);
-                setActiveTab('delivery');
+                setActiveTab('orders');
               }}
             />
           </Suspense>
@@ -446,7 +425,6 @@ export default function MarketplaceApp() {
                   onToggleSave={handleToggleSave}
                   savedIds={savedIds}
                   onOpenMessagesChat={handleOpenMessagesChat}
-                  onOpenTasks={handleOpenTasks}
                 />
               )}
               {activeTab === 'search' && (
@@ -455,11 +433,8 @@ export default function MarketplaceApp() {
               {activeTab === 'sell' && (
                 <SellView user={user} onListingCreated={() => setActiveTab('home')} />
               )}
-              {activeTab === 'delivery' && (
-                <DeliveryView user={user} />
-              )}
-              {activeTab === 'tasks' && (
-                <RunnerView user={user} initialTaskId={selectedTaskId} onInitialTaskOpened={handleInitialTaskOpened} />
+              {activeTab === 'orders' && (
+                <OrdersView user={user} />
               )}
               {activeTab === 'messages' && (
                 <MessagesView user={user} initialChatId={selectedChatId} onInitialChatOpened={handleInitialChatOpened} />

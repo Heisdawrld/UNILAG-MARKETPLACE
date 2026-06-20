@@ -49,7 +49,7 @@ export default function HomeFeed({
   onToggleSave: (id: string) => void;
   savedIds: Set<string>;
   onOpenMessagesChat: (chatId?: string | null) => void;
-  onOpenTasks: (taskId?: string | null) => void;
+  onOpenTasks?: (taskId?: string | null) => void;
 }) {
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
@@ -139,7 +139,7 @@ export default function HomeFeed({
     }
 
     if (notif.type === 'task_application' || notif.type === 'task_accepted' || data.taskId) {
-      onOpenTasks(data.taskId || null);
+      onOpenTasks?.(data.taskId || null);
       return;
     }
 
