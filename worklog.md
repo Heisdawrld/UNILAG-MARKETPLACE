@@ -5,30 +5,27 @@
 
 ---
 
-## Project Status: LIVE & DEPLOYED (with one known issue)
+## Project Status: LIVE & FULLY WORKING ✅
 
 **Live URL:** https://www.unilagmarketplace.online/
 **Repo:** https://github.com/Heisdawrld/UNILAG-MARKETPLACE
-**Current commit (main):** `0046a6a` — diag: add /api/db-test endpoint
-**Remote main:** `0046a6a` (in sync)
+**Current commit (main):** `ac8aeeb` — feat: add seed-turso.ts script
+**Remote main:** `ac8aeeb` (in sync)
 
 ### Deployed & Verified Working
 - `/api/health` → **200** `{"status":"ok","database":"connected","turso":"configured","clerk":"configured"}`
+- `/api/db-test` → **200** all 4 query tests pass (count, updateMany, findMany+include, findMany)
+- `/api/listings` → **200** returns 6 listings with seller relations (was 500 before fix)
 - `/` → **200** full page renders, Clerk live key loads, branding correct
-- Sign-in page renders, Clerk OTP email sends successfully
+- Turso DB: 5 users, 6 listings, 2 boosts, 1 store (seeded)
 - Render build: `npm install && npx prisma generate && npm run build` ✅
 - Render start: `npm run start` (→ `NODE_ENV=production tsx server.ts`) ✅
 
-### Current Known Issue (ACTIVE — fixing)
-- **After Clerk sign-in + OTP code entry, home page shows "Retry Loading"**
-- Root cause chain:
-  1. The home page (`src/app/page.tsx`) has a 12-second bootstrap timer
-  2. After sign-in, it calls `/api/auth/clerk-me` to sync the Clerk user to DB
-  3. If that API crashes (DB query fails), the timer fires → "Retry Loading" screen
-  4. `/api/listings` also returns 500 "Failed to fetch listings"
-- **Turso DB IS populated** — I synced the schema directly (71 tables created, 36 already existed, 0 failed). DB now has 31 tables, 5 users, 19 listings (verified via direct libsql query)
-- **The live server's Prisma client still can't query Turso** despite DB being correct
-- Added `/api/db-test` diagnostic endpoint (commit `0046a6a`) to capture the exact error — waiting for Render rebuild to test
+### What Was Fixed (2026-07-08 session)
+1. **Turso schema drift** — the Turso DB had an OLD schema (V0) with columns like `isBoosted`, `boostExpiry`, `name`, `password`, `image`, `isVerified`, `rating` — but the Prisma schema (V1) expected `boosted`, `boostedUntil`, `username`, `avatar`, `verificationStatus`, `ratingAverage`. Caused `InvalidArg: invalid type: unit value, expected i32` on every query.
+2. **Fix: Dropped all 31 tables, recreated from prisma/schema.sql (107 statements, all OK)**
+3. **Seeded fresh data** via `scripts/seed-turso.ts` (5 users, 6 listings, 2 boosts, 1 store)
+4. **Auto-sync on boot** — `server.ts` now calls `syncTursoSchema()` on every production startup, so the schema stays in sync with `prisma/schema.sql` automatically
 
 ---
 
