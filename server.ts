@@ -21,6 +21,18 @@ async function main() {
     // env-check is optional; don't block startup
   }
 
+  // Sync Prisma schema to Turso (production only, when Turso is configured).
+  // Ensures all tables exist so API routes don't crash on first query.
+  if (!dev && process.env.TURSO_DATABASE_URL && process.env.TURSO_AUTH_TOKEN) {
+    try {
+      console.log('[server] Syncing Turso schema...')
+      const { syncTursoSchema } = await import(resolve(projectDir, 'scripts/sync-turso-schema.mjs'))
+      await syncTursoSchema()
+    } catch (err) {
+      console.warn('[server] Turso schema sync failed (non-fatal):', err instanceof Error ? err.message : String(err))
+    }
+  }
+
   const app = next({ dev, hostname, port, dir: projectDir })
   const handle = app.getRequestHandler()
 
