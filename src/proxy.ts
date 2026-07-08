@@ -42,6 +42,7 @@ const isPublicApiRoute = createRouteMatcher([
   '/api/payments/verify',        // Redirect from Flutterwave
   '/api/payments/transfer-webhook', // Transfer status webhook from Flutterwave
   '/api/health',                 // Health check
+  '/api/db-test',                // DB diagnostic (no secrets returned)
   '/api/',                       // Root API status
   '/api/cron/ping',              // Cron ping
   '/api/seed',                   // Seeding (protected by SEED_SECRET_KEY internally)
