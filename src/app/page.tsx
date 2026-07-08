@@ -20,7 +20,12 @@ const ListingDetail = lazy(() => import('@/components/marketplace/ListingDetail'
 import Onboarding from '@/components/marketplace/Onboarding';
 import PWAInstallPrompt from '@/components/PWAInstallPrompt';
 
-const isClerkConfigured = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) && process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY!.startsWith('pk_test_') && process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY!.length > 30;
+// Accept both pk_test_ (dev) and pk_live_ (production) Clerk publishable keys.
+// Previously this only checked pk_test_, which made the live deploy (pk_live_)
+// fall into the demo-user branch and auto-sign-in as the first seeded user.
+const isClerkConfigured = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY)
+  && (process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY!.startsWith('pk_test_') || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY!.startsWith('pk_live_'))
+  && process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY!.length > 30;
 
 // ── Bottom Navigation ──
 function BottomNav({ activeTab, onTabChange }: { activeTab: ViewTab; onTabChange: (tab: ViewTab) => void }) {

@@ -3,7 +3,28 @@ import { NextResponse } from 'next/server';
 
 // Demo user endpoint for development/testing without Clerk.
 // Returns a sanitized user object (no PII like phone/email/whatsapp/GPS).
+//
+// SAFETY: This endpoint is DEV-ONLY. When Clerk is configured (pk_test_ or
+// pk_live_), it refuses to run. Previously, the live deploy (pk_live_) fell
+// into the demo-user branch because page.tsx only checked for pk_test_, which
+// auto-signed-in every visitor as the first seeded user ("chidi"). This guard
+// ensures that can never happen again, regardless of the client-side check.
 export async function GET() {
+  // Block in production / whenever Clerk is configured.
+  const clerkPubKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || '';
+  const clerkSecKey = process.env.CLERK_SECRET_KEY || '';
+  const isClerkConfigured = !!(
+    clerkPubKey && clerkSecKey &&
+    (clerkPubKey.startsWith('pk_test_') || clerkPubKey.startsWith('pk_live_')) &&
+    clerkSecKey.startsWith('sk_')
+  );
+  if (isClerkConfigured) {
+    return NextResponse.json(
+      { error: 'Demo user disabled — Clerk is configured. Sign in via /sign-in.' },
+      { status: 403 }
+    );
+  }
+
   if (!isDatabaseAvailable()) {
     return NextResponse.json(
       { error: 'Database not configured' },
